@@ -37,6 +37,7 @@ export interface Trabajador {
   faena?: string;
   cumplimiento?: number;
   detalle?: string;
+  documentos?: Documento[];
 }
 
 export interface Documento {

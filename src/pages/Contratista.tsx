@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { 
   Bell, LayoutDashboard, Folder, Upload, Archive, Sparkles, Users, 
-  Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight,
+  Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight, ArrowLeft,
   FileCheck, Clock, X, XCircle, CloudUpload, Download, Eye,
   Building2, MapPin, Search, Info, FileText, Plus, Send, ShieldCheck, Banknote,
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, getMandantes } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador } from '../data/localStorageDb';
 
 export default function ContratistaPortal() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -18,6 +18,7 @@ export default function ContratistaPortal() {
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
   const [newWorkerForm, setNewWorkerForm] = useState({
     nombre: '',
     rut: '',
@@ -63,28 +64,48 @@ export default function ContratistaPortal() {
   const numPendientes = documentosData.filter(d => d.estado === 'pendiente').length;
   const numRechazados = documentosData.filter(d => d.estado === 'rechazado').length;
   const numPorVencer = documentosData.filter(d => d.estado === 'por_vencer').length;
-  const approvedWorkers = trabajadoresData.filter(t => t.estado === 'aprobado').length;
+  const approvedWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t) === 'aprobado').length;
   const totalWorkers = trabajadoresData.length;
-  const pendingWorkers = trabajadoresData.filter(t => t.estado !== 'aprobado').length;
+  const pendingWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t) !== 'aprobado').length;
 
-  const handleUploadDocument = (docId: string, actionMsg: string = 'Documento subido correctamente') => {
+  const handleUploadDocument = (docId: string, actionMsg: string = 'Documento subido correctamente', workerRut?: string) => {
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
     if (currentIdx !== -1) {
-      const docIdx = list[currentIdx].documentos.findIndex(d => d.id === docId);
-      if (docIdx !== -1) {
-        list[currentIdx].documentos[docIdx].estado = 'revision';
-        list[currentIdx].documentos[docIdx].subido = '13 Aug 2026';
-        saveContratistas(list);
+      if (workerRut) {
+        const workerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === workerRut);
+        if (workerIdx !== undefined && workerIdx !== -1) {
+          const docIdx = list[currentIdx].trabajadores![workerIdx].documentos?.findIndex(d => d.id === docId);
+          if (docIdx !== undefined && docIdx !== -1) {
+            const docObj = list[currentIdx].trabajadores![workerIdx].documentos![docIdx];
+            docObj.estado = 'revision';
+            docObj.subido = '13 Aug 2026';
+            
+            const workerObj = list[currentIdx].trabajadores![workerIdx];
+            workerObj.estado = calcularEstadoTrabajador(workerObj);
+            
+            saveContratistas(list);
+            setTrabajadoresData(list[currentIdx].trabajadores || []);
+          }
+        }
+      } else {
+        const docIdx = list[currentIdx].documentos.findIndex(d => d.id === docId);
+        if (docIdx !== -1) {
+          list[currentIdx].documentos[docIdx].estado = 'revision';
+          list[currentIdx].documentos[docIdx].subido = '13 Aug 2026';
+          saveContratistas(list);
+        }
       }
     }
     
-    setDocumentosData(prev => prev.map(d => {
-      if (d.id === docId) {
-        return { ...d, estado: 'revision', subido: '13 Aug 2026' };
-      }
-      return d;
-    }));
+    if (!workerRut) {
+      setDocumentosData(prev => prev.map(d => {
+        if (d.id === docId) {
+          return { ...d, estado: 'revision', subido: '13 Aug 2026' };
+        }
+        return d;
+      }));
+    }
     
     if (selectedDocumentForPanel && selectedDocumentForPanel.id === docId) {
       setSelectedDocumentForPanel({ ...selectedDocumentForPanel, estado: 'revision', subido: '13 Aug 2026' });
@@ -97,13 +118,24 @@ export default function ContratistaPortal() {
     e.preventDefault();
     if (!newWorkerForm.nombre || !newWorkerForm.rut) return;
 
+    // Generate initial documentos from templates with destino === 'trabajador'
+    const workerTemplates = getPlantillas().filter(p => p.destino === 'trabajador');
+    const workerDocs = workerTemplates.map((p, idx) => ({
+      id: `wdoc_${Date.now()}_${idx}`,
+      nombre: p.nombre,
+      categoria: p.categoria as 'Laboral' | 'Prevención' | 'Tributario',
+      estado: 'pendiente' as const,
+      vencimiento: '—'
+    }));
+
     const newWorker = {
       nombre: newWorkerForm.nombre,
       rut: newWorkerForm.rut,
-      estado: 'aprobado' as const,
+      estado: 'pendiente' as const,
       cargo: newWorkerForm.cargo || 'Operario',
       faena: newWorkerForm.faena,
-      cumplimiento: 100
+      cumplimiento: 0,
+      documentos: workerDocs
     };
 
     const list = getContratistas();
@@ -353,9 +385,16 @@ export default function ContratistaPortal() {
               
               {/* Tu Acreditación Card */}
               <div className="card bg-cream border border-cream3 p-5">
-                <h3 className="section-title text-[15px] font-bold text-navy mb-4 flex items-center gap-2">
-                  <CheckCircle size={18} className="text-green-600" />
-                  Tu Acreditación
+                <h3 className="section-title text-[15px] font-bold text-navy mb-4 flex items-center justify-between gap-2 w-full">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-green-600" />
+                    Tu Acreditación
+                  </span>
+                  {(() => {
+                    const status = calcularEstadoAcreditacion(contratistaLogueado);
+                    const badgeClass = status === 'Aprobado' ? 'b-green' : status === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
+                    return <span className={`badge ${badgeClass} text-[11px]`}>{status === 'Aprobado' ? 'Acreditado' : status === 'Vencido/Bloqueado' ? 'Bloqueado' : status}</span>;
+                  })()}
                 </h3>
                 
                 <div className="flex flex-col md:flex-row gap-6 items-center">
@@ -1093,144 +1132,286 @@ export default function ContratistaPortal() {
 
           {/* MIS TRABAJADORES (PORTAL CONTRATISTA) */}
           {activeTab === 'trabajadores' && (
-            <div className="fade-in">
-              <div className="page-header mb-6">
-                <div>
-                  <h2 className="page-title flex items-center gap-2">
-                    <Users className="text-brown" size={22} /> Directorio de Trabajadores
-                  </h2>
-                  <p className="page-sub">Gestiona la documentación y habilitación de tu personal en terreno</p>
-                </div>
-                <button className="btn btn-primary shadow-sm hover:shadow-md" onClick={() => setShowAddWorkerModal(true)}>
-                  <UserPlus size={16} className="mr-2" /> Agregar Trabajador
-                </button>
-              </div>
-
-              {/* BARRA DE BÚSQUEDA Y FILTROS */}
-              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-white p-3 rounded-xl border border-cream3 shadow-sm">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar por nombre, RUT o cargo..." 
-                    className="form-input w-full pl-9 py-2 border-none bg-cream2/50 focus:bg-white text-[14.3px]"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <select className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer">
-                    <option>Todos los estados</option>
-                    <option>Habilitados (Al día)</option>
-                    <option>Con problemas (Rojo)</option>
-                  </select>
-                  <select className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer">
-                    <option>Todas las faenas</option>
-                    {misProyectos.map(p => (
-                      <option key={p.id}>{p.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* GRID DE PERFILES DE TRABAJADORES */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {trabajadoresData.map((worker: any) => {
-                  let statusColor = 'border-t-[#2a6a3a]';
-                  let badge = <span className="badge b-green" title="Habilitado para ingreso">Al día</span>;
-                  let cardBg = 'bg-[#f4fbf6]';
-                  let cardBorder = 'border-[#d4f0de]/50';
-                  let textColor = 'text-[#1a6030]';
-                  let barColor = 'bg-[#2a6a3a]';
-                  let barBg = 'bg-[#f4fbf6]';
-                  let actionBtn = (
-                    <button className="btn btn-ghost w-full border border-cream3 text-gray-600 hover:text-navy">
-                      <FolderOpen size={16} className="mr-2" /> Ver Carpeta
+            selectedWorkerForDocs ? (
+              <div className="fade-in flex flex-col gap-5">
+                <div className="page-header mb-4">
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => setSelectedWorkerForDocs(null)} 
+                      className="btn btn-ghost p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-navy transition-colors"
+                      title="Volver al Directorio"
+                    >
+                      <ArrowLeft size={20} />
                     </button>
-                  );
-
-                  if (worker.estado === 'rechazado') {
-                    statusColor = 'border-t-[#c02020]';
-                    badge = <span className="badge bg-[#fde8e8] text-[#c02020] border border-[#fde8e8]" title="Acceso bloqueado">Bloqueado</span>;
-                    cardBg = 'bg-[#fff8f8]';
-                    cardBorder = 'border-[#fde8e8]';
-                    textColor = 'text-[#c02020]';
-                    barColor = 'bg-[#c02020]';
-                    barBg = 'bg-[#fde8e8]';
-                    actionBtn = (
-                      <button className="btn btn-primary w-full bg-[#c02020] hover:bg-[#a01515] border-none" onClick={() => setActiveTab('subir')}>
-                        Solucionar ahora
-                      </button>
-                    );
-                  } else if (worker.estado === 'por_vencer') {
-                    statusColor = 'border-t-[#d4a000]';
-                    badge = <span className="badge b-yellow">Advertencia</span>;
-                    cardBg = 'bg-[#fffdf5]';
-                    cardBorder = 'border-[#fdf0d0]';
-                    textColor = 'text-[#a07000]';
-                    barColor = 'bg-[#d4a000]';
-                    barBg = 'bg-[#fdf0d0]';
-                    actionBtn = (
-                      <button className="btn btn-secondary w-full" onClick={() => setActiveTab('subir')}>
-                        Actualizar documento
-                      </button>
-                    );
-                  } else if (worker.estado === 'pendiente') {
-                    statusColor = 'border-t-gray-400';
-                    badge = <span className="badge b-gray">Pendiente</span>;
-                    cardBg = 'bg-gray-50';
-                    cardBorder = 'border-gray-200';
-                    textColor = 'text-gray-500';
-                    barColor = 'bg-gray-400';
-                    barBg = 'bg-gray-200';
-                    actionBtn = (
-                      <button className="btn btn-secondary w-full" onClick={() => setActiveTab('subir')}>
-                        Subir carpeta
-                      </button>
-                    );
-                  }
-
-                  const initials = worker.nombre
-                    .split(' ')
-                    .map((n: string) => n[0])
-                    .join('')
-                    .substring(0, 2)
-                    .toUpperCase();
-
-                  return (
-                    <div key={worker.rut} className={`card hover:shadow-md transition-shadow group border-t-4 ${statusColor}`}>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex gap-3">
-                          <div className="avatar w-11 h-11 text-[14.3px] bg-navy text-cream flex items-center justify-center font-bold">{initials}</div>
-                          <div>
-                            <div className="font-semibold text-[15.4px] text-navy group-hover:text-brown transition-colors">{worker.nombre}</div>
-                            <div className="text-[12.1px] text-gray-500 font-mono mt-0.5">{worker.rut}</div>
-                          </div>
-                        </div>
-                        {badge}
-                      </div>
-                      
-                      <div className="flex items-center gap-1.5 text-[13.2px] text-gray-600 mb-4">
-                        <Briefcase size={14} className="text-gray-400" /> {worker.cargo || 'Operario'}
-                      </div>
-
-                      <div className={`rounded-lg p-3 mb-4 border ${cardBg} ${cardBorder}`}>
-                        <div className="flex justify-between items-center text-[12.1px] mb-1.5">
-                          <span className={`${textColor} font-medium`}>Cumplimiento General</span>
-                          <span className={`font-bold ${textColor}`}>{worker.cumplimiento || 100}%</span>
-                        </div>
-                        <div className={`prog-wrap h-1.5 ${barBg}`}>
-                          <div className={`prog-fill ${barColor}`} style={{ width: `${worker.cumplimiento || 100}%` }}></div>
-                        </div>
-                        <p className="text-[11px] text-gray-500 mt-2">
-                          {worker.detalle || `Asignado a: ${worker.faena || 'Torre Mackenna'}`}
-                        </p>
-                      </div>
-
-                      {actionBtn}
+                    <div>
+                      <h2 className="page-title flex items-center gap-2">
+                        Carpeta de Documentos: {selectedWorkerForDocs.nombre}
+                      </h2>
+                      <p className="page-sub">RUT: {selectedWorkerForDocs.rut} · Cargo: {selectedWorkerForDocs.cargo || 'Operario'}</p>
                     </div>
-                  );
-                })}
+                  </div>
+                  {(() => {
+                    const list = getContratistas();
+                    const cObj = list.find(c => c.id === contratistaLogueado.id);
+                    const freshWorker = cObj?.trabajadores?.find(w => w.rut === selectedWorkerForDocs.rut);
+                    const statusVal = freshWorker ? calcularEstadoTrabajador(freshWorker) : 'pendiente';
+                    const badgeClass = statusVal === 'aprobado' ? 'b-green' : statusVal === 'rechazado' ? 'b-red' : 'b-yellow';
+                    return <span className={`badge ${badgeClass} text-xs font-bold py-1.5 px-3`}>{statusVal === 'aprobado' ? 'Habilitado' : statusVal === 'rechazado' ? 'Bloqueado' : 'Pendiente'}</span>;
+                  })()}
+                </div>
+
+                <div className="card">
+                  <h3 className="section-title mb-4">Checklist de Requisitos</h3>
+                  <div className="flex flex-col gap-3">
+                    {(() => {
+                      const list = getContratistas();
+                      const cObj = list.find(c => c.id === contratistaLogueado.id);
+                      const freshWorker = cObj?.trabajadores?.find(w => w.rut === selectedWorkerForDocs.rut);
+                      const docsList = freshWorker?.documentos || [];
+                      
+                      if (docsList.length === 0) {
+                        return <p className="text-gray-500 text-[13.5px] p-4 text-center">No hay requisitos configurados para este trabajador.</p>;
+                      }
+
+                      return docsList.map(doc => {
+                        let RowIcon = Clock;
+                        let iconColorClass = 'text-gray-400';
+                        let rowBgClass = '';
+                        let badgeClass = 'b-gray';
+                        let badgeLabel = 'Pendiente';
+                        let subtext = `Sin subir · Requisito Obligatorio`;
+                        let actionBtn = (
+                          <button className="btn btn-secondary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
+                            <Upload size={14} /> Subir
+                          </button>
+                        );
+
+                        if (doc.estado === 'aprobado') {
+                          RowIcon = FileCheck;
+                          iconColorClass = 'text-[#2a6a3a]';
+                          badgeClass = 'b-green';
+                          badgeLabel = 'Aprobado';
+                          subtext = 'Subido · Validación automática';
+                          actionBtn = (
+                            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
+                              <Eye size={14}/>
+                            </button>
+                          );
+                        } else if (doc.estado === 'por_vencer') {
+                          RowIcon = AlertTriangle;
+                          iconColorClass = 'text-[#c08000]';
+                          rowBgClass = 'bg-[#fffdf5] -mx-4 px-4 py-3 border-y border-cream3 rounded-md';
+                          badgeClass = 'b-yellow';
+                          badgeLabel = 'Por vencer';
+                          subtext = doc.observacion || `Vence el ${doc.vencimiento}`;
+                          actionBtn = (
+                            <button className="btn btn-primary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
+                              <Upload size={14} /> Renovar
+                            </button>
+                          );
+                        } else if (doc.estado === 'rechazado') {
+                          RowIcon = X;
+                          iconColorClass = 'text-[#c02020]';
+                          rowBgClass = 'bg-[#fff8f8] -mx-4 px-4 py-3 border-b border-cream3 rounded-md';
+                          badgeClass = 'b-red';
+                          badgeLabel = 'Rechazado';
+                          subtext = doc.observacion || 'Documento rechazado.';
+                          actionBtn = (
+                            <button className="btn btn-danger btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
+                              <Upload size={14} /> Corregir
+                            </button>
+                          );
+                        } else if (doc.estado === 'revision') {
+                          RowIcon = Clock;
+                          iconColorClass = 'text-blue-500';
+                          badgeClass = 'b-blue';
+                          badgeLabel = 'En revisión';
+                          subtext = 'Enviado para revisión por auditoría';
+                          actionBtn = (
+                            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
+                              <Eye size={14}/>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div 
+                            key={doc.id} 
+                            className={`doc-row cursor-pointer hover:bg-cream/40 ${rowBgClass} transition-colors`} 
+                            onClick={() => setSelectedDocumentForPanel(doc)}
+                          >
+                            <RowIcon size={20} className={`${iconColorClass} shrink-0`} />
+                            <div className="flex-1 font-sans">
+                              <div className="text-[15.4px] font-medium text-navy">{doc.nombre}</div>
+                              <div className={`text-[13.2px] ${doc.estado === 'por_vencer' ? 'text-[#a07000]' : doc.estado === 'rechazado' ? 'text-[#c03030]' : 'text-gray-400'}`}>
+                                {subtext}
+                              </div>
+                            </div>
+                            <span className={`badge ${badgeClass}`}>{badgeLabel}</span>
+                            <div className="doc-meta font-sans">{doc.vencimiento && doc.vencimiento !== '—' ? doc.vencimiento : ''}</div>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {actionBtn}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="fade-in">
+                <div className="page-header mb-6">
+                  <div>
+                    <h2 className="page-title flex items-center gap-2">
+                      <Users className="text-brown" size={22} /> Directorio de Trabajadores
+                    </h2>
+                    <p className="page-sub">Gestiona la documentación y habilitación de tu personal en terreno</p>
+                  </div>
+                  <button className="btn btn-primary shadow-sm hover:shadow-md" onClick={() => setShowAddWorkerModal(true)}>
+                    <UserPlus size={16} className="mr-2" /> Agregar Trabajador
+                  </button>
+                </div>
+
+                {/* BARRA DE BÚSQUEDA Y FILTROS */}
+                <div className="flex flex-col md:flex-row gap-3 mb-6 bg-white p-3 rounded-xl border border-cream3 shadow-sm">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por nombre, RUT o cargo..." 
+                      className="form-input w-full pl-9 py-2 border-none bg-cream2/50 focus:bg-white text-[14.3px]"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer">
+                      <option>Todos los estados</option>
+                      <option>Habilitados (Al día)</option>
+                      <option>Con problemas (Rojo)</option>
+                    </select>
+                    <select className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer">
+                      <option>Todas las faenas</option>
+                      {misProyectos.map(p => (
+                        <option key={p.id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* GRID DE PERFILES DE TRABAJADORES */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {trabajadoresData.map((worker: any) => {
+                    const workerEstado = calcularEstadoTrabajador(worker);
+                    let statusColor = 'border-t-[#2a6a3a]';
+                    let badge = <span className="badge b-green" title="Habilitado para ingreso">Al día</span>;
+                    let cardBg = 'bg-[#f4fbf6]';
+                    let cardBorder = 'border-[#d4f0de]/50';
+                    let textColor = 'text-[#1a6030]';
+                    let barColor = 'bg-[#2a6a3a]';
+                    let barBg = 'bg-[#f4fbf6]';
+                    let actionBtn = (
+                      <button 
+                        onClick={() => setSelectedWorkerForDocs(worker)}
+                        className="btn btn-ghost w-full border border-cream3 text-gray-600 hover:text-navy"
+                      >
+                        <FolderOpen size={16} className="mr-2" /> Ver Carpeta
+                      </button>
+                    );
+
+                    if (workerEstado === 'rechazado') {
+                      statusColor = 'border-t-[#c02020]';
+                      badge = <span className="badge bg-[#fde8e8] text-[#c02020] border border-[#fde8e8]" title="Acceso bloqueado">Bloqueado</span>;
+                      cardBg = 'bg-[#fff8f8]';
+                      cardBorder = 'border-[#fde8e8]';
+                      textColor = 'text-[#c02020]';
+                      barColor = 'bg-[#c02020]';
+                      barBg = 'bg-[#fde8e8]';
+                      actionBtn = (
+                        <button 
+                          onClick={() => setSelectedWorkerForDocs(worker)}
+                          className="btn btn-primary w-full bg-[#c02020] hover:bg-[#a01515] border-none"
+                        >
+                          Solucionar ahora
+                        </button>
+                      );
+                    } else if (workerEstado === 'por_vencer') {
+                      statusColor = 'border-t-[#d4a000]';
+                      badge = <span className="badge b-yellow">Advertencia</span>;
+                      cardBg = 'bg-[#fffdf5]';
+                      cardBorder = 'border-[#fdf0d0]';
+                      textColor = 'text-[#a07000]';
+                      barColor = 'bg-[#d4a000]';
+                      barBg = 'bg-[#fdf0d0]';
+                      actionBtn = (
+                        <button 
+                          onClick={() => setSelectedWorkerForDocs(worker)}
+                          className="btn btn-secondary w-full"
+                        >
+                          Actualizar documento
+                        </button>
+                      );
+                    } else if (workerEstado === 'pendiente') {
+                      statusColor = 'border-t-gray-400';
+                      badge = <span className="badge b-gray">Pendiente</span>;
+                      cardBg = 'bg-gray-50';
+                      cardBorder = 'border-gray-200';
+                      textColor = 'text-gray-500';
+                      barColor = 'bg-gray-400';
+                      barBg = 'bg-gray-200';
+                      actionBtn = (
+                        <button 
+                          onClick={() => setSelectedWorkerForDocs(worker)}
+                          className="btn btn-secondary w-full"
+                        >
+                          Subir carpeta
+                        </button>
+                      );
+                    }
+
+                    const initials = worker.nombre
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .substring(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <div key={worker.rut} className={`card hover:shadow-md transition-shadow group border-t-4 ${statusColor}`}>
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex gap-3">
+                            <div className="avatar w-11 h-11 text-[14.3px] bg-navy text-cream flex items-center justify-center font-bold">{initials}</div>
+                            <div>
+                              <div className="font-semibold text-[15.4px] text-navy group-hover:text-brown transition-colors">{worker.nombre}</div>
+                              <div className="text-[12.1px] text-gray-500 font-mono mt-0.5">{worker.rut}</div>
+                            </div>
+                          </div>
+                          {badge}
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 text-[13.2px] text-gray-600 mb-4">
+                          <Briefcase size={14} className="text-gray-400" /> {worker.cargo || 'Operario'}
+                        </div>
+
+                        <div className={`rounded-lg p-3 mb-4 border ${cardBg} ${cardBorder}`}>
+                          <div className="flex justify-between items-center text-[12.1px] mb-1.5">
+                            <span className={`${textColor} font-medium`}>Cumplimiento General</span>
+                            <span className={`font-bold ${textColor}`}>{worker.cumplimiento || 100}%</span>
+                          </div>
+                          <div className={`prog-wrap h-1.5 ${barBg}`}>
+                            <div className={`prog-fill ${barColor}`} style={{ width: `${worker.cumplimiento || 100}%` }}></div>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-2">
+                            {worker.detalle || `Asignado a: ${worker.faena || 'Torre Mackenna'}`}
+                          </p>
+                        </div>
+
+                        {actionBtn}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )
           )}
 
           {/* CONFIGURACIÓN Y PREFERENCIAS (PORTAL CONTRATISTA) */}
@@ -1384,7 +1565,7 @@ export default function ContratistaPortal() {
         <DocumentDetailPanel 
           doc={selectedDocumentForPanel} 
           onClose={() => setSelectedDocumentForPanel(null)} 
-          onUpload={handleUploadDocument}
+          onUpload={(docId, msg) => handleUploadDocument(docId, msg, selectedWorkerForDocs?.rut)}
           showToast={showToast} 
         />
       )}

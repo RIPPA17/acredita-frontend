@@ -7,7 +7,7 @@ import {
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
   Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador } from '../data/localStorageDb';
 import { Contratista } from '../types';
 
 export default function MandantePortal() {
@@ -96,22 +96,13 @@ export default function MandantePortal() {
     const totalDocs = contractorDocs.length;
     const approvedDocs = contractorDocs.filter(d => d.estado === 'aprobado').length;
     const totalWorkers = workers.length;
-    const approvedWorkers = workers.filter(w => w.estado === 'aprobado').length;
+    const approvedWorkers = workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
     
     const percentDocs = totalDocs > 0 ? Math.round((approvedDocs / totalDocs) * 100) : 100;
     
-    let stateLabel = 'Acreditado';
-    let badgeClass = 'b-green';
-    const hasRejected = contractorDocs.some(d => d.estado === 'rechazado') || workers.some(w => w.estado === 'rechazado');
-    const hasPending = contractorDocs.some(d => d.estado === 'revision' || d.estado === 'pendiente') || workers.some(w => w.estado === 'pendiente');
-    
-    if (hasRejected) {
-      stateLabel = 'Bloqueado';
-      badgeClass = 'b-red';
-    } else if (hasPending) {
-      stateLabel = 'En proceso';
-      badgeClass = 'b-yellow';
-    }
+    const stateLabelVal = calcularEstadoAcreditacion(cObj);
+    const stateLabel = stateLabelVal === 'Aprobado' ? 'Acreditado' : stateLabelVal === 'Vencido/Bloqueado' ? 'Bloqueado' : stateLabelVal;
+    const badgeClass = stateLabelVal === 'Aprobado' ? 'b-green' : stateLabelVal === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
 
     const hasRejectedDocs = contractorDocs.some(d => d.estado === 'rechazado');
     let paymentLabel = 'Pago Habilitado';
@@ -135,11 +126,12 @@ export default function MandantePortal() {
       }
     });
     workers.forEach(w => {
-      if (w.estado !== 'aprobado') {
+      const wEstado = calcularEstadoTrabajador(w);
+      if (wEstado !== 'aprobado') {
         pendingReqs.push({
           source: `Trabajador: ${w.nombre}`,
-          detail: `${w.cargo || 'Operario'} · ${w.estado === 'rechazado' ? 'Examen/Doc rechazado' : w.estado === 'pendiente' ? 'Documentos pendientes' : 'Por vencer'}`,
-          badge: w.estado === 'rechazado' ? 'b-red' : 'b-gray'
+          detail: `${w.cargo || 'Operario'} · ${wEstado === 'rechazado' ? 'Examen/Doc rechazado' : wEstado === 'pendiente' ? 'Documentos pendientes' : 'Por vencer'}`,
+          badge: wEstado === 'rechazado' ? 'b-red' : 'b-gray'
         });
       }
     });
@@ -234,6 +226,61 @@ export default function MandantePortal() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="section-title text-sm uppercase tracking-wider text-gray-400 font-semibold mb-3">Acreditación y Carpetas de Trabajadores</h4>
+            <div className="flex flex-col gap-3">
+              {workers.map(w => {
+                const wEstado = calcularEstadoTrabajador(w);
+                const wBadgeClass = wEstado === 'aprobado' ? 'b-green' : wEstado === 'rechazado' ? 'b-red' : 'b-yellow';
+                const wStatusLabel = wEstado === 'aprobado' ? 'Habilitado' : wEstado === 'rechazado' ? 'Bloqueado' : 'Pendiente';
+                return (
+                  <div key={w.rut} className="p-3 border border-cream3 rounded-xl bg-white flex flex-col gap-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <div>
+                        <div className="font-semibold text-navy">{w.nombre}</div>
+                        <div className="text-gray-400 mt-0.5">{w.cargo || 'Operario'} · RUT: {w.rut}</div>
+                      </div>
+                      <span className={`badge text-[10px] ${wBadgeClass}`}>{wStatusLabel}</span>
+                    </div>
+                    {/* Documents list of this worker */}
+                    <div className="bg-cream2/30 rounded-lg p-2 flex flex-col gap-1.5 border border-cream3/30 mt-1">
+                      {w.documentos && w.documentos.length > 0 ? (
+                        w.documentos.map(wd => (
+                          <div key={wd.id} className="flex justify-between items-center text-[11px] py-1 border-b border-cream3/25 last:border-b-0">
+                            <span className="text-navy/80">{wd.nombre}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                                wd.estado === 'aprobado' ? 'bg-green-100 text-green-800' :
+                                wd.estado === 'rechazado' ? 'bg-red-100 text-red-800' :
+                                wd.estado === 'por_vencer' ? 'bg-yellow-100 text-yellow-800' :
+                                wd.estado === 'revision' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {wd.estado === 'aprobado' ? 'Aprobado' :
+                                 wd.estado === 'rechazado' ? 'Rechazado' :
+                                 wd.estado === 'por_vencer' ? 'Por vencer' :
+                                 wd.estado === 'revision' ? 'En revisión' : 'Pendiente'}
+                              </span>
+                              {(wd.estado === 'aprobado' || wd.estado === 'rechazado' || wd.estado === 'revision') && (
+                                <button 
+                                  className="text-brown hover:underline text-[9px] font-medium"
+                                  onClick={() => showToast(`Abriendo visor para ${wd.nombre} de ${w.nombre}...`)}
+                                >
+                                  Ver
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-gray-400 text-[10px] italic">Sin documentos registrados.</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -581,22 +628,22 @@ export default function MandantePortal() {
             ).forEach(c => {
               const workers = c.trabajadores || [];
               totalWorkers += workers.length;
-              approvedWorkers += workers.filter(w => w.estado === 'aprobado').length;
-              pendingWorkers += workers.filter(w => w.estado === 'pendiente' || w.estado === 'rechazado').length;
+              approvedWorkers += workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
+              pendingWorkers += workers.filter(w => calcularEstadoTrabajador(w) === 'pendiente' || calcularEstadoTrabajador(w) === 'rechazado').length;
             });
 
             const okContractorsList = contractorsData.filter(c => {
               const statusValues = Object.values(c.status).filter(s => s !== 'na');
               const contractorObj = allContratistas.find(co => co.id === c.id);
               const workers = contractorObj?.trabajadores || [];
-              const allWOk = workers.every(w => w.estado === 'aprobado');
+              const allWOk = workers.every(w => calcularEstadoTrabajador(w) === 'aprobado');
               return statusValues.length > 0 && statusValues.every(s => s === 'ok') && allWOk;
             });
             const critContractorsList = contractorsData.filter(c => {
               const statusValues = Object.values(c.status).filter(s => s !== 'na');
               const contractorObj = allContratistas.find(co => co.id === c.id);
               const workers = contractorObj?.trabajadores || [];
-              const hasWError = workers.some(w => w.estado === 'rechazado');
+              const hasWError = workers.some(w => calcularEstadoTrabajador(w) === 'rechazado');
               const hasCompanyError = statusValues.includes('error');
               return hasCompanyError || hasWError;
             });
@@ -604,8 +651,8 @@ export default function MandantePortal() {
               const statusValues = Object.values(c.status).filter(s => s !== 'na');
               const contractorObj = allContratistas.find(co => co.id === c.id);
               const workers = contractorObj?.trabajadores || [];
-              const hasWError = workers.some(w => w.estado === 'rechazado');
-              const hasWWarn = workers.some(w => w.estado === 'por_vencer' || w.estado === 'pendiente');
+              const hasWError = workers.some(w => calcularEstadoTrabajador(w) === 'rechazado');
+              const hasWWarn = workers.some(w => calcularEstadoTrabajador(w) === 'por_vencer' || calcularEstadoTrabajador(w) === 'pendiente');
               const hasCompanyError = statusValues.includes('error');
               const hasCompanyWarn = statusValues.includes('warn');
               return (hasCompanyWarn || hasWWarn) && !hasCompanyError && !hasWError;
@@ -661,13 +708,13 @@ export default function MandantePortal() {
                       {[...critContractorsList, ...warnContractorsList].map(c => {
                         const contractorObj = allContratistas.find(co => co.id === c.id);
                         const workers = contractorObj?.trabajadores || [];
-                        const approvedW = workers.filter(w => w.estado === 'aprobado').length;
+                        const approvedW = workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
                         const pendingW = workers.length - approvedW;
                         
                         const totalDocs = contractorObj?.documentos.length || 0;
                         const approvedDocs = contractorObj?.documentos.filter(d => d.estado === 'aprobado').length || 0;
                         
-                        const isError = Object.values(c.status).includes('error') || workers.some(w => w.estado === 'rechazado');
+                        const isError = Object.values(c.status).includes('error') || workers.some(w => calcularEstadoTrabajador(w) === 'rechazado');
                         
                         return (
                           <div key={c.id} className="p-4 border border-cream3 rounded-2xl bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-shadow">
@@ -743,7 +790,7 @@ export default function MandantePortal() {
                       const contractorObj = allContratistas.find(co => co.id === c.id);
                       const workers = contractorObj?.trabajadores || [];
                       projectTotalWorkers += workers.length;
-                      projectApprovedWorkers += workers.filter(w => w.estado === 'aprobado').length;
+                      projectApprovedWorkers += workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
                     });
                     
                     if (totalDocs > 0) {
@@ -1233,22 +1280,10 @@ export default function MandantePortal() {
                             const contractorObj = allContratistas.find(co => co.id === c.id);
                             const workers = contractorObj?.trabajadores || [];
                             
-                            let statusLabel = 'Acreditado';
-                            let badgeClass = 'b-green';
-                            let barColor = 'bg-[#2a6a3a]';
-                            
-                            const hasRejected = (contractorInState && Object.values(contractorInState.status).includes('error')) || workers.some(w => w.estado === 'rechazado');
-                            const hasPending = (contractorInState && Object.values(contractorInState.status).includes('pending')) || workers.some(w => w.estado === 'pendiente');
-
-                            if (hasRejected) {
-                              statusLabel = 'Bloqueado';
-                              badgeClass = 'b-red';
-                              barColor = 'bg-[#c02020]';
-                            } else if (hasPending) {
-                              statusLabel = 'En proceso';
-                              badgeClass = 'b-yellow';
-                              barColor = 'bg-[#c08000]';
-                            }
+                            const statusLabelVal = contractorObj ? calcularEstadoAcreditacion(contractorObj) : 'No acreditado';
+                            const statusLabel = statusLabelVal === 'Aprobado' ? 'Acreditado' : statusLabelVal === 'Vencido/Bloqueado' ? 'Bloqueado' : statusLabelVal;
+                            const badgeClass = statusLabelVal === 'Aprobado' ? 'b-green' : statusLabelVal === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
+                            const barColor = statusLabelVal === 'Aprobado' ? 'bg-[#2a6a3a]' : statusLabelVal === 'Vencido/Bloqueado' ? 'bg-[#c02020]' : 'bg-[#c08000]';
 
                             return (
                               <tr key={c.id} className="hover:bg-gray-50 border-b border-cream cursor-pointer" onClick={() => setSelectedContratista(c.id)}>
@@ -1510,7 +1545,7 @@ export default function MandantePortal() {
                   const statusValues = Object.values(c.status).filter(s => s !== 'na');
                   const contractorObj = allContratistas.find(co => co.id === c.id);
                   const workers = contractorObj?.trabajadores || [];
-                  const allWOk = workers.every(w => w.estado === 'aprobado');
+                  const allWOk = workers.every(w => calcularEstadoTrabajador(w) === 'aprobado');
                   return statusValues.length > 0 && statusValues.every(s => s === 'ok') && allWOk;
                 }).length;
 
@@ -1521,7 +1556,7 @@ export default function MandantePortal() {
                 ).forEach(c => {
                   const workers = c.trabajadores || [];
                   totalW += workers.length;
-                  approvedW += workers.filter(w => w.estado === 'aprobado').length;
+                  approvedW += workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
                 });
                 const rate = totalC > 0 ? Math.round((okC / totalC) * 100) : 100;
 
@@ -1554,20 +1589,11 @@ export default function MandantePortal() {
                             
                             const cObj = allContratistas.find(co => co.id === c.id);
                             const workers = cObj?.trabajadores || [];
-                            const approvedWorkersCount = workers.filter(w => w.estado === 'aprobado').length;
+                            const approvedWorkersCount = workers.filter(w => calcularEstadoTrabajador(w) === 'aprobado').length;
                             
-                            const hasRejected = Object.values(c.status).includes('error') || workers.some(w => w.estado === 'rechazado');
-                            const hasWarning = Object.values(c.status).includes('warn') || workers.some(w => w.estado === 'por_vencer' || w.estado === 'pendiente');
-                            
-                            let statusText = 'Acreditado';
-                            let badgeClass = 'b-green';
-                            if (hasRejected) {
-                              statusText = 'Bloqueado';
-                              badgeClass = 'b-red';
-                            } else if (hasWarning) {
-                              statusText = 'En proceso';
-                              badgeClass = 'b-yellow';
-                            }
+                            const statusTextVal = cObj ? calcularEstadoAcreditacion(cObj) : 'No acreditado';
+                            const statusText = statusTextVal === 'Aprobado' ? 'Acreditado' : statusTextVal === 'Vencido/Bloqueado' ? 'Bloqueado' : statusTextVal;
+                            const badgeClass = statusTextVal === 'Aprobado' ? 'b-green' : statusTextVal === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
 
                             const projName = misProyectos.find(p => cObj?.proyectos.includes(p.id))?.nombre || 'General';
 

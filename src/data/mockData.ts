@@ -1,12 +1,12 @@
 import { Mandante, Proyecto, Contratista, Documento, Trabajador } from '../types';
 
 export const PLANTILLA_DOCUMENTOS = [
-  { id: 'liquidacion', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', frecuencia: 'Mensual' },
-  { id: 'f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', frecuencia: 'Mensual' },
-  { id: 'contrato', nombre: 'Contrato de Trabajo', categoria: 'Laboral', frecuencia: 'Indefinido' },
-  { id: 'mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', frecuencia: 'Mensual' },
-  { id: 'antecedentes', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', frecuencia: 'Mensual' },
-  { id: 'odi', nombre: 'ODI 2026', categoria: 'Prevención', frecuencia: 'Por Proyecto' },
+  { id: 'liquidacion', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador' },
+  { id: 'f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', frecuencia: 'Mensual', destino: 'empresa' },
+  { id: 'contrato', nombre: 'Contrato de Trabajo', categoria: 'Laboral', frecuencia: 'Indefinido', destino: 'trabajador' },
+  { id: 'mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', frecuencia: 'Mensual', destino: 'empresa' },
+  { id: 'antecedentes', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador' },
+  { id: 'odi', nombre: 'ODI 2026', categoria: 'Prevención', frecuencia: 'Por Proyecto', destino: 'trabajador' },
 ];
 
 export const MANDANTES: Mandante[] = [
@@ -88,9 +88,50 @@ export const CONTRATISTAS: Contratista[] = [
     rut: '77.321.654-1',
     proyectos: ['mackenna', 'bodega', 'solar'],
     trabajadores: [
-      { nombre: 'Juan Pérez González', rut: '18.453.211-0', estado: 'aprobado', cargo: 'Operador de Maquinaria', faena: 'Torre Mackenna', cumplimiento: 100 },
-      { nombre: 'Carlos Rojas Méndez', rut: '19.223.445-8', estado: 'rechazado', cargo: 'Jornalero', faena: 'Torre Mackenna', cumplimiento: 50, detalle: 'Examen de Altura Rechazado' },
-      { nombre: 'Alejandro Muñoz Silva', rut: '16.784.322-K', estado: 'por_vencer', cargo: 'Eléctrico', faena: 'Torre Mackenna', cumplimiento: 85, detalle: 'Curso Faltante' }
+      { 
+        nombre: 'Juan Pérez González', 
+        rut: '18.453.211-0', 
+        estado: 'aprobado', 
+        cargo: 'Operador de Maquinaria', 
+        faena: 'Torre Mackenna', 
+        cumplimiento: 100,
+        documentos: [
+          { id: 'wt1_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'wt1_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt1_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt1_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' }
+        ]
+      },
+      { 
+        nombre: 'Carlos Rojas Méndez', 
+        rut: '19.223.445-8', 
+        estado: 'rechazado', 
+        cargo: 'Jornalero', 
+        faena: 'Torre Mackenna', 
+        cumplimiento: 50, 
+        detalle: 'Examen de Altura Rechazado',
+        documentos: [
+          { id: 'wt2_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'wt2_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt2_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt2_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'rechazado', vencimiento: '—', subido: '12 May 2026', motivo: 'Examen de Altura Rechazado', observacion: 'Examen de Altura Rechazado' }
+        ]
+      },
+      { 
+        nombre: 'Alejandro Muñoz Silva', 
+        rut: '16.784.322-K', 
+        estado: 'por_vencer', 
+        cargo: 'Eléctrico', 
+        faena: 'Torre Mackenna', 
+        cumplimiento: 85, 
+        detalle: 'Curso Faltante',
+        documentos: [
+          { id: 'wt3_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'wt3_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt3_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'wt3_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'por_vencer', vencimiento: '24 May 2026', subido: '24 May 2025', observacion: 'Curso Faltante' }
+        ]
+      }
     ],
     documentos: [
       {
@@ -155,10 +196,50 @@ export const CONTRATISTAS: Contratista[] = [
     rut: '76.111.222-3',
     proyectos: ['costanera', 'hospital', 'bodega'],
     trabajadores: [
-      { nombre: 'Jorge Morales', rut: '12.345.678-9', estado: 'aprobado' },
-      { nombre: 'Pedro Soto', rut: '13.456.789-0', estado: 'por_vencer' },
-      { nombre: 'Luis Vera', rut: '14.567.890-1', estado: 'rechazado' },
-      { nombre: 'Carlos Muñoz', rut: '15.678.901-2', estado: 'pendiente' },
+      { 
+        nombre: 'Jorge Morales', 
+        rut: '12.345.678-9', 
+        estado: 'aprobado',
+        documentos: [
+          { id: 'ws1_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'ws1_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws1_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws1_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' }
+        ]
+      },
+      { 
+        nombre: 'Pedro Soto', 
+        rut: '13.456.789-0', 
+        estado: 'por_vencer',
+        documentos: [
+          { id: 'ws2_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'ws2_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws2_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws2_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'por_vencer', vencimiento: '24 May 2026', subido: '24 May 2025' }
+        ]
+      },
+      { 
+        nombre: 'Luis Vera', 
+        rut: '14.567.890-1', 
+        estado: 'rechazado',
+        documentos: [
+          { id: 'ws3_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'ws3_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws3_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws3_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'rechazado', vencimiento: '—', subido: '11 May 2026', motivo: 'Examen de altura vencido', observacion: 'Examen de altura vencido' }
+        ]
+      },
+      { 
+        nombre: 'Carlos Muñoz', 
+        rut: '15.678.901-2', 
+        estado: 'pendiente',
+        documentos: [
+          { id: 'ws4_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
+          { id: 'ws4_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws4_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
+          { id: 'ws4_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'pendiente', vencimiento: '—' }
+        ]
+      },
     ],
     documentos: [
       {

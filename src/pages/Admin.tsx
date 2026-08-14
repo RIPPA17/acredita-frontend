@@ -40,7 +40,7 @@ import {
   ArrowLeft,
   ChevronRight,
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
 
 const GLOBAL_MANDANTES = getMandantes();
@@ -52,6 +52,7 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
   const list: any[] = [];
   let qId = 1;
   contratistas.forEach(c => {
+    // 1. Empresa
     c.documentos.forEach(d => {
       if (d.estado === 'revision') {
         const pId = c.proyectos[0] || 'costanera';
@@ -59,6 +60,8 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
         
         list.push({
           id: qId++,
+          docId: d.id,
+          origen: 'Empresa',
           emp: c.nombre,
           rut: c.rut,
           proyecto: project ? project.nombre : 'Costanera Norte',
@@ -68,7 +71,7 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
           tag: d.nombre.toLowerCase().includes('contrato') || d.nombre.toLowerCase().includes('f30') ? 'urgente' : 'normal',
           time: 'Hace 2 hr',
           timeSort: 2,
-          hint: d.motivo || 'Verificar descuentos legales y base imponible del trabajador indicado.',
+          hint: d.motivo || 'Verificar descuentos legales y base imponible del contratista.',
           historial: [
             {
               type: 'uploaded',
@@ -79,6 +82,42 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
           ]
         });
       }
+    });
+
+    // 2. Trabajadores
+    c.trabajadores?.forEach(w => {
+      w.documentos?.forEach(wd => {
+        if (wd.estado === 'revision') {
+          const pId = c.proyectos[0] || 'costanera';
+          const project = proyectos.find(p => p.id === pId);
+          
+          list.push({
+            id: qId++,
+            docId: wd.id,
+            origen: 'Trabajador',
+            trabajadorNombre: w.nombre,
+            trabajadorRut: w.rut,
+            emp: c.nombre,
+            rut: c.rut,
+            proyecto: project ? project.nombre : 'Costanera Norte',
+            title: wd.nombre,
+            type: wd.categoria === 'Laboral' ? 'Documento laboral trabajador' : 'Prevención de riesgos',
+            prio: wd.nombre.toLowerCase().includes('contrato') ? 'Alta' : 'Media',
+            tag: wd.nombre.toLowerCase().includes('contrato') ? 'urgente' : 'normal',
+            time: 'Hace 3 hr',
+            timeSort: 3,
+            hint: wd.motivo || `Verificar documento cargado para el trabajador ${w.nombre}.`,
+            historial: [
+              {
+                type: 'uploaded',
+                who: c.nombre,
+                when: 'Hace 3 hr',
+                msg: `Subido por portal contratista para trabajador: ${w.nombre}`
+              }
+            ]
+          });
+        }
+      });
     });
   });
   return list;
@@ -244,22 +283,46 @@ function ColaRevisionTab({
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
     if (cObj) {
-      const docObj = cObj.documentos.find(d => d.nombre === current.title);
-      if (docObj) {
-        if (action === "approve") {
-          docObj.estado = 'aprobado';
-          docObj.revisor = 'Ana Díaz';
-          docObj.subido = '13 Aug 2026';
-          setAprobadosHoy((a) => a + 1);
-        } else if (action === "reject") {
-          const finalMotivo = motivoRechazoRapido || "Rechazado por auditoría";
-          const finalObs = observacionRechazo ? `${finalMotivo}: ${observacionRechazo}` : finalMotivo;
-          docObj.estado = 'rechazado';
-          docObj.motivo = finalObs;
-          docObj.observacion = finalObs;
-          setRechazadosHoy((r) => r + 1);
+      if (current.origen === 'Trabajador') {
+        const worker = cObj.trabajadores?.find(w => w.nombre === current.trabajadorNombre || w.rut === current.trabajadorRut);
+        if (worker) {
+          const docObj = worker.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+          if (docObj) {
+            if (action === "approve") {
+              docObj.estado = 'aprobado';
+              docObj.revisor = 'Ana Díaz';
+              docObj.subido = '13 Aug 2026';
+              setAprobadosHoy((a) => a + 1);
+            } else if (action === "reject") {
+              const finalMotivo = motivoRechazoRapido || "Rechazado por auditoría";
+              const finalObs = observacionRechazo ? `${finalMotivo}: ${observacionRechazo}` : finalMotivo;
+              docObj.estado = 'rechazado';
+              docObj.motivo = finalObs;
+              docObj.observacion = finalObs;
+              setRechazadosHoy((r) => r + 1);
+            }
+            worker.estado = calcularEstadoTrabajador(worker);
+            saveContratistas(list);
+          }
         }
-        saveContratistas(list);
+      } else {
+        const docObj = cObj.documentos.find(d => d.id === current.docId || d.nombre === current.title);
+        if (docObj) {
+          if (action === "approve") {
+            docObj.estado = 'aprobado';
+            docObj.revisor = 'Ana Díaz';
+            docObj.subido = '13 Aug 2026';
+            setAprobadosHoy((a) => a + 1);
+          } else if (action === "reject") {
+            const finalMotivo = motivoRechazoRapido || "Rechazado por auditoría";
+            const finalObs = observacionRechazo ? `${finalMotivo}: ${observacionRechazo}` : finalMotivo;
+            docObj.estado = 'rechazado';
+            docObj.motivo = finalObs;
+            docObj.observacion = finalObs;
+            setRechazadosHoy((r) => r + 1);
+          }
+          saveContratistas(list);
+        }
       }
     }
 
@@ -393,7 +456,7 @@ function ColaRevisionTab({
                   {d.title}
                 </div>
                 <div className="text-[11.5px] text-gray-500 truncate ml-1">
-                  {d.emp} · {d.rut}
+                  {d.emp} {d.origen === 'Trabajador' ? `· Personal: ${d.trabajadorNombre}` : `· RUT: ${d.rut}`}
                 </div>
                 <div className="text-[11px] text-gray-400 mt-1.5 ml-1 flex items-center gap-1">
                   <Building size={11} /> {d.proyecto}
@@ -500,7 +563,12 @@ function ColaRevisionTab({
                       <div className="px-5 pb-3.5 flex flex-col gap-3">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-[13px] font-medium text-navy">{current.emp}</p>
+                            <p className="text-[13px] font-semibold text-navy">{current.emp}</p>
+                            {current.origen === 'Trabajador' && (
+                              <p className="text-[12.5px] font-medium text-brown">
+                                Personal: {current.trabajadorNombre} ({current.trabajadorRut})
+                              </p>
+                            )}
                             <p className="text-[11.5px] text-gray-500">{current.proyecto}</p>
                           </div>
                           <button
@@ -508,7 +576,7 @@ function ColaRevisionTab({
                               empresa: current.emp,
                               rut: current.rut,
                               rol: "Contratista",
-                              cumplimiento: hasRejectedDocs ? "Con Requisitos Pendientes" : "Acreditado",
+                              cumplimiento: contractorObj ? calcularEstadoAcreditacion(contractorObj) : "No acreditado",
                               iniciales: current.emp.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase(),
                             })}
                             className="text-[11.5px] text-brown font-medium hover:underline whitespace-nowrap"
@@ -2807,18 +2875,8 @@ export default function AdminPortal() {
                       const workers = c.trabajadores || [];
                       const approvedWorkers = workers.filter(w => w.estado === 'aprobado').length;
                       
-                      const hasRejected = c.documentos.some(d => d.estado === 'rechazado') || workers.some(w => w.estado === 'rechazado');
-                      const hasPending = c.documentos.some(d => d.estado === 'revision' || d.estado === 'pendiente') || workers.some(w => w.estado === 'pendiente');
-                      
-                      let stateLabel = 'Acreditado';
-                      let badgeClass = 'b-green';
-                      if (hasRejected) {
-                        stateLabel = 'Bloqueado';
-                        badgeClass = 'b-red';
-                      } else if (hasPending) {
-                        stateLabel = 'En proceso';
-                        badgeClass = 'b-yellow';
-                      }
+                      const stateLabel = calcularEstadoAcreditacion(c);
+                      const badgeClass = stateLabel === 'Aprobado' ? 'b-green' : stateLabel === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
                       
                       return (
                         <tr key={c.id} className="border-b border-cream hover:bg-gray-50 last:border-0 font-sans">
