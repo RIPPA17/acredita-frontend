@@ -51,6 +51,9 @@ export interface Documento {
   observacion?: string; // Alias o copia para compatibilidad con vistas contratista
   revisor?: string;
   fechaRevisado?: string;
+  motivoRechazo?: string;
+  explicacionRechazo?: string;
+  solucionRechazo?: string;
 }
 
 export interface Contratista {

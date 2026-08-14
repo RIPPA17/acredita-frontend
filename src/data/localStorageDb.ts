@@ -210,3 +210,47 @@ export function calcularEstadoAcreditacion(c: Contratista): 'No acreditado' | 'E
 
   return 'En proceso';
 }
+
+export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Normal' | 'Baja' {
+  let rule = r;
+  if (!rule) {
+    const reglas = getReglas();
+    rule = reglas.find(reg => 
+      d.nombre.toLowerCase().includes(reg.documento.toLowerCase()) || 
+      reg.documento.toLowerCase().includes(d.nombre.toLowerCase())
+    );
+  }
+
+  const criticidad = rule ? rule.criticidad : 'bloquea_acceso';
+  const isVencido = esVencidoPorFecha(d.vencimiento);
+  const isPorVencer = d.estado === 'por_vencer';
+
+  let esAntiguo = false;
+  if (d.subido && d.subido !== '—') {
+    const parts = d.subido.trim().split(' ');
+    if (parts.length >= 3) {
+      const day = parseInt(parts[0]);
+      const year = parseInt(parts[2]);
+      const months: Record<string, number> = {
+        'ene': 0, 'feb': 1, 'mar': 2, 'abr': 3, 'may': 4, 'jun': 5,
+        'jul': 6, 'ago': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dic': 11
+      };
+      const monthStr = parts[1].substring(0, 3).toLowerCase();
+      const month = months[monthStr] !== undefined ? months[monthStr] : 0;
+      const uploadDate = new Date(year, month, day);
+      const diffTime = Math.abs(DEMO_TODAY.getTime() - uploadDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays >= 3) {
+        esAntiguo = true;
+      }
+    }
+  }
+
+  if (criticidad === 'bloquea_acceso' || isVencido || esAntiguo) {
+    return 'Alta';
+  }
+  if (criticidad === 'bloquea_pago' || isPorVencer) {
+    return 'Normal';
+  }
+  return 'Baja';
+}

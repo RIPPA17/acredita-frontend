@@ -38,9 +38,9 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight,
+  ChevronRight, Briefcase
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, calcularPrioridadDocumento } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
 
 const GLOBAL_MANDANTES = getMandantes();
@@ -57,6 +57,7 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
       if (d.estado === 'revision') {
         const pId = c.proyectos[0] || 'costanera';
         const project = proyectos.find(p => p.id === pId);
+        const prioVal = calcularPrioridadDocumento(d);
         
         list.push({
           id: qId++,
@@ -67,16 +68,16 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
           proyecto: project ? project.nombre : 'Costanera Norte',
           title: d.nombre,
           type: d.categoria === 'Laboral' ? 'Liquidación mensual' : d.categoria === 'Tributario' ? 'Declaración mensual SII' : 'Certificación prevención',
-          prio: d.nombre.toLowerCase().includes('contrato') || d.nombre.toLowerCase().includes('f30') ? 'Alta' : 'Media',
-          tag: d.nombre.toLowerCase().includes('contrato') || d.nombre.toLowerCase().includes('f30') ? 'urgente' : 'normal',
-          time: 'Hace 2 hr',
-          timeSort: 2,
+          prio: prioVal,
+          tag: prioVal === 'Alta' ? 'urgente' : 'normal',
+          time: d.subido || 'Reciente',
+          timeSort: d.subido && d.subido !== '—' && !d.subido.includes('hr') ? new Date(d.subido).getTime() : Date.now(),
           hint: d.motivo || 'Verificar descuentos legales y base imponible del contratista.',
           historial: [
             {
               type: 'uploaded',
               who: c.nombre,
-              when: 'Hace 2 hr',
+              when: d.subido || 'Reciente',
               msg: 'Subido por portal contratista'
             }
           ]
@@ -90,6 +91,7 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
         if (wd.estado === 'revision') {
           const pId = c.proyectos[0] || 'costanera';
           const project = proyectos.find(p => p.id === pId);
+          const prioVal = calcularPrioridadDocumento(wd);
           
           list.push({
             id: qId++,
@@ -97,21 +99,22 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
             origen: 'Trabajador',
             trabajadorNombre: w.nombre,
             trabajadorRut: w.rut,
+            trabajadorCargo: w.cargo || 'Operario',
             emp: c.nombre,
             rut: c.rut,
             proyecto: project ? project.nombre : 'Costanera Norte',
             title: wd.nombre,
             type: wd.categoria === 'Laboral' ? 'Documento laboral trabajador' : 'Prevención de riesgos',
-            prio: wd.nombre.toLowerCase().includes('contrato') ? 'Alta' : 'Media',
-            tag: wd.nombre.toLowerCase().includes('contrato') ? 'urgente' : 'normal',
-            time: 'Hace 3 hr',
-            timeSort: 3,
+            prio: prioVal,
+            tag: prioVal === 'Alta' ? 'urgente' : 'normal',
+            time: wd.subido || 'Reciente',
+            timeSort: wd.subido && wd.subido !== '—' && !wd.subido.includes('hr') ? new Date(wd.subido).getTime() : Date.now(),
             hint: wd.motivo || `Verificar documento cargado para el trabajador ${w.nombre}.`,
             historial: [
               {
                 type: 'uploaded',
                 who: c.nombre,
-                when: 'Hace 3 hr',
+                when: wd.subido || 'Reciente',
                 msg: `Subido por portal contratista para trabajador: ${w.nombre}`
               }
             ]
@@ -217,6 +220,10 @@ function ColaRevisionTab({
   const [docs, setDocs] = useState(() => buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS));
   const [motivoRechazoRapido, setMotivoRechazoRapido] = useState('');
   const [observacionRechazo, setObservacionRechazo] = useState('');
+  const [showRejectionForm, setShowRejectionForm] = useState(false);
+  const [motivoRechazo, setMotivoRechazo] = useState('');
+  const [explicacionRechazo, setExplicacionRechazo] = useState('');
+  const [solucionRechazo, setSolucionRechazo] = useState('');
 
   const [filter, setFilter] = useState("all");
   const [sortField, setSortField] = useState("prio");
@@ -225,6 +232,7 @@ function ColaRevisionTab({
   const setSelectedId = setSelectedDocId !== undefined && setSelectedDocId !== null ? setSelectedDocId : setLocalSelectedId;
   const [reviewTab, setReviewTab] = useState("documento");
   const [contextoAbierto, setContextoAbierto] = useState(true);
+  const [zoom, setZoom] = useState(100);
   const [reviewed, setReviewed] = useState(3);
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
 
@@ -273,8 +281,10 @@ function ColaRevisionTab({
       const currentIdx = filtered.findIndex((d) => d.id === current.id);
       const nextIdx = (currentIdx + 1) % filtered.length;
       setSelectedId(filtered[nextIdx]?.id || null);
-      setMotivoRechazoRapido('');
-      setObservacionRechazo('');
+      setMotivoRechazo('');
+      setExplicacionRechazo('');
+      setSolucionRechazo('');
+      setShowRejectionForm(false);
       return;
     }
     setReviewed((r) => r + 1);
@@ -290,15 +300,23 @@ function ColaRevisionTab({
           if (docObj) {
             if (action === "approve") {
               docObj.estado = 'aprobado';
-              docObj.revisor = 'Ana Díaz';
-              docObj.subido = '13 Aug 2026';
+              docObj.revisor = 'Verificador Acredita';
+              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
+              docObj.motivo = undefined;
+              docObj.observacion = undefined;
+              docObj.motivoRechazo = undefined;
+              docObj.explicacionRechazo = undefined;
+              docObj.solucionRechazo = undefined;
               setAprobadosHoy((a) => a + 1);
             } else if (action === "reject") {
-              const finalMotivo = motivoRechazoRapido || "Rechazado por auditoría";
-              const finalObs = observacionRechazo ? `${finalMotivo}: ${observacionRechazo}` : finalMotivo;
               docObj.estado = 'rechazado';
-              docObj.motivo = finalObs;
-              docObj.observacion = finalObs;
+              docObj.motivoRechazo = motivoRechazo;
+              docObj.explicacionRechazo = explicacionRechazo;
+              docObj.solucionRechazo = solucionRechazo;
+              docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
+              docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
+              docObj.revisor = 'Verificador Acredita';
+              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
               setRechazadosHoy((r) => r + 1);
             }
             worker.estado = calcularEstadoTrabajador(worker);
@@ -310,15 +328,23 @@ function ColaRevisionTab({
         if (docObj) {
           if (action === "approve") {
             docObj.estado = 'aprobado';
-            docObj.revisor = 'Ana Díaz';
-            docObj.subido = '13 Aug 2026';
+            docObj.revisor = 'Verificador Acredita';
+            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
+            docObj.motivo = undefined;
+            docObj.observacion = undefined;
+            docObj.motivoRechazo = undefined;
+            docObj.explicacionRechazo = undefined;
+            docObj.solucionRechazo = undefined;
             setAprobadosHoy((a) => a + 1);
           } else if (action === "reject") {
-            const finalMotivo = motivoRechazoRapido || "Rechazado por auditoría";
-            const finalObs = observacionRechazo ? `${finalMotivo}: ${observacionRechazo}` : finalMotivo;
             docObj.estado = 'rechazado';
-            docObj.motivo = finalObs;
-            docObj.observacion = finalObs;
+            docObj.motivoRechazo = motivoRechazo;
+            docObj.explicacionRechazo = explicacionRechazo;
+            docObj.solucionRechazo = solucionRechazo;
+            docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
+            docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
+            docObj.revisor = 'Verificador Acredita';
+            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
             setRechazadosHoy((r) => r + 1);
           }
           saveContratistas(list);
@@ -327,8 +353,10 @@ function ColaRevisionTab({
     }
 
     // Reset inputs
-    setMotivoRechazoRapido('');
-    setObservacionRechazo('');
+    setMotivoRechazo('');
+    setExplicacionRechazo('');
+    setSolucionRechazo('');
+    setShowRejectionForm(false);
 
     const newDocs = docs.filter((d) => d.id !== current.id);
     setDocs(newDocs);
@@ -435,31 +463,50 @@ function ColaRevisionTab({
               <div
                 key={d.id}
                 onClick={() => selectDoc(d.id)}
-                className={`bg-white border rounded-[10px] p-3 cursor-pointer transition-all relative overflow-hidden ${selectedId === d.id ? "border-brown shadow-[0_0_0_2px_rgba(154,105,78,0.25)] bg-[#fdf9f7]" : "border-cream3 hover:bg-cream hover:border-gray-300"}`}
+                className={`bg-white border rounded-[12px] p-3.5 cursor-pointer transition-all relative overflow-hidden flex flex-col gap-2 ${selectedId === d.id ? "border-brown shadow-[0_0_0_2px_rgba(154,105,78,0.25)] bg-[#fdf9f7]" : "border-cream3 hover:bg-cream hover:border-gray-300"}`}
               >
                 <div
-                  className={`absolute left-0 top-0 bottom-0 w-[3px] ${d.prio === "Alta" ? "bg-[#c03030]" : d.prio === "Media" ? "bg-[#d4a000]" : "bg-cream3"}`}
+                  className={`absolute left-0 top-0 bottom-0 w-[4px] ${d.prio === "Alta" ? "bg-[#c03030]" : d.prio === "Normal" ? "bg-[#d4a000]" : "bg-green-500"}`}
                 ></div>
-                <div className="flex justify-between items-center mb-1.5 ml-1">
-                  <span
-                    className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${d.tag === "urgente" ? "bg-[#fde8e8] text-[#a32d2d]" : d.tag === "nuevo" ? "bg-[#eaf3de] text-[#3b6d11]" : "bg-[#faeeda] text-[#854f0b]"}`}
-                  >
-                    {d.tag === "urgente"
-                      ? "Urgente"
-                      : d.tag === "nuevo"
-                        ? "Nuevo"
-                        : "Normal"}
+                
+                <div className="flex justify-between items-center ml-1">
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                    d.prio === 'Alta' ? 'bg-[#fde8e8] text-[#c03030]' : 
+                    d.prio === 'Normal' ? 'bg-[#fffdf0] text-[#a07000]' : 
+                    'bg-[#f0fbf0] text-green-700'
+                  }`}>
+                    Prioridad: {d.prio}
                   </span>
-                  <span className="text-[11px] text-gray-500">{d.time}</span>
+                  <span className="text-[11px] text-gray-500 font-sans">{d.time}</span>
                 </div>
-                <div className="text-[13.5px] font-medium text-navy mb-0.5 ml-1">
+
+                <div className="text-[14px] font-semibold text-navy ml-1 leading-snug">
                   {d.title}
                 </div>
-                <div className="text-[11.5px] text-gray-500 truncate ml-1">
-                  {d.emp} {d.origen === 'Trabajador' ? `· Personal: ${d.trabajadorNombre}` : `· RUT: ${d.rut}`}
+
+                <div className="ml-1 flex gap-1.5 items-center">
+                  <span className={`text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded ${d.origen === 'Trabajador' ? 'bg-[#faeeda] text-[#854f0b]' : 'bg-[#eaf3de] text-[#3b6d11]'}`}>
+                    {d.origen}
+                  </span>
+                  <span className="text-[11.5px] text-gray-500 font-medium">Estado: En revisión</span>
                 </div>
-                <div className="text-[11px] text-gray-400 mt-1.5 ml-1 flex items-center gap-1">
-                  <Building size={11} /> {d.proyecto}
+
+                <div className="text-[12px] text-gray-600 ml-1 leading-relaxed font-sans">
+                  <div className="font-semibold text-navy/95 truncate">{d.emp}</div>
+                  {d.origen === 'Trabajador' && (
+                    <div className="text-brown font-medium mt-0.5 truncate">
+                      Personal: {d.trabajadorNombre} ({d.trabajadorRut})
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-1 ml-1 flex justify-between items-center border-t border-cream3/45 pt-2 text-[11px]">
+                  <span className="text-gray-400 flex items-center gap-1 font-sans">
+                    <Building size={11} className="shrink-0" /> {d.proyecto}
+                  </span>
+                  <span className="text-brown font-semibold flex items-center gap-0.5 hover:underline">
+                    Revisar <ChevronRight size={12} />
+                  </span>
                 </div>
               </div>
             ))}
@@ -493,267 +540,281 @@ function ColaRevisionTab({
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col h-full">
-              <div className="p-3.5 px-5 border-b border-cream3 flex items-start justify-between gap-3">
+                      <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* Header of review */}
+              <div className="p-4 px-5 border-b border-cream3 flex items-center justify-between bg-[#faf9f8] shrink-0 font-sans">
                 <div>
-                  <div className="text-[15px] font-medium text-navy">
-                    {current.title}
-                  </div>
-                  <div className="text-[12.5px] text-gray-500 mt-0.5">
-                    {current.emp} · RUT {current.rut}
-                  </div>
+                  <span className="text-[10px] font-bold text-brown uppercase tracking-wider bg-cream px-2 py-1 rounded mr-2">
+                    {current.origen === 'Trabajador' ? 'Documento de Personal' : 'Documento de Empresa'}
+                  </span>
+                  <span className={`badge ${current.prio === 'Alta' ? 'b-red' : current.prio === 'Normal' ? 'b-yellow' : 'b-green'} text-[10px] font-semibold`}>
+                    Prioridad: {current.prio}
+                  </span>
                 </div>
-                <span
-                  className={`flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${current.prio === "Alta" ? "bg-[#fde8e8] text-[#a32d2d]" : "bg-[#faeeda] text-[#854f0b]"}`}
-                >
-                  {current.prio === "Alta" ? <AlertCircle size={12} /> : null}{" "}
-                  Prioridad {current.prio}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 px-5 pb-3 pt-2 border-b border-cream3">
-                <span className="text-[11px] text-gray-500 whitespace-nowrap">
-                  Revisado {reviewed} de {totalDocs}
-                </span>
-                <div className="flex-1 h-[3px] bg-cream3 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-brown rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.round((reviewed / totalDocs) * 100)}%`,
-                    }}
-                  ></div>
+                <div className="text-[12px] text-gray-500">
+                  Subido: {current.time}
                 </div>
               </div>
 
-              {(() => {
-                const contractorObj = GLOBAL_CONTRATISTAS.find(c => c.nombre === current.emp || c.rut === current.rut);
-                const workers = contractorObj?.trabajadores || [];
-                const approvedW = workers.filter(w => w.estado === 'aprobado').length;
+              {/* Two-Column split layout */}
+              <div className="flex-1 grid grid-cols-[360px_1fr] overflow-hidden">
                 
-                const totalDocs = contractorObj?.documentos.length || 0;
-                const approvedDocs = contractorObj?.documentos.filter(d => d.estado === 'aprobado').length || 0;
-                const totalWorkers = workers.length;
-
-                let associatedWorker = null;
-                const isWorkerDoc = current.title.toLowerCase().includes('odi') || current.title.toLowerCase().includes('antecedentes') || current.title.toLowerCase().includes('sueldo');
-                if (isWorkerDoc) {
-                  associatedWorker = workers.find(w => w.estado !== 'aprobado') || workers[0];
-                }
-
-                const hasRejectedDocs = contractorObj?.documentos.some(d => d.estado === 'rechazado');
-                let paymentLabel = 'Pago Habilitado';
-                let paymentBadgeClass = 'b-green';
-                if (hasRejectedDocs) {
-                  paymentLabel = 'Pago Retenido';
-                  paymentBadgeClass = 'b-red';
-                }
-
-                return (
-                  <div className="border-b border-cream3 bg-[#faf9f8]">
-                    <button
-                      onClick={() => setContextoAbierto(!contextoAbierto)}
-                      className="w-full flex items-center justify-between px-5 py-2.5 text-left focus:outline-none"
-                    >
-                      <span className="flex items-center gap-2 text-[12.5px] font-medium text-navy">
-                        <Building size={14} className="text-brown" /> Contexto de Acreditación
-                      </span>
-                      <ChevronDown size={15} className={`text-gray-400 transition-transform ${contextoAbierto ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {contextoAbierto && (
-                      <div className="px-5 pb-3.5 flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-[13px] font-semibold text-navy">{current.emp}</p>
-                            {current.origen === 'Trabajador' && (
-                              <p className="text-[12.5px] font-medium text-brown">
-                                Personal: {current.trabajadorNombre} ({current.trabajadorRut})
-                              </p>
-                            )}
-                            <p className="text-[11.5px] text-gray-500">{current.proyecto}</p>
-                          </div>
-                          <button
-                            onClick={() => onVerEmpresa?.({
-                              empresa: current.emp,
-                              rut: current.rut,
-                              rol: "Contratista",
-                              cumplimiento: contractorObj ? calcularEstadoAcreditacion(contractorObj) : "No acreditado",
-                              iniciales: current.emp.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase(),
-                            })}
-                            className="text-[11.5px] text-brown font-medium hover:underline whitespace-nowrap"
-                          >
-                            Ver empresa completa
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="bg-white border border-cream3 rounded-lg p-2">
-                            <div className="text-[14px] font-semibold text-navy">{approvedDocs} / {totalDocs}</div>
-                            <div className="text-[10px] text-gray-500">Requisitos Empresa</div>
-                          </div>
-                          <div className="bg-white border border-cream3 rounded-lg p-2">
-                            <div className="text-[14px] font-semibold text-navy">{approvedW} / {totalWorkers}</div>
-                            <div className="text-[10px] text-gray-500">Personal Acreditado</div>
-                          </div>
-                          <div className="bg-white border border-cream3 rounded-lg p-2 flex flex-col justify-center items-center">
-                            <span className={`badge ${paymentBadgeClass} text-[9px] font-bold px-1.5 py-0.5`}>{paymentLabel}</span>
-                            <div className="text-[9px] text-gray-400 mt-1 font-sans">Estado de Pago</div>
-                          </div>
-                        </div>
-
-                        <div className="bg-cream border border-cream3 rounded-lg p-2.5">
-                          <div className="text-[11.5px] text-navy font-semibold mb-1">Impacto de la Acreditación:</div>
-                          <p className="text-[11px] text-gray-600 leading-relaxed font-sans">
-                            Este documento corresponde al requisito <strong>{current.title}</strong> {associatedWorker ? `del trabajador ${associatedWorker.nombre}` : 'de la empresa'}.
-                          </p>
-                          <p className="text-[11px] text-brown font-medium mt-1 font-sans">
-                            💡 Al aprobar este documento, el requisito de {associatedWorker ? associatedWorker.nombre : current.emp} quedará cumplido.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                {/* COLUMN 1: IZQUIERDA (Details, metadata, worker info, compliance) */}
+                <div className="border-r border-cream3 overflow-y-auto p-5 bg-[#fcfbfa] flex flex-col gap-4">
+                  
+                  {/* Empresa */}
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-gray-400 font-sans">Contratista / Empresa</div>
+                    <div className="text-[14px] font-bold text-navy mt-0.5">{current.emp}</div>
+                    <div className="text-[12px] text-gray-500 font-mono">RUT: {current.rut}</div>
                   </div>
-                );
-              })()}
 
-              <div className="px-5 border-b border-cream3 flex gap-0 shrink-0">
-                <button
-                  onClick={() => setReviewTab("documento")}
-                  className={`text-[12.5px] px-3.5 py-2.5 border-b-2 cursor-pointer transition-colors ${reviewTab === "documento" ? "text-brown border-brown font-medium" : "text-gray-500 border-transparent hover:text-navy"}`}
-                >
-                  Documento
-                </button>
-                <button
-                  onClick={() => setReviewTab("metadata")}
-                  className={`text-[12.5px] px-3.5 py-2.5 border-b-2 cursor-pointer transition-colors ${reviewTab === "metadata" ? "text-brown border-brown font-medium" : "text-gray-500 border-transparent hover:text-navy"}`}
-                >
-                  Detalle
-                </button>
-                <button
-                  onClick={() => setReviewTab("historial")}
-                  className={`text-[12.5px] px-3.5 py-2.5 border-b-2 cursor-pointer transition-colors ${reviewTab === "historial" ? "text-brown border-brown font-medium" : "text-gray-500 border-transparent hover:text-navy"}`}
-                >
-                  Historial
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 px-5 flex flex-col gap-3.5">
-                {reviewTab === "documento" && (
-                  <>
-                    <div className="bg-[#eeeade] border border-dashed border-[#dedad1] rounded-[10px] flex flex-col items-center justify-center min-h-[200px] gap-2 p-4">
-                      <FileText
-                        size={32}
-                        className="text-brown opacity-70 mb-1"
-                      />
-                      <div className="text-[13px] font-medium text-navy text-center">
-                        {current.title}.pdf
+                  {/* Trabajador (si corresponde) */}
+                  {current.origen === 'Trabajador' && (() => {
+                    const contractorObj = GLOBAL_CONTRATISTAS.find(c => c.nombre === current.emp || c.rut === current.rut);
+                    const worker = contractorObj?.trabajadores?.find(w => w.rut === current.trabajadorRut || w.nombre === current.trabajadorNombre);
+                    
+                    const wEstado = worker ? calcularEstadoTrabajador(worker) : 'pendiente';
+                    const wCompliance = worker?.cumplimiento || 0;
+                    
+                    const wStatusLabel = wEstado === 'aprobado' ? 'Habilitado' : wEstado === 'rechazado' ? 'Bloqueado' : 'Pendiente';
+                    const wBadgeClass = wEstado === 'aprobado' ? 'b-green' : wEstado === 'rechazado' ? 'b-red' : 'b-yellow';
+
+                    return (
+                      <div className="bg-[#faf5f0] border border-cream3 rounded-xl p-3.5 flex flex-col gap-2.5">
+                        <div className="text-[10.5px] uppercase font-bold text-brown font-sans">Información de Personal</div>
+                        <div>
+                          <div className="text-[13.5px] font-bold text-navy">{current.trabajadorNombre}</div>
+                          <div className="text-[11.5px] text-gray-500 font-mono">RUT: {current.trabajadorRut}</div>
+                          <div className="text-[11.5px] text-gray-600 mt-1 flex items-center gap-1 font-sans">
+                            <Briefcase size={12} className="text-gray-400" /> Cargo: {current.trabajadorCargo || 'Operario'}
+                          </div>
+                        </div>
+                        
+                        <div className="border-t border-cream3/60 pt-2.5">
+                          <div className="flex justify-between items-center text-[11.5px] mb-1 font-sans">
+                            <span className="text-navy font-semibold">Acreditación:</span>
+                            <span className={`badge ${wBadgeClass} text-[9.5px] py-px px-2 font-semibold`}>{wStatusLabel}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11.5px] mb-1 font-sans">
+                            <span className="text-gray-500">Cumplimiento General:</span>
+                            <span className="font-bold text-navy">{wCompliance}%</span>
+                          </div>
+                          <div className="prog-wrap h-1.5 bg-gray-200">
+                            <div className="prog-fill bg-brown" style={{ width: `${wCompliance}%` }}></div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[11.5px] text-gray-500">
-                        Vista previa del documento
-                      </div>
-                      <button className="flex items-center gap-1.5 mt-1 text-[12px] px-3.5 py-1.5 border border-cream3 rounded-lg bg-white hover:bg-gray-50 text-navy cursor-pointer transition-colors">
-                        <Maximize size={13} /> Abrir en pantalla completa
+                    );
+                  })()}
+
+                  {/* Proyecto */}
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-gray-400 font-sans">Proyecto</div>
+                    <div className="text-[13px] font-semibold text-navy mt-0.5">{current.proyecto}</div>
+                  </div>
+
+                  {/* Requisito / Documento */}
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-gray-400 font-sans">Requisito Evaluado</div>
+                    <div className="text-[13px] font-bold text-navy mt-0.5">{current.title}</div>
+                    <div className="text-[11.5px] text-gray-500 mt-0.5 font-sans">Categoría: {current.type}</div>
+                  </div>
+
+                  {/* Estado y fechas del documento */}
+                  {(() => {
+                    const contractorObj = GLOBAL_CONTRATISTAS.find(c => c.nombre === current.emp || c.rut === current.rut);
+                    let docObj = null;
+                    if (current.origen === 'Trabajador') {
+                      const worker = contractorObj?.trabajadores?.find(w => w.rut === current.trabajadorRut);
+                      docObj = worker?.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+                    } else {
+                      docObj = contractorObj?.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+                    }
+                    const fechaCarga = docObj?.subido || current.time || 'No disponible';
+                    const fechaVencimiento = docObj?.vencimiento || 'Indefinido';
+                    
+                    return (
+                      <>
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-gray-400 font-sans">Estado del Documento</div>
+                          <span className="badge b-blue text-[10px] font-semibold mt-1">En revisión</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white border border-cream3 rounded-lg p-2 font-sans">
+                            <div className="text-[9.5px] text-gray-400 uppercase font-semibold">Fecha Carga</div>
+                            <div className="text-[12px] font-medium text-navy mt-0.5">{fechaCarga}</div>
+                          </div>
+                          <div className="bg-white border border-cream3 rounded-lg p-2 font-sans">
+                            <div className="text-[9.5px] text-gray-400 uppercase font-semibold">Vencimiento</div>
+                            <div className="text-[12px] font-medium text-navy mt-0.5">{fechaVencimiento}</div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                </div>
+
+                {/* COLUMN 2: DERECHA (Visor, zoom controls, structured form / review buttons) */}
+                <div className="flex flex-col overflow-hidden bg-white">
+                  
+                  {/* Visor Area */}
+                  <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-center items-center bg-gray-50/50 relative">
+                    
+                    {/* Zoom / View controls */}
+                    <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white border border-cream3 rounded-lg p-1.5 shadow-sm z-10 font-sans">
+                      <button 
+                        onClick={() => setZoom(prev => Math.max(50, prev - 10))}
+                        className="w-6 h-6 flex items-center justify-center text-gray-500 hover:text-navy hover:bg-gray-100 rounded text-sm font-bold focus:outline-none"
+                        title="Reducir Zoom"
+                      >
+                        -
+                      </button>
+                      <span className="text-[11px] font-semibold font-mono text-navy px-1.5">{zoom}%</span>
+                      <button 
+                        onClick={() => setZoom(prev => Math.min(200, prev + 10))}
+                        className="w-6 h-6 flex items-center justify-center text-gray-500 hover:text-navy hover:bg-gray-100 rounded text-sm font-bold focus:outline-none"
+                        title="Aumentar Zoom"
+                      >
+                        +
+                      </button>
+                      <button 
+                        onClick={() => setZoom(100)}
+                        className="text-[10px] font-semibold text-brown hover:underline px-1.5 border-l border-cream3 focus:outline-none"
+                      >
+                        Reset
                       </button>
                     </div>
+
+                    <div 
+                      className="bg-[#eeeade] border border-dashed border-[#dedad1] rounded-xl flex flex-col items-center justify-center min-h-[300px] w-full max-w-[480px] p-6 gap-3 transition-transform shadow-sm"
+                      style={{ transform: `scale(${zoom / 100})` }}
+                    >
+                      <FileText size={48} className="text-brown opacity-85" />
+                      <div className="text-[14px] font-bold text-navy text-center font-mono">
+                        {current.title}.pdf
+                      </div>
+                      <div className="text-[12px] text-gray-500 text-center font-sans">
+                        Vista previa del documento cargado por el contratista
+                      </div>
+                      <div className="text-[11px] text-[#639922] bg-[#f0fbf0] border border-[#d4f0de] font-semibold rounded-full px-3 py-1 mt-1">
+                        ✓ Archivo Digitalizado Correctamente
+                      </div>
+                    </div>
+
                     {current.hint && (
-                      <div className="bg-[#fdf5df] border border-[#e8c84a] rounded-lg p-2.5 px-3 flex gap-2 items-start mt-2">
-                        <AlertTriangle
-                          size={16}
-                          className="text-[#854f0b] shrink-0 mt-0.5"
-                        />
-                        <span className="text-[12.5px] text-[#633806] leading-relaxed">
-                          {current.hint}
+                      <div className="bg-[#fdf5df] border border-[#e8c84a] rounded-xl p-3 px-4 flex gap-2.5 items-start mt-6 max-w-[480px] shadow-sm">
+                        <AlertTriangle size={16} className="text-[#854f0b] shrink-0 mt-0.5" />
+                        <span className="text-[12.5px] text-[#633806] leading-relaxed font-sans">
+                          <strong>Sugerencia de Auditoría:</strong> {current.hint}
                         </span>
                       </div>
                     )}
-                  </>
-                )}
-                {reviewTab === "metadata" && (
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {[
-                      ["Proyecto", current.proyecto],
-                      ["Empresa", current.emp],
-                      ["RUT", current.rut],
-                      ["Tipo de doc.", current.type],
-                      ["Prioridad", current.prio],
-                      ["Subido", current.time],
-                    ].map(([l, v]) => (
-                      <div
-                        key={l as string}
-                        className="bg-[#faf9f8] rounded-lg p-2.5 border border-cream3"
-                      >
-                        <div className="text-[11px] text-gray-500 mb-1">
-                          {l}
+                  </div>
+
+                  {/* Actions / Form Footer */}
+                  <div className="p-4 px-5 border-t border-cream3 bg-[#faf9f8] shrink-0 flex flex-col gap-3 font-sans">
+                    
+                    {showRejectionForm ? (
+                      <div className="flex flex-col gap-3 fade-in">
+                        <h4 className="text-[13px] font-bold text-navy flex items-center gap-1">
+                          <XCircle size={15} className="text-[#c02020]" /> Configurar Rechazo de Documento
+                        </h4>
+                        
+                        {/* Motivo dropdown */}
+                        <div className="form-group flex flex-col gap-1">
+                          <label className="text-[11px] font-semibold text-gray-500">Motivo principal</label>
+                          <select
+                            value={motivoRechazo}
+                            onChange={(e) => setMotivoRechazo(e.target.value)}
+                            className="w-full text-[12.5px] border border-cream3 rounded-lg px-2.5 py-1.5 bg-white text-navy focus:outline-none focus:border-brown"
+                          >
+                            <option value="">Seleccione el motivo de rechazo…</option>
+                            <option value="Documento ilegible">Documento ilegible</option>
+                            <option value="Documento vencido">Documento vencido</option>
+                            <option value="Datos incorrectos">Datos incorrectos</option>
+                            <option value="Falta información">Falta información</option>
+                            <option value="Documento corresponde a otra persona">Documento corresponde a otra persona</option>
+                            <option value="Documento incompleto">Documento incompleto</option>
+                            <option value="Formato incorrecto">Formato incorrecto</option>
+                            <option value="Otro">Otro</option>
+                          </select>
                         </div>
-                        <div className="text-[13px] font-medium text-navy">
-                          {v}
+
+                        {/* Explicación textarea */}
+                        <div className="form-group flex flex-col gap-1">
+                          <label className="text-[11px] font-semibold text-gray-500">Explicación (qué está mal)</label>
+                          <textarea
+                            rows={2}
+                            value={explicacionRechazo}
+                            onChange={(e) => setExplicacionRechazo(e.target.value)}
+                            placeholder="Detalle exactamente el problema encontrado con el documento…"
+                            className="w-full text-[12.5px] border border-cream3 rounded-lg px-2.5 py-1.5 bg-white text-navy resize-none focus:outline-none focus:border-brown placeholder-gray-400 font-sans"
+                          ></textarea>
+                        </div>
+
+                        {/* Solución textarea */}
+                        <div className="form-group flex flex-col gap-1">
+                          <label className="text-[11px] font-semibold text-gray-500">Solución (qué debe hacer el contratista)</label>
+                          <textarea
+                            rows={2}
+                            value={solucionRechazo}
+                            onChange={(e) => setSolucionRechazo(e.target.value)}
+                            placeholder="Describa los pasos para que el contratista resuelva el rechazo…"
+                            className="w-full text-[12.5px] border border-cream3 rounded-lg px-2.5 py-1.5 bg-white text-navy resize-none focus:outline-none focus:border-brown placeholder-gray-400 font-sans"
+                          ></textarea>
+                        </div>
+
+                        {/* Action buttons inside form */}
+                        <div className="flex gap-2.5 mt-1">
+                          <button
+                            onClick={() => decide("reject")}
+                            disabled={!motivoRechazo || !explicacionRechazo || !solucionRechazo}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-semibold py-2 rounded-lg bg-[#a32d2d] text-white hover:bg-[#791f1f] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors border-none"
+                          >
+                            <XCircle size={15} /> Confirmar Rechazo
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowRejectionForm(false);
+                              setMotivoRechazo('');
+                              setExplicacionRechazo('');
+                              setSolucionRechazo('');
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 text-[13px] font-medium py-2 border border-cream3 rounded-lg bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+                          >
+                            Cancelar
+                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {reviewTab === "historial" && (
-                  <div className="flex flex-col gap-3">
-                    {current.historial.map((h, i) => (
-                      <div key={i} className="flex gap-2.5">
-                        <div
-                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${h.type === "approved" ? "bg-[#639922]" : h.type === "rejected" ? "bg-[#c03030]" : "bg-brown"}`}
-                        ></div>
-                        <div>
-                          <div className="text-[12.5px] text-gray-600 leading-relaxed">
-                            <strong className="text-navy font-medium">
-                              {h.who}
-                            </strong>{" "}
-                            · {h.msg}
-                          </div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">
-                            {h.when}
-                          </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex gap-2 flex-1">
+                          <button
+                            onClick={() => decide("approve")}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-bold py-2.5 rounded-lg border-none bg-[#3b6d11] text-white hover:bg-[#27500a] transition-colors shadow-sm"
+                          >
+                            <CheckCircle size={15} /> Aprobar
+                          </button>
+                          <button
+                            onClick={() => setShowRejectionForm(true)}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-bold py-2.5 rounded-lg border-none bg-[#a32d2d] text-white hover:bg-[#791f1f] transition-colors shadow-sm"
+                          >
+                            <XCircle size={15} /> Rechazar
+                          </button>
                         </div>
+                        <button
+                          onClick={() => decide("skip")}
+                          className="flex items-center justify-center gap-1 text-[12.5px] px-4 py-2.5 border border-cream3 rounded-lg bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+                        >
+                          <SkipForward size={14} /> Saltar
+                        </button>
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-              <div className="p-4 pt-3.5 px-5 border-t border-cream3 bg-[#faf9f8] mt-auto shrink-0">
-                <div className="flex gap-2 mb-2.5">
-                  <select 
-                    value={motivoRechazoRapido}
-                    onChange={(e) => setMotivoRechazoRapido(e.target.value)}
-                    className="w-full text-[12.5px] border border-cream3 rounded-lg px-2.5 py-1.5 bg-white text-navy focus:outline-none focus:border-brown"
-                  >
-                    <option value="">Motivo de rechazo rápido…</option>
-                    <option value="Documento ilegible">Documento ilegible</option>
-                    <option value="Faltan firmas">Faltan firmas</option>
-                    <option value="Fechas no coinciden">Fechas no coinciden</option>
-                    <option value="Falta timbre institucional">Falta timbre institucional</option>
-                    <option value="Período incorrecto">Período incorrecto</option>
-                  </select>
-                </div>
-                <textarea
-                  rows={2}
-                  value={observacionRechazo}
-                  onChange={(e) => setObservacionRechazo(e.target.value)}
-                  placeholder="Observación adicional (opcional)…"
-                  className="w-full text-[12.5px] border border-cream3 rounded-lg px-2.5 py-1.5 bg-white text-navy resize-none mb-3 focus:outline-none focus:border-brown placeholder-gray-400"
-                ></textarea>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => decide("approve")}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border-none bg-[#3b6d11] text-white hover:bg-[#27500a] transition-colors"
-                  >
-                    <CheckCircle size={15} /> Aprobar
-                  </button>
-                  <button
-                    onClick={() => decide("reject")}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border-none bg-[#a32d2d] text-white hover:bg-[#791f1f] transition-colors"
-                  >
-                    <XCircle size={15} /> Rechazar
-                  </button>
-                  <button
-                    onClick={() => decide("skip")}
-                    className="flex items-center justify-center gap-1 text-[12px] px-3.5 py-2 border border-cream3 rounded-lg bg-white text-gray-500 hover:bg-gray-50 transition-colors"
-                  >
-                    <SkipForward size={14} /> Saltar
-                  </button>
+
                 </div>
               </div>
             </div>
