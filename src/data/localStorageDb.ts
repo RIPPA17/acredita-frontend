@@ -1,12 +1,95 @@
 import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador } from '../types';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion } from '../types';
 
 export function initDb() {
   if (typeof window !== 'undefined' && !localStorage.getItem('acredita_db_initialized')) {
-    localStorage.setItem('acredita_contratistas', JSON.stringify(CONTRATISTAS));
+    // 1. Initialize project-specific requirements
+    const defaultRequisitos: Requisito[] = [];
+    PROYECTOS.forEach(proj => {
+      PLANTILLA_DOCUMENTOS.forEach((plantilla) => {
+        let alertaDias = 15;
+        let criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' = 'bloquea_pago';
+        let obligatorio = true;
+
+        if (plantilla.id === 'liquidacion') {
+          alertaDias = 5;
+          criticidad = 'bloquea_pago';
+        } else if (plantilla.id === 'f30') {
+          alertaDias = 7;
+          criticidad = 'bloquea_pago';
+        } else if (plantilla.id === 'contrato') {
+          alertaDias = 15;
+          criticidad = 'bloquea_acceso';
+        } else if (plantilla.id === 'mutual') {
+          alertaDias = 7;
+          criticidad = 'bloquea_pago';
+        } else if (plantilla.id === 'antecedentes') {
+          alertaDias = 15;
+          criticidad = 'advertencia';
+          obligatorio = false;
+        } else if (plantilla.id === 'odi') {
+          alertaDias = 30;
+          criticidad = 'bloquea_acceso';
+        }
+
+        defaultRequisitos.push({
+          id: `${proj.id}_${plantilla.id}`,
+          nombre: plantilla.nombre,
+          categoria: plantilla.categoria as any,
+          destino: plantilla.destino as any,
+          obligatorio,
+          frecuencia: plantilla.frecuencia,
+          alertaDias,
+          criticidad,
+          proyectoId: proj.id,
+          activo: true
+        });
+      });
+    });
+    localStorage.setItem('acredita_requisitos', JSON.stringify(defaultRequisitos));
+
+    // 2. Expand mock contractors to assign project-specific documents and workers
+    const expandedContratistas = CONTRATISTAS.map(c => {
+      const docsWithProject: Documento[] = [];
+      c.proyectos.forEach(pId => {
+        c.documentos.forEach(d => {
+          docsWithProject.push({
+            ...d,
+            id: `${pId}_${d.id}`,
+            proyectoId: pId
+          });
+        });
+      });
+
+      const workersWithProject = c.trabajadores?.map(w => {
+        const wDocsWithProject: Documento[] = [];
+        c.proyectos.forEach(pId => {
+          w.documentos?.forEach(wd => {
+            wDocsWithProject.push({
+              ...wd,
+              id: `${pId}_${wd.id}`,
+              proyectoId: pId
+            });
+          });
+        });
+        return {
+          ...w,
+          documentos: wDocsWithProject
+        };
+      });
+
+      return {
+        ...c,
+        documentos: docsWithProject,
+        trabajadores: workersWithProject
+      };
+    });
+
+    localStorage.setItem('acredita_contratistas', JSON.stringify(expandedContratistas));
     localStorage.setItem('acredita_proyectos', JSON.stringify(PROYECTOS));
     localStorage.setItem('acredita_mandantes', JSON.stringify(MANDANTES));
     localStorage.setItem('acredita_plantillas', JSON.stringify(PLANTILLA_DOCUMENTOS));
+    
     const defaultReglas = [
       { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
       { id: 2, documento: "F30 / F31 SII", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
@@ -66,6 +149,18 @@ export function savePlantillas(data: any[]) {
   }
 }
 
+export function getRequisitos(): Requisito[] {
+  initDb();
+  if (typeof window === 'undefined') return [];
+  return JSON.parse(localStorage.getItem('acredita_requisitos') || '[]');
+}
+
+export function saveRequisitos(data: Requisito[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('acredita_requisitos', JSON.stringify(data));
+  }
+}
+
 export function getReglas(): any[] {
   initDb();
   const defaultReglas = [
@@ -86,10 +181,19 @@ export function saveReglas(data: any[]) {
 
 export const DEMO_TODAY = new Date(2026, 4, 18); // 18 de Mayo, 2026
 
-export function esVencidoPorFecha(vencimientoStr: string): boolean {
-  if (!vencimientoStr || vencimientoStr === '—' || vencimientoStr.includes('-')) return false;
-  const parts = vencimientoStr.trim().split(' ');
-  if (parts.length < 3) return false;
+export function parseVencimientoDate(vencimientoStr: string): Date | null {
+  if (!vencimientoStr || vencimientoStr === '—') return null;
+  if (vencimientoStr.includes('-')) {
+    const parts = vencimientoStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+      return new Date(year, month, day);
+    }
+  }
+  const parts = vencimientoStr.trim().split(/\s+/);
+  if (parts.length < 3) return null;
   const day = parseInt(parts[0]);
   const year = parseInt(parts[2]);
   const months: Record<string, number> = {
@@ -98,126 +202,178 @@ export function esVencidoPorFecha(vencimientoStr: string): boolean {
   };
   const monthStr = parts[1].substring(0, 3).toLowerCase();
   const month = months[monthStr] !== undefined ? months[monthStr] : 0;
-  const vDate = new Date(year, month, day);
+  return new Date(year, month, day);
+}
+
+export function esVencidoPorFecha(vencimientoStr: string): boolean {
+  const vDate = parseVencimientoDate(vencimientoStr);
+  if (!vDate) return false;
   return vDate < DEMO_TODAY;
 }
 
-export function esRequisitoObligatorio(docNombre: string): boolean {
-  const reglas = getReglas();
-  const regla = reglas.find(r => 
-    docNombre.toLowerCase().includes(r.documento.toLowerCase()) || 
-    r.documento.toLowerCase().includes(docNombre.toLowerCase())
-  );
-  if (!regla) return true;
-  return regla.criticidad !== 'advertencia';
+export function obtenerDiasRestantes(vencimientoStr: string): number {
+  const vDate = parseVencimientoDate(vencimientoStr);
+  if (!vDate) return 99999;
+  const diffTime = vDate.getTime() - DEMO_TODAY.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
 
-export function esReglaBloqueante(docNombre: string): boolean {
-  const reglas = getReglas();
-  const regla = reglas.find(r => 
-    docNombre.toLowerCase().includes(r.documento.toLowerCase()) || 
-    r.documento.toLowerCase().includes(docNombre.toLowerCase())
-  );
-  if (!regla) return false;
-  return regla.criticidad === 'bloquea_acceso' || regla.criticidad === 'bloquea_pago';
+export function esPorVencerPorFecha(vencimientoStr: string, alertaDias: number): boolean {
+  const diasRestantes = obtenerDiasRestantes(vencimientoStr);
+  return diasRestantes >= 0 && diasRestantes <= alertaDias;
 }
 
-export function calcularEstadoTrabajador(w: Trabajador): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
-  const docs = w.documentos || [];
-  if (docs.length === 0) return 'pendiente';
+export function esRequisitoObligatorio(docNombre: string, proyectoId?: string): boolean {
+  const reqs = getRequisitos();
+  const rule = reqs.find(r => 
+    (!proyectoId || r.proyectoId === proyectoId) && 
+    (docNombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
+     r.nombre.toLowerCase().includes(docNombre.toLowerCase()))
+  );
+  if (!rule) return true;
+  return rule.obligatorio;
+}
 
-  // 1. Algún documento obligatorio rechazado o vencido -> rechazado
-  const tieneObligatorioRechazadoOVencido = docs.some(d => {
-    const obligatorio = esRequisitoObligatorio(d.nombre);
-    if (!obligatorio) return false;
-    return d.estado === 'rechazado' || esVencidoPorFecha(d.vencimiento);
+export function esReglaBloqueante(docNombre: string, proyectoId?: string): boolean {
+  const reqs = getRequisitos();
+  const rule = reqs.find(r => 
+    (!proyectoId || r.proyectoId === proyectoId) && 
+    (docNombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
+     r.nombre.toLowerCase().includes(docNombre.toLowerCase()))
+  );
+  if (!rule) return false;
+  return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago';
+}
+
+export function calcularEstadoTrabajador(w: Trabajador, proyectoId?: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
+  if (!proyectoId) {
+    const allC = getContratistas();
+    const parentC = allC.find(c => c.trabajadores?.some(worker => worker.rut === w.rut));
+    proyectoId = parentC?.proyectos[0] || 'costanera';
+  }
+
+  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
+  const documentos = w.documentos || [];
+
+  if (reqs.length === 0) return 'aprobado';
+
+  let hasRechazado = false;
+  let hasPendiente = false;
+  let hasPorVencer = false;
+
+  reqs.forEach(req => {
+    const doc = documentos.find(d => 
+      d.proyectoId === proyectoId &&
+      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+    );
+    
+    if (!doc) {
+      if (req.obligatorio) {
+        hasPendiente = true;
+      }
+      return;
+    }
+
+    const isVencido = esVencidoPorFecha(doc.vencimiento);
+    const isRechazado = doc.estado === 'rechazado' || isVencido;
+    const isPendiente = doc.estado === 'pendiente' || doc.estado === 'revision';
+    const isPorVencer = doc.estado === 'por_vencer';
+
+    if (req.obligatorio) {
+      if (isRechazado) {
+        hasRechazado = true;
+      } else if (isPendiente) {
+        hasPendiente = true;
+      } else if (isPorVencer) {
+        hasPorVencer = true;
+      }
+    }
   });
-  if (tieneObligatorioRechazadoOVencido) return 'rechazado';
 
-  // 2. Algún documento obligatorio pendiente o en revisión -> pendiente
-  const tieneObligatorioPendienteORevision = docs.some(d => {
-    const obligatorio = esRequisitoObligatorio(d.nombre);
-    if (!obligatorio) return false;
-    return d.estado === 'pendiente' || d.estado === 'revision';
-  });
-  if (tieneObligatorioPendienteORevision) return 'pendiente';
-
-  // 3. Algún documento obligatorio por_vencer -> por_vencer
-  const tieneObligatorioPorVencer = docs.some(d => {
-    const obligatorio = esRequisitoObligatorio(d.nombre);
-    if (!obligatorio) return false;
-    return d.estado === 'por_vencer';
-  });
-  if (tieneObligatorioPorVencer) return 'por_vencer';
-
-  // 4. Todos los obligatorios aprobados -> aprobado
+  if (hasRechazado) return 'rechazado';
+  if (hasPendiente) return 'pendiente';
+  if (hasPorVencer) return 'por_vencer';
   return 'aprobado';
 }
 
-export function esTrabajadorAcreditado(w: Trabajador): boolean {
-  return calcularEstadoTrabajador(w) === 'aprobado';
+export function esTrabajadorAcreditado(w: Trabajador, proyectoId?: string): boolean {
+  return calcularEstadoTrabajador(w, proyectoId) === 'aprobado';
 }
 
-export function calcularEstadoAcreditacion(c: Contratista): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
+export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
+  if (!proyectoId) {
+    proyectoId = c.proyectos[0] || 'costanera';
+  }
+
+  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
 
-  // 1. Si existe algún requisito obligatorio RECHAZADO o VENCIDO -> "Vencido/Bloqueado"
-  // O si algún trabajador está rechazado.
-  const tieneRequisitoObligatorioBloqueado = documentos.some(d => {
-    const obligatorio = esRequisitoObligatorio(d.nombre);
-    if (!obligatorio) return false;
+  const tieneTrabajadorRechazado = trabajadores.some(w => 
+    w.documentos?.some(d => d.proyectoId === proyectoId) && 
+    calcularEstadoTrabajador(w, proyectoId) === 'rechazado'
+  );
 
-    const isRechazado = d.estado === 'rechazado';
-    const isVencido = esVencidoPorFecha(d.vencimiento);
+  let hasReRechazado = false;
+  let hasRePendiente = false;
 
-    return isRechazado || isVencido;
+  reqs.forEach(req => {
+    const doc = documentos.find(d => 
+      d.proyectoId === proyectoId &&
+      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+    );
+    if (!doc) {
+      if (req.obligatorio) {
+        hasRePendiente = true;
+      }
+      return;
+    }
+
+    const isVencido = esVencidoPorFecha(doc.vencimiento);
+    const isRechazado = doc.estado === 'rechazado' || isVencido;
+    const isPendiente = doc.estado === 'pendiente' || doc.estado === 'revision';
+
+    if (req.obligatorio) {
+      if (isRechazado) {
+        hasReRechazado = true;
+      } else if (isPendiente) {
+        hasRePendiente = true;
+      }
+    }
   });
 
-  const tieneTrabajadorRechazado = trabajadores.some(w => calcularEstadoTrabajador(w) === 'rechazado');
-
-  if (tieneRequisitoObligatorioBloqueado || tieneTrabajadorRechazado) {
+  if (hasReRechazado || tieneTrabajadorRechazado) {
     return 'Vencido/Bloqueado';
   }
 
-  // 2. Una empresa sin trabajadores no puede ser Aprobada. Queda en "No acreditado" o "En proceso"
-  if (trabajadores.length === 0) {
-    const obligatorios = documentos.filter(d => esRequisitoObligatorio(d.nombre));
-    const todosAprobados = obligatorios.length > 0 && obligatorios.every(d => d.estado === 'aprobado');
-    return todosAprobados ? 'En proceso' : 'No acreditado';
+  const projectWorkers = trabajadores.filter(w => 
+    w.documentos?.some(d => d.proyectoId === proyectoId)
+  );
+
+  if (projectWorkers.length === 0) {
+    return hasRePendiente ? 'No acreditado' : 'En proceso';
   }
 
-  // 3. Faltan requisitos obligatorios de empresa o trabajadores por revisar -> "En proceso"
-  const tieneObligatorioPendiente = documentos.some(d => {
-    const obligatorio = esRequisitoObligatorio(d.nombre);
-    return obligatorio && (d.estado === 'revision' || d.estado === 'pendiente');
-  });
+  const tieneTrabajadorPendiente = projectWorkers.some(w => calcularEstadoTrabajador(w, proyectoId) === 'pendiente');
 
-  const tieneTrabajadorPendiente = trabajadores.some(w => calcularEstadoTrabajador(w) === 'pendiente');
-
-  if (tieneObligatorioPendiente || tieneTrabajadorPendiente) {
+  if (hasRePendiente || tieneTrabajadorPendiente) {
     return 'En proceso';
   }
 
-  // 4. Si 100% de obligatorios de empresa y trabajadores están Aprobados (o en advertencia no bloqueante) -> "Aprobado"
-  const obligatorios = documentos.filter(d => esRequisitoObligatorio(d.nombre));
-  const obligatoriosAprobados = obligatorios.length > 0 && obligatorios.every(d => d.estado === 'aprobado' || d.estado === 'por_vencer');
-  const trabajadoresAprobados = trabajadores.every(w => esTrabajadorAcreditado(w) || calcularEstadoTrabajador(w) === 'por_vencer');
-
-  if (obligatoriosAprobados && trabajadoresAprobados) {
-    return 'Aprobado';
-  }
-
-  return 'En proceso';
+  return 'Aprobado';
 }
 
 export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Normal' | 'Baja' {
   let rule = r;
   if (!rule) {
-    const reglas = getReglas();
-    rule = reglas.find(reg => 
-      d.nombre.toLowerCase().includes(reg.documento.toLowerCase()) || 
-      reg.documento.toLowerCase().includes(d.nombre.toLowerCase())
+    const reqs = getRequisitos();
+    rule = reqs.find(reg => 
+      (!d.proyectoId || reg.proyectoId === d.proyectoId) && 
+      (d.nombre.toLowerCase().includes(reg.nombre.toLowerCase()) || 
+       reg.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
     );
   }
 
@@ -254,3 +410,211 @@ export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Nor
   }
   return 'Baja';
 }
+
+export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
+  accesoBloqueado: boolean;
+  motivoAcceso?: string;
+  pagoBloqueado: boolean;
+  motivoPago?: string;
+} {
+  const estado = calcularEstadoAcreditacion(c, proyectoId);
+  const isAprobado = estado === 'Aprobado';
+  return {
+    accesoBloqueado: !isAprobado,
+    motivoAcceso: !isAprobado ? `La acreditación no está aprobada` : undefined,
+    pagoBloqueado: !isAprobado,
+    motivoPago: !isAprobado ? `La acreditación no está aprobada` : undefined
+  };
+}
+
+export interface AlertaVigencia {
+  id: string;
+  documentoId: string;
+  documentoNombre: string;
+  empresaId: string;
+  empresaNombre: string;
+  trabajadorRut?: string;
+  trabajadorNombre?: string;
+  proyectoId: string;
+  proyectoNombre: string;
+  vencimiento: string;
+  diasRestantes: number;
+  criticidad: 'Crítica' | 'Atención' | 'Informativa';
+  bloquea: boolean;
+}
+
+export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
+  const contratistas = getContratistas();
+  const proyectos = getProyectos();
+  const requisitos = getRequisitos().filter(r => r.activo !== false);
+  const alertas: AlertaVigencia[] = [];
+
+  contratistas.forEach(c => {
+    const cProjs = c.proyectos || [];
+    cProjs.forEach(pId => {
+      if (proyectoId && pId !== proyectoId) return;
+      const proj = proyectos.find(p => p.id === pId);
+      const projNombre = proj ? proj.nombre : pId;
+
+      const companyDocs = c.documentos || [];
+      const companyReqs = requisitos.filter(r => r.proyectoId === pId && r.destino === 'empresa');
+
+      companyReqs.forEach(req => {
+        const doc = companyDocs.find(d => 
+          d.proyectoId === pId &&
+          (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+           req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+        );
+        if (!doc) return;
+
+        const isVencido = esVencidoPorFecha(doc.vencimiento);
+        const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+        const isPorVencer = esPorVencerPorFecha(doc.vencimiento, req.alertaDias);
+
+        if (isVencido || isPorVencer) {
+          let criticidad: 'Crítica' | 'Atención' | 'Informativa' = 'Informativa';
+          let bloquea = false;
+
+          if (isVencido) {
+            if (req.obligatorio) {
+              criticidad = 'Crítica';
+              bloquea = true;
+            } else {
+              criticidad = 'Informativa';
+              bloquea = false;
+            }
+          } else if (isPorVencer) {
+            if (req.obligatorio) {
+              criticidad = 'Atención';
+              bloquea = false;
+            } else {
+              criticidad = 'Informativa';
+              bloquea = false;
+            }
+          }
+
+          alertas.push({
+            id: `alert_e_${c.id}_${doc.id}`,
+            documentoId: doc.id,
+            documentoNombre: doc.nombre,
+            empresaId: c.id,
+            empresaNombre: c.nombre,
+            proyectoId: pId,
+            proyectoNombre: projNombre,
+            vencimiento: doc.vencimiento,
+            diasRestantes,
+            criticidad,
+            bloquea
+          });
+        }
+      });
+
+      const workers = c.trabajadores || [];
+      const workerReqs = requisitos.filter(r => r.proyectoId === pId && r.destino === 'trabajador');
+
+      workers.forEach(w => {
+        const hasProjDocs = w.documentos?.some(d => d.proyectoId === pId);
+        if (!hasProjDocs) return;
+
+        workerReqs.forEach(req => {
+          const doc = w.documentos?.find(d => 
+            d.proyectoId === pId &&
+            (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+             req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+          );
+          if (!doc) return;
+
+          const isVencido = esVencidoPorFecha(doc.vencimiento);
+          const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+          const isPorVencer = esPorVencerPorFecha(doc.vencimiento, req.alertaDias);
+
+          if (isVencido || isPorVencer) {
+            let criticidad: 'Crítica' | 'Atención' | 'Informativa' = 'Informativa';
+            let bloquea = false;
+
+            if (isVencido) {
+              if (req.obligatorio) {
+                criticidad = 'Crítica';
+                bloquea = true;
+              } else {
+                criticidad = 'Informativa';
+                bloquea = false;
+              }
+            } else if (isPorVencer) {
+              if (req.obligatorio) {
+                criticidad = 'Atención';
+                bloquea = false;
+              } else {
+                criticidad = 'Informativa';
+                bloquea = false;
+              }
+            }
+
+            alertas.push({
+              id: `alert_w_${c.id}_${w.rut.replace(/[^a-zA-Z0-9]/g, '')}_${doc.id}`,
+              documentoId: doc.id,
+              documentoNombre: doc.nombre,
+              empresaId: c.id,
+              empresaNombre: c.nombre,
+              trabajadorRut: w.rut,
+              trabajadorNombre: w.nombre,
+              proyectoId: pId,
+              proyectoNombre: projNombre,
+              vencimiento: doc.vencimiento,
+              diasRestantes,
+              criticidad,
+              bloquea
+            });
+          }
+        });
+      });
+    });
+  });
+
+  return alertas;
+}
+
+export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): string {
+  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
+  const docs = w.documentos || [];
+  
+  let result = '';
+  reqs.forEach(req => {
+    const doc = docs.find(d => 
+      d.proyectoId === proyectoId &&
+      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+    );
+    if (!doc) {
+      if (req.obligatorio) {
+        result = `${req.nombre} pendiente`;
+      }
+    } else {
+      const isVencido = esVencidoPorFecha(doc.vencimiento);
+      if (req.obligatorio) {
+        if (doc.estado === 'rechazado') {
+          result = `${req.nombre} rechazado`;
+        } else if (isVencido) {
+          result = `${req.nombre} vencido`;
+        } else if (doc.estado === 'pendiente' || doc.estado === 'revision') {
+          result = `${req.nombre} pendiente`;
+        }
+      }
+    }
+  });
+  return result || 'Requisitos en proceso';
+}
+
+export function getInvitaciones(): Invitacion[] {
+  try {
+    const raw = localStorage.getItem('acredita_invitaciones');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveInvitaciones(list: Invitacion[]): void {
+  localStorage.setItem('acredita_invitaciones', JSON.stringify(list));
+}
+

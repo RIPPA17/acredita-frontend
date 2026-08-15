@@ -5,25 +5,23 @@ import { ShieldCheck, Bell, Clock } from 'lucide-react';
 export default function LoginPage() {
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(window.location.search);
-  const initialRol = searchParams.get('rol') || 'mandante';
-  const [rol, setRol] = useState(initialRol);
+  const [rol, setRol] = useState<'mandante' | 'contratista' | 'admin'>(() => {
+    const val = searchParams.get('rol');
+    if (val === 'admin' || val === 'contratista' || val === 'mandante') return val;
+    return 'mandante';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const isMandante = rol === 'mandante';
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.toLowerCase().includes('mandante')) {
+    if (rol === 'mandante') {
       navigate('/mandante');
-    } else {
+    } else if (rol === 'contratista') {
       navigate('/contratista');
+    } else if (rol === 'admin') {
+      navigate('/admin');
     }
-  };
-
-  const switchRol = () => {
-    setRol(isMandante ? 'contratista' : 'mandante');
-    window.history.replaceState(null, '', `?rol=${isMandante ? 'contratista' : 'mandante'}`);
   };
 
   return (
@@ -86,12 +84,33 @@ export default function LoginPage() {
               <div className="text-[28px] text-navy tracking-[2px] font-medium">Acre<b className="text-brown font-normal">dita</b></div>
             </div>
 
-            <div className="text-center mb-8">
-              <span className={`badge mb-4 ${isMandante ? 'b-brown' : 'b-blue'}`}>
-                {isMandante ? 'Acceso Mandante' : 'Acceso Contratista'}
-              </span>
+            <div className="text-center mb-6">
               <h2 className="text-[28px] text-navy font-semibold mb-2">Iniciar sesión</h2>
-              <p className="text-gray-500 text-[14.3px]">Ingresa tus credenciales para continuar</p>
+              <p className="text-gray-500 text-[14.3px]">Selecciona tu perfil de acceso para continuar</p>
+            </div>
+
+            <div className="flex border-b border-cream3 mb-6">
+              <button 
+                type="button" 
+                onClick={() => { setRol('mandante'); window.history.replaceState(null, '', '?rol=mandante'); }}
+                className={`flex-1 pb-2.5 text-[13.5px] font-semibold transition-colors border-b-2 text-center ${rol === 'mandante' ? 'border-brown text-brown font-bold' : 'border-transparent text-gray-400 hover:text-navy'}`}
+              >
+                Mandante
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { setRol('contratista'); window.history.replaceState(null, '', '?rol=contratista'); }}
+                className={`flex-1 pb-2.5 text-[13.5px] font-semibold transition-colors border-b-2 text-center ${rol === 'contratista' ? 'border-navy text-navy font-bold' : 'border-transparent text-gray-400 hover:text-navy'}`}
+              >
+                Contratista
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { setRol('admin'); window.history.replaceState(null, '', '?rol=admin'); }}
+                className={`flex-1 pb-2.5 text-[13.5px] font-semibold transition-colors border-b-2 text-center ${rol === 'admin' ? 'border-[#ff7a00] text-[#ff7a00] font-bold' : 'border-transparent text-gray-400 hover:text-navy'}`}
+              >
+                Auditor Acredita
+              </button>
             </div>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
@@ -119,22 +138,13 @@ export default function LoginPage() {
               </div>
               
               <div className="flex justify-end mb-2">
-                <a href="#" className="text-[13.2px] text-brown font-medium hover:underline">¿Olvidaste tu contraseña?</a>
+                <a href="#" className="text-[13.2px] text-brown font-medium hover:underline" onClick={(e) => e.preventDefault()}>¿Olvidaste tu contraseña?</a>
               </div>
 
               <button type="submit" className="btn btn-primary w-full justify-center py-2.5 text-[15.4px]">
                 Ingresar
               </button>
             </form>
-
-            <div className="mt-8 text-center text-[14.3px]">
-              <button 
-                onClick={switchRol}
-                className="text-gray-500 hover:text-navy transition-colors"
-              >
-                ¿Eres {isMandante ? 'contratista' : 'mandante'}? <span className="font-medium underline">Cambiar rol</span>
-              </button>
-            </div>
             
             <div className="mt-8 text-center text-[13.2px] text-gray-500">
               ¿No tienes una cuenta? <Link to={`/registro?rol=${rol}`} className="text-brown font-medium hover:underline">Regístrate gratis</Link>

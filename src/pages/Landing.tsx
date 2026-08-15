@@ -8,6 +8,12 @@ import { Link } from 'react-router-dom';
 
 export default function LandingPage() {
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
+
+  const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   return (
     <div className="bg-white min-h-screen text-navy">
@@ -42,7 +48,8 @@ export default function LandingPage() {
         </div>
         
         {/* MOCKUP */}
-        <div className="bg-[#1e262f] border border-white/10 rounded-t-xl max-w-[880px] mx-auto flex flex-col h-[380px] shadow-2xl relative mt-4 translate-y-4">
+        <div className="w-full overflow-x-auto pb-4 scrollbar-thin">
+          <div className="bg-[#1e262f] border border-white/10 rounded-t-xl w-[880px] mx-auto flex flex-col h-[380px] shadow-2xl relative mt-4 translate-y-4 shrink-0">
           {/* Mockup Header */}
           <div className="h-10 border-b border-white/10 bg-[#141a20] flex items-center px-4 justify-between shrink-0 rounded-t-xl">
             <div className="flex items-center gap-2">
@@ -153,6 +160,7 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* COMO FUNCIONA */}
@@ -329,7 +337,7 @@ export default function LandingPage() {
               <label className="form-label text-[15.4px]">Mensaje (opcional)</label>
               <textarea className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white resize-none" rows={3} placeholder="Cuéntanos sobre tu caso..."></textarea>
             </div>
-            <button className="btn btn-primary w-full justify-center text-[16.5px] py-3">Solicitar demo</button>
+            <button className="btn btn-primary w-full justify-center text-[16.5px] py-3 cursor-not-allowed opacity-60" disabled title="Próximamente disponible">Solicitar demo [Próximamente]</button>
           </div>
           <div className="flex flex-col gap-6 pt-4 text-cream">
             <div className="flex items-start gap-4">
@@ -445,7 +453,7 @@ export default function LandingPage() {
               </Link>
               
               <Link 
-                to="/registro?rol=contratista" 
+                to="/login?rol=contratista" 
                 className="flex items-center gap-4 p-4 border border-cream3 rounded-xl hover:bg-cream/50 hover:border-brown transition-all group"
               >
                 <div className="w-12 h-12 bg-cream group-hover:bg-brown/10 rounded-lg flex items-center justify-center text-brown shrink-0">
@@ -462,6 +470,14 @@ export default function LandingPage() {
               ¿No tienes una cuenta? <Link to="/registro" className="text-brown font-medium hover:underline">Regístrate gratis</Link>
             </div>
           </div>
+        </div>
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[999] px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium flex items-center gap-2
+          ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`}>
+          {toast.type === 'success' && <CheckCircle size={18}/>}
+          {toast.type === 'warning' && <AlertTriangle size={18}/>}
+          {toast.msg}
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   LayoutDashboard,
@@ -38,10 +39,11 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight, Briefcase
+  ChevronRight, Briefcase, Menu
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, calcularPrioridadDocumento } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, calcularPrioridadDocumento, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
+import FichaAcreditacion from '../components/FichaAcreditacion';
 
 const GLOBAL_MANDANTES = getMandantes();
 const GLOBAL_PROYECTOS = getProyectos();
@@ -55,13 +57,14 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
     // 1. Empresa
     c.documentos.forEach(d => {
       if (d.estado === 'revision') {
-        const pId = c.proyectos[0] || 'costanera';
+        const pId = d.proyectoId || c.proyectos[0] || 'costanera';
         const project = proyectos.find(p => p.id === pId);
         const prioVal = calcularPrioridadDocumento(d);
         
         list.push({
           id: qId++,
           docId: d.id,
+          proyectoId: pId,
           origen: 'Empresa',
           emp: c.nombre,
           rut: c.rut,
@@ -89,13 +92,14 @@ function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
     c.trabajadores?.forEach(w => {
       w.documentos?.forEach(wd => {
         if (wd.estado === 'revision') {
-          const pId = c.proyectos[0] || 'costanera';
+          const pId = wd.proyectoId || c.proyectos[0] || 'costanera';
           const project = proyectos.find(p => p.id === pId);
           const prioVal = calcularPrioridadDocumento(wd);
           
           list.push({
             id: qId++,
             docId: wd.id,
+            proyectoId: pId,
             origen: 'Trabajador',
             trabajadorNombre: w.nombre,
             trabajadorRut: w.rut,
@@ -319,7 +323,7 @@ function ColaRevisionTab({
               docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
               setRechazadosHoy((r) => r + 1);
             }
-            worker.estado = calcularEstadoTrabajador(worker);
+            worker.estado = calcularEstadoTrabajador(worker, current.proyectoId);
             saveContratistas(list);
           }
         }
@@ -396,9 +400,9 @@ function ColaRevisionTab({
       </div>
 
       {vistaRevision === 'lista' && (
-      <div className="grid grid-cols-[320px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden min-h-[640px] shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden min-h-[640px] shadow-sm">
         {/* LEFT PANEL */}
-        <div className="bg-[#faf9f8] border-r border-cream3 flex flex-col">
+        <div className={`bg-[#faf9f8] border-r border-cream3 flex flex-col ${selectedId ? "hidden lg:flex" : "flex"}`}>
           <div className="p-4 border-b border-cream3">
             <div className="text-[13px] font-medium text-navy flex items-center gap-1.5">
               <ClipboardList size={15} />
@@ -519,7 +523,7 @@ function ColaRevisionTab({
         </div>
 
         {/* RIGHT PANEL */}
-        <div className="flex flex-col bg-white overflow-hidden relative">
+        <div className={`flex flex-col bg-white overflow-hidden relative ${selectedId ? "flex" : "hidden lg:flex"}`}>
           {!current ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 px-8">
               <CheckCircle size={44} className="text-[#639922] opacity-80" />
@@ -542,9 +546,15 @@ function ColaRevisionTab({
           ) : (
                       <div className="flex-1 flex flex-col h-full overflow-hidden">
               {/* Header of review */}
-              <div className="p-4 px-5 border-b border-cream3 flex items-center justify-between bg-[#faf9f8] shrink-0 font-sans">
-                <div>
-                  <span className="text-[10px] font-bold text-brown uppercase tracking-wider bg-cream px-2 py-1 rounded mr-2">
+              <div className="p-4 px-5 border-b border-cream3 flex items-center justify-between bg-[#faf9f8] shrink-0 font-sans flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { setLocalSelectedId(null); setSelectedDocId(null); }}
+                    className="lg:hidden btn btn-ghost btn-sm text-gray-500 hover:text-navy px-2 py-1 font-bold flex items-center gap-1 border border-cream3 rounded bg-white"
+                  >
+                    <ArrowLeft size={14} /> Volver
+                  </button>
+                  <span className="text-[10px] font-bold text-brown uppercase tracking-wider bg-cream px-2 py-1 rounded">
                     {current.origen === 'Trabajador' ? 'Documento de Personal' : 'Documento de Empresa'}
                   </span>
                   <span className={`badge ${current.prio === 'Alta' ? 'b-red' : current.prio === 'Normal' ? 'b-yellow' : 'b-green'} text-[10px] font-semibold`}>
@@ -557,7 +567,7 @@ function ColaRevisionTab({
               </div>
 
               {/* Two-Column split layout */}
-              <div className="flex-1 grid grid-cols-[360px_1fr] overflow-hidden">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[360px_1fr] overflow-y-auto lg:overflow-hidden">
                 
                 {/* COLUMN 1: IZQUIERDA (Details, metadata, worker info, compliance) */}
                 <div className="border-r border-cream3 overflow-y-auto p-5 bg-[#fcfbfa] flex flex-col gap-4">
@@ -574,7 +584,7 @@ function ColaRevisionTab({
                     const contractorObj = GLOBAL_CONTRATISTAS.find(c => c.nombre === current.emp || c.rut === current.rut);
                     const worker = contractorObj?.trabajadores?.find(w => w.rut === current.trabajadorRut || w.nombre === current.trabajadorNombre);
                     
-                    const wEstado = worker ? calcularEstadoTrabajador(worker) : 'pendiente';
+                    const wEstado = worker ? calcularEstadoTrabajador(worker, current.proyectoId) : 'pendiente';
                     const wCompliance = worker?.cumplimiento || 0;
                     
                     const wStatusLabel = wEstado === 'aprobado' ? 'Habilitado' : wEstado === 'rechazado' ? 'Bloqueado' : 'Pendiente';
@@ -658,7 +668,7 @@ function ColaRevisionTab({
                 </div>
 
                 {/* COLUMN 2: DERECHA (Visor, zoom controls, structured form / review buttons) */}
-                <div className="flex flex-col overflow-hidden bg-white">
+                <div className="flex flex-col lg:overflow-hidden bg-white min-h-[500px]">
                   
                   {/* Visor Area */}
                   <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-center items-center bg-gray-50/50 relative">
@@ -790,7 +800,7 @@ function ColaRevisionTab({
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                         <div className="flex gap-2 flex-1">
                           <button
                             onClick={() => decide("approve")}
@@ -807,7 +817,7 @@ function ColaRevisionTab({
                         </div>
                         <button
                           onClick={() => decide("skip")}
-                          className="flex items-center justify-center gap-1 text-[12.5px] px-4 py-2.5 border border-cream3 rounded-lg bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+                          className="flex items-center justify-center gap-1 text-[12.5px] w-full sm:w-auto px-4 py-2.5 border border-cream3 rounded-lg bg-white text-gray-500 hover:bg-gray-50 transition-colors"
                         >
                           <SkipForward size={14} /> Saltar
                         </button>
@@ -945,7 +955,7 @@ function ColaRevisionTab({
   );
 }
 
-const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void }> = ({ doc, onRevisar }) => {
+const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void; showToast?: (msg: string) => void }> = ({ doc, onRevisar, showToast }) => {
   const [open, setOpen] = useState(false);
   const badgeMap: any = {
     aprobado: "b-green bg-green-100 text-green-800",
@@ -1004,10 +1014,10 @@ const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void }> = ({ 
             </p>
           )}
           <div className="flex gap-2 mt-2">
-            <button className="btn btn-ghost btn-sm text-[12px]">
+            <button className="btn btn-ghost btn-sm text-[12px]" onClick={() => showToast?.('Abriendo visor de documento...')}>
               <Eye size={12} /> Ver documento
             </button>
-            <button className="btn btn-ghost btn-sm text-[12px]">
+            <button className="btn btn-ghost btn-sm text-[12px]" onClick={() => showToast?.('Iniciando descarga del documento...')}>
               <Download size={12} /> Descargar
             </button>
           </div>
@@ -1033,7 +1043,7 @@ const getDocumentosEmpresa = (cliente: any) => {
   }));
 };
 
-const ProyectoRow: React.FC<{ proyecto: any; contractorId?: string }> = ({ proyecto, contractorId }) => {
+const ProyectoRow: React.FC<{ proyecto: any; contractorId?: string; showToast?: (msg: string) => void }> = ({ proyecto, contractorId, showToast }) => {
   const [open, setOpen] = useState(false);
   const [tabProy, setTabProy] = useState("trabajadores");
 
@@ -1186,7 +1196,7 @@ const ProyectoRow: React.FC<{ proyecto: any; contractorId?: string }> = ({ proye
                     >
                       {labelEstado[doc.estado]}
                     </span>
-                    <button className="text-gray-400 hover:text-navy">
+                    <button className="text-gray-400 hover:text-navy" onClick={() => showToast?.('Visualizando documento del checklist...')}>
                       <Eye size={14} />
                     </button>
                   </div>
@@ -1199,7 +1209,7 @@ const ProyectoRow: React.FC<{ proyecto: any; contractorId?: string }> = ({ proye
           <div className="px-4 py-3 border-t border-cream3 flex justify-between text-[12px] text-gray-400 bg-white">
             <span>Inicio: 01 Ene 2026</span>
             <span>Cierre: 31 Dic 2026</span>
-            <button className="text-brown hover:underline font-medium">
+            <button className="text-brown hover:underline font-medium" onClick={() => showToast?.('Cargando vista completa del proyecto...')}>
               Ver proyecto completo →
             </button>
           </div>
@@ -1326,6 +1336,7 @@ const ALERTAS_DASHBOARD = [
 ];
 
 export default function AdminPortal() {
+  const navigate = useNavigate();
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
@@ -1358,6 +1369,7 @@ export default function AdminPortal() {
   });
 
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aprobadosHoy, setAprobadosHoy] = useState(2);
   const [rechazadosHoy, setRechazadosHoy] = useState(1);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
@@ -1368,6 +1380,7 @@ export default function AdminPortal() {
   const [actividadSeleccionada, setActividadSeleccionada] = useState<typeof ACTIVIDAD_RECIENTE[0] | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   const [mandanteActivo, setMandanteActivo] = useState<any>(null);
@@ -1565,6 +1578,13 @@ export default function AdminPortal() {
       {/* TOPBAR */}
       <div className="topbar">
         <div className="logo flex-shrink-0 flex items-center">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="lg:hidden text-cream hover:text-white mr-3 focus:outline-none"
+            title="Abrir menú"
+          >
+            <Menu size={20} className="text-cream" />
+          </button>
           Acre<b>dita</b>
           <span className="text-[12.1px] bg-brown/30 text-brown px-2 py-0.5 rounded-lg ml-2 tracking-[1px]">
             ADMIN
@@ -1679,7 +1699,7 @@ export default function AdminPortal() {
             )}
 
             {showNotif && (
-              <div className="absolute right-0 top-11 w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300]">
+              <div className="absolute top-11 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300] right-3 sm:right-0">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-cream3">
                   <span className="font-semibold text-navy text-[15px]">
@@ -1779,7 +1799,7 @@ export default function AdminPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <div className="sidebar">
+        <div className="sidebar hidden lg:flex">
           <div className="sb-org">
             <div className="sb-org-name">Panel Administración</div>
             <div className="sb-org-sub">Acredita · Equipo revisor</div>
@@ -1809,11 +1829,61 @@ export default function AdminPortal() {
             </React.Fragment>
           ))}
 <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto">
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
         </div>
+
+        {/* Mobile Sidebar Drawer Overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div 
+              className="fixed inset-0 bg-black/60 z-[998] lg:hidden" 
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] lg:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
+              <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
+                <div>
+                  <div className="sb-org-name">Panel Administración</div>
+                  <div className="sb-org-sub">Acredita · Equipo revisor</div>
+                </div>
+                <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="sb-label">Principal</div>
+              {menuItems.map((item, index) => (
+                <React.Fragment key={item.id}>
+                  {item.section && (
+                    <div className="sb-label mt-2">{item.section}</div>
+                  )}
+                  <button
+                    onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                    className={`sb-item w-full flex text-left ${activeTab === item.id ? "active" : ""}`}
+                  >
+                    <item.icon size={18} className="shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    {item.badge !== undefined && (
+                      <span className={`sb-badge ${item.badgeTipo === "alerta" ? "sb-badge-alerta" : ""}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                    {item.badgePunto && (
+                      <span className="w-2 h-2 rounded-full bg-[#c03030] shrink-0" title="Requiere atención" />
+                    )}
+                  </button>
+                </React.Fragment>
+              ))}
+              <div className="sb-bottom">
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                  <LogOut size={18} /> Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* MAIN CONTENT */}
         <div className="main">
@@ -1977,10 +2047,11 @@ export default function AdminPortal() {
                           )}
                           <div className="mt-3.5 flex justify-end">
                             <button
-                              onClick={() => showToast('Abriendo vista de seguimiento...')}
-                              className="text-[12px] text-brown font-semibold hover:underline flex items-center gap-1"
+                              disabled
+                              title="No disponible en entorno demo"
+                              className="text-[12px] text-gray-400 font-semibold flex items-center gap-1 cursor-not-allowed opacity-60"
                             >
-                              Ver todos los seguimientos de corrección <ChevronRight size={14} />
+                              Ver todos los seguimientos [Demo] <ChevronRight size={14} />
                             </button>
                           </div>
                         </div>
@@ -1990,29 +2061,57 @@ export default function AdminPortal() {
                         <div className="card border border-cream3 shadow-sm bg-white font-sans">
                           <div className="mb-3">
                             <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2">
-                              <Building2 size={18} className="text-brown" />
-                              CASOS EN SEGUIMIENTO
+                              <Bell size={18} className="text-orange-500 animate-pulse" />
+                              ALERTAS DE VIGENCIA
                             </h3>
-                            <p className="text-xs text-gray-500 mt-0.5">Requieren atención humana y contacto con la empresa contratista.</p>
-                            <span className="text-[10px] text-gray-400 italic block mt-1">* Concepto operacional (Dato mock de simulación)</span>
+                            <p className="text-xs text-gray-500 mt-0.5">Alertas de vencimiento basadas en proyectos y criticidad de requisitos.</p>
                           </div>
 
-                          <div className="divide-y divide-cream">
-                            {mockCasosSeguimiento.map(caso => (
-                              <div key={caso.id} className="py-2.5 flex items-start justify-between gap-3 text-[12.5px]">
-                                <div className="flex-1">
-                                  <div className="font-semibold text-navy">{caso.empresa}</div>
-                                  <div className="text-[11.5px] text-gray-600 font-medium">{caso.detalle}</div>
-                                  <div className="text-[11px] text-gray-400 mt-0.5">{caso.info}</div>
-                                </div>
-                                <button
-                                  onClick={() => showToast(`Iniciando seguimiento para ${caso.empresa}`)}
-                                  className="btn btn-ghost btn-sm text-brown text-[11px] font-semibold shrink-0"
-                                >
-                                  Ver caso
-                                </button>
-                              </div>
-                            ))}
+                          <div className="divide-y divide-cream max-h-[300px] overflow-y-auto pr-1">
+                            {(() => {
+                              const list = getAlertasVigencia();
+                              const sorted = [...list].sort((a, b) => {
+                                const score = { 'Crítica': 3, 'Atención': 2, 'Informativa': 1 };
+                                return score[b.criticidad] - score[a.criticidad];
+                              });
+
+                              if (sorted.length === 0) {
+                                return <p className="text-center py-6 text-gray-400 text-xs">No hay alertas de vigencia activas.</p>;
+                              }
+
+                              return sorted.map(alert => {
+                                const critColor = alert.criticidad === 'Crítica' ? 'text-red-600 bg-red-50 border-red-100' :
+                                                  alert.criticidad === 'Atención' ? 'text-yellow-600 bg-yellow-50 border-yellow-100' :
+                                                  'text-blue-600 bg-blue-50 border-blue-100';
+                                
+                                return (
+                                  <div key={alert.id} className="py-2.5 flex items-start justify-between gap-3 text-[12.5px]">
+                                    <div className="flex-1">
+                                      <div className="font-semibold text-navy flex items-center gap-1.5 flex-wrap">
+                                        {alert.documentoNombre}
+                                        <span className={`text-[9.5px] px-1.5 py-0.5 rounded border font-medium ${critColor}`}>
+                                          {alert.criticidad}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-gray-600 font-medium mt-0.5">
+                                        Empresa: {alert.empresaNombre} {alert.trabajadorNombre && `· Personal: ${alert.trabajadorNombre}`}
+                                      </div>
+                                      <div className="text-[10.5px] text-gray-400 mt-0.5 flex flex-wrap gap-x-2">
+                                        <span>Obra: {alert.proyectoNombre}</span>
+                                        <span>Vence: {alert.vencimiento}</span>
+                                        {alert.bloquea && <span className="text-red-500 font-bold font-sans">Bloquea Faena</span>}
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <div className={`font-bold text-[13px] ${alert.diasRestantes < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                                        {alert.diasRestantes < 0 ? `Vencido` : `${alert.diasRestantes} d`}
+                                      </div>
+                                      <div className="text-[9.5px] text-gray-400">restantes</div>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
                           </div>
                         </div>
 
@@ -2035,10 +2134,11 @@ export default function AdminPortal() {
                                   <div className="text-[11px] text-gray-400 mt-0.5">{caso.info}</div>
                                 </div>
                                 <button
-                                  onClick={() => showToast(`Abriendo decisión de supervisor para ${caso.empresa}`)}
-                                  className="btn btn-ghost btn-sm text-[#a32d2d] text-[11px] font-semibold shrink-0"
+                                  disabled
+                                  title="No disponible en demo"
+                                  className="btn btn-ghost btn-sm text-gray-400 text-[11px] font-semibold shrink-0 cursor-not-allowed opacity-50"
                                 >
-                                  Revisar
+                                  Revisar [Demo]
                                 </button>
                               </div>
                             ))}
@@ -2137,7 +2237,7 @@ export default function AdminPortal() {
                   className="fixed inset-0 z-[399] bg-black/20"
                   onClick={() => setActividadSeleccionada(null)}
                 />
-                <div className="fixed left-1/2 top-1/2 z-[400] flex h-[90vh] w-3/4 max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-cream3 bg-white shadow-2xl">
+                <div className="fixed left-1/2 top-1/2 z-[400] flex h-[calc(100vh-16px)] sm:h-[90vh] w-[calc(100vw-16px)] sm:w-3/4 max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto sm:overflow-hidden rounded-2xl border border-cream3 bg-white shadow-2xl">
                   {/* Header */}
                   <div className="flex items-center justify-between px-5 py-3 rounded-t-xl"
                     style={{ background: '#1f1f1f' }}>
@@ -2165,8 +2265,8 @@ export default function AdminPortal() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <button className="flex items-center gap-1.5 text-[13px] text-gray-400 hover:text-white transition-colors" title="Descargar documento">
-                        <Download size={14} /> Descargar
+                      <button className="flex items-center gap-1.5 text-[13px] text-gray-500 cursor-not-allowed opacity-50 font-medium" disabled title="Descargar deshabilitado en demo">
+                        <Download size={14} /> Descargar [Demo]
                       </button>
                       <button onClick={() => setActividadSeleccionada(null)} className="text-gray-500 hover:text-white transition-colors">
                         <X size={16} />
@@ -2483,15 +2583,15 @@ export default function AdminPortal() {
                                 Servicio de Redacción Disponible
                               </span>
                             </div>
-                            <button className="btn btn-primary btn-sm w-full py-1.5 text-[12.5px]">Solicitar asesoría</button>
+                            <button className="btn btn-primary btn-sm w-full py-1.5 text-[12.5px] cursor-not-allowed opacity-55" disabled title="Próximamente en producción">Solicitar asesoría [Demo]</button>
                           </>
                         ) : (
                           <div className="flex items-center justify-between">
                              <span className="text-[12.1px] text-gray-400 font-medium tracking-wide uppercase">
                               Plantilla Gratuita
                             </span>
-                            <button className="btn btn-secondary btn-sm">
-                              <Download size={14} /> Ver documento
+                            <button className="btn btn-secondary btn-sm cursor-not-allowed opacity-55" disabled title="Vista previa no disponible en entorno demo">
+                              <Download size={14} /> Ver plantilla
                             </button>
                           </div>
                         )}
@@ -2537,8 +2637,8 @@ export default function AdminPortal() {
                           <td className="px-4 py-3 text-[13.2px] text-gray-500">{p.actualizacion}</td>
                           <td className="px-4 py-3 text-[13.2px] text-gray-600">{p.descargas}</td>
                           <td className="px-4 py-3 text-right whitespace-nowrap">
-                            <button className="text-gray-400 hover:text-navy mr-3"><Edit2 size={16} /></button>
-                            <button className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                            <button className="text-gray-300 cursor-not-allowed mr-3" disabled title="Edición deshabilitada en demo"><Edit2 size={16} /></button>
+                            <button className="text-gray-300 cursor-not-allowed" disabled title="Eliminación deshabilitada en demo"><Trash2 size={16} /></button>
                           </td>
                         </tr>
                       )) : (
@@ -2781,8 +2881,8 @@ export default function AdminPortal() {
                       plataforma.
                     </p>
                   </div>
-                  <button className="btn btn-ghost btn-sm">
-                    <Download size={14} className="mr-1" /> Exportar log (CSV)
+                  <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="Exportación deshabilitada en demo">
+                    <Download size={14} className="mr-1" /> Exportar log [Demo]
                   </button>
                 </div>
 
@@ -2940,7 +3040,7 @@ export default function AdminPortal() {
                       const badgeClass = stateLabel === 'Aprobado' ? 'b-green' : stateLabel === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
                       
                       return (
-                        <tr key={c.id} className="border-b border-cream hover:bg-gray-50 last:border-0 font-sans">
+                        <tr key={c.id} className="border-b border-cream hover:bg-gray-50 last:border-0 font-sans cursor-pointer" onClick={() => setSelectedAcreditacionContratista(c)}>
                           <td className="px-4 py-3">
                             <div className="font-semibold text-navy text-[14px]">{c.nombre}</div>
                             <div className="text-[11.5px] text-gray-500">RUT: {c.rut}</div>
@@ -2980,7 +3080,7 @@ export default function AdminPortal() {
 
       {showInvitarModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] overflow-hidden">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-medium text-navy text-[17.6px]">
                 Invitar Mandante
@@ -3151,7 +3251,7 @@ export default function AdminPortal() {
             className="fixed inset-0 z-[399] bg-black/20"
             onClick={() => setClienteSeleccionado(null)}
           />
-          <div className="fixed left-1/2 top-1/2 z-[400] flex h-[90vh] w-3/4 max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-cream3 bg-white shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 z-[400] flex h-[calc(100vh-16px)] sm:h-[90vh] w-[calc(100vw-16px)] sm:w-3/4 max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto sm:overflow-hidden rounded-2xl border border-cream3 bg-white shadow-2xl">
             {/* Header */}
             <div className="flex items-start justify-between p-5 border-b border-cream3">
               <div>
@@ -3293,6 +3393,7 @@ export default function AdminPortal() {
                            <DocumentoRow
                              key={i}
                              doc={doc}
+                             showToast={showToast}
                              onRevisar={(d) => setActividadSeleccionada({
                                id: d.id || Math.random(),
                                documento: d.nombre || "—",
@@ -3340,7 +3441,7 @@ export default function AdminPortal() {
                 return (
                   <div className="flex flex-col gap-2">
                     {contractorProjects.map((p, i) => (
-                      <ProyectoRow key={i} proyecto={p} contractorId={contractorObj.id} />
+                      <ProyectoRow key={i} proyecto={p} contractorId={contractorObj.id} showToast={showToast} />
                     ))}
                   </div>
                 );
@@ -3460,11 +3561,11 @@ export default function AdminPortal() {
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border border-cream3 bg-white hover:bg-gray-50 text-navy transition-colors">
-                      <Edit size={14} /> Editar datos
+                    <button className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border border-cream3 bg-white text-gray-400 cursor-not-allowed opacity-50" disabled title="Función deshabilitada en demo">
+                      <Edit size={14} /> Editar datos [Demo]
                     </button>
-                    <button className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-                      <Trash2 size={14} /> Suspender cuenta
+                    <button className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-medium py-2 rounded-lg border border-red-100 bg-red-50/50 text-red-400 cursor-not-allowed opacity-50" disabled title="Función deshabilitada en demo">
+                      <Trash2 size={14} /> Suspender cuenta [Demo]
                     </button>
                   </div>
                 </div>
@@ -3472,6 +3573,27 @@ export default function AdminPortal() {
             </div>
           </div>
         </>
+      )}
+
+      {selectedAcreditacionContratista && (
+        <FichaAcreditacion
+          tipo="empresa"
+          contratista={selectedAcreditacionContratista}
+          proyectoId={selectedAcreditacionContratista.proyectos[0] || 'costanera'}
+          onClose={() => setSelectedAcreditacionContratista(null)}
+          rol="admin"
+          onRevisarDocumento={(doc) => {
+            const dynamicCola = buildColaDocs(getContratistas(), getProyectos());
+            const queueItem = dynamicCola.find(item => item.docId === doc.id || item.title === doc.nombre);
+            if (queueItem) {
+              setSelectedDocId(queueItem.id);
+              setActiveTab('cola');
+            } else {
+              showToast('El documento ya está aprobado o no se encuentra pendiente en la cola de revisión.', 'warning');
+            }
+            setSelectedAcreditacionContratista(null);
+          }}
+        />
       )}
 
       {toast && (

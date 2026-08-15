@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Bell, LayoutDashboard, Folder, Upload, Archive, Sparkles, Users, 
   Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight, ArrowLeft,
   FileCheck, Clock, X, XCircle, CloudUpload, Download, Eye,
   Building2, MapPin, Search, Info, FileText, Plus, Send, ShieldCheck, Banknote,
-  UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList
+  UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import FichaAcreditacion from '../components/FichaAcreditacion';
 
 export default function ContratistaPortal() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedDocumentForPanel, setSelectedDocumentForPanel] = useState<Documento | null>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [invitacionAceptada, setInvitacionAceptada] = useState(false);
@@ -18,6 +22,16 @@ export default function ContratistaPortal() {
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
+  const [fichaTipo, setFichaTipo] = useState<'empresa' | 'trabajador'>('empresa');
+  const [fichaTrabajador, setFichaTrabajador] = useState<any>(null);
+  const [activeConfigTab, setActiveConfigTab] = useState<'perfil' | 'alertas' | 'seguridad'>('perfil');
+  const [canalAlertas, setCanalAlertas] = useState({
+    rechazoEmail: true,
+    vencimientoEmail: true,
+    vencimientoWhatsapp: false,
+    aprobacionEmail: true
+  });
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
   const [newWorkerForm, setNewWorkerForm] = useState({
     nombre: '',
@@ -49,28 +63,61 @@ export default function ContratistaPortal() {
   const contratistaLogueado = allContratistas.find(c => c.id === 'tecnicosur') || allContratistas[0];
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
 
-  // Documents state for reactive UI updates
-  const [documentosData, setDocumentosData] = useState<Documento[]>(() => {
-    return contratistaLogueado.documentos;
+  const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
+    return misProyectos[0]?.id || 'costanera';
   });
 
-  // Workers state for reactive UI updates
-  const [trabajadoresData, setTrabajadoresData] = useState<any[]>(() => {
-    return contratistaLogueado.trabajadores || [];
-  });
+  const [documentosData, setDocumentosData] = useState<Documento[]>([]);
+  const [trabajadoresData, setTrabajadoresData] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const list = getContratistas();
+    const cObj = list.find(c => c.id === contratistaLogueado.id);
+    if (cObj) {
+      const filteredDocs = cObj.documentos.filter(d => d.proyectoId === selectedProyectoId);
+      setDocumentosData(filteredDocs);
+      
+      const projectWorkers = cObj.trabajadores?.filter(w => 
+        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+      ) || [];
+      setTrabajadoresData(projectWorkers);
+    }
+  }, [selectedProyectoId]);
+
+  React.useEffect(() => {
+    const invs = getInvitaciones();
+    const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
+    if (pending) {
+      setTieneProyecto(true);
+      setInvitacionAceptada(false);
+    } else {
+      if (misProyectos.length > 0) {
+        setTieneProyecto(true);
+        setInvitacionAceptada(true);
+      } else {
+        setTieneProyecto(false);
+        setInvitacionAceptada(false);
+      }
+    }
+  }, []);
 
   const numProyectos = misProyectos.length;
   const numAprobados = documentosData.filter(d => d.estado === 'aprobado').length;
   const numPendientes = documentosData.filter(d => d.estado === 'pendiente').length;
   const numRechazados = documentosData.filter(d => d.estado === 'rechazado').length;
   const numPorVencer = documentosData.filter(d => d.estado === 'por_vencer').length;
-  const approvedWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t) === 'aprobado').length;
+  const approvedWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t, selectedProyectoId) === 'aprobado').length;
   const totalWorkers = trabajadoresData.length;
-  const pendingWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t) !== 'aprobado').length;
+  const pendingWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t, selectedProyectoId) !== 'aprobado').length;
 
   const handleUploadDocument = (docId: string, actionMsg: string = 'Documento subido correctamente', workerRut?: string) => {
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
+    const today = new Date();
+    const day = today.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const todayStr = `${day} ${months[today.getMonth()]} ${today.getFullYear()}`;
+
     if (currentIdx !== -1) {
       if (workerRut) {
         const workerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === workerRut);
@@ -79,21 +126,42 @@ export default function ContratistaPortal() {
           if (docIdx !== undefined && docIdx !== -1) {
             const docObj = list[currentIdx].trabajadores![workerIdx].documentos![docIdx];
             docObj.estado = 'revision';
-            docObj.subido = '13 Aug 2026';
+            docObj.subido = todayStr;
+            docObj.archivoReferencia = `mock_file_${docId}.pdf`;
+            delete docObj.motivoRechazo;
+            delete docObj.explicacionRechazo;
+            delete docObj.solucionRechazo;
+            delete docObj.motivo;
+            delete docObj.observacion;
             
             const workerObj = list[currentIdx].trabajadores![workerIdx];
-            workerObj.estado = calcularEstadoTrabajador(workerObj);
+            workerObj.estado = calcularEstadoTrabajador(workerObj, selectedProyectoId);
             
             saveContratistas(list);
-            setTrabajadoresData(list[currentIdx].trabajadores || []);
+            
+            const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
+              w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+            ) || [];
+            setTrabajadoresData(projectWorkers);
+            showToast(actionMsg, 'success');
           }
         }
       } else {
         const docIdx = list[currentIdx].documentos.findIndex(d => d.id === docId);
         if (docIdx !== -1) {
-          list[currentIdx].documentos[docIdx].estado = 'revision';
-          list[currentIdx].documentos[docIdx].subido = '13 Aug 2026';
+          const docObj = list[currentIdx].documentos[docIdx];
+          docObj.estado = 'revision';
+          docObj.subido = todayStr;
+          docObj.archivoReferencia = `mock_file_${docId}.pdf`;
+          delete docObj.motivoRechazo;
+          delete docObj.explicacionRechazo;
+          delete docObj.solucionRechazo;
+          delete docObj.motivo;
+          delete docObj.observacion;
           saveContratistas(list);
+          
+          setDocumentosData(list[currentIdx].documentos.filter(d => d.proyectoId === selectedProyectoId));
+          showToast(actionMsg, 'success');
         }
       }
     }
@@ -101,54 +169,95 @@ export default function ContratistaPortal() {
     if (!workerRut) {
       setDocumentosData(prev => prev.map(d => {
         if (d.id === docId) {
-          return { ...d, estado: 'revision', subido: '13 Aug 2026' };
+          return { 
+            ...d, 
+            estado: 'revision', 
+            subido: todayStr,
+            motivoRechazo: undefined,
+            explicacionRechazo: undefined,
+            solucionRechazo: undefined,
+            motivo: undefined,
+            observacion: undefined
+          };
         }
         return d;
       }));
     }
     
     if (selectedDocumentForPanel && selectedDocumentForPanel.id === docId) {
-      setSelectedDocumentForPanel({ ...selectedDocumentForPanel, estado: 'revision', subido: '13 Aug 2026' });
+      setSelectedDocumentForPanel({ 
+        ...selectedDocumentForPanel, 
+        estado: 'revision', 
+        subido: todayStr,
+        motivoRechazo: undefined,
+        explicacionRechazo: undefined,
+        solucionRechazo: undefined,
+        motivo: undefined,
+        observacion: undefined
+      });
     }
 
-    showToast(actionMsg);
+    showToast(actionMsg, 'success');
   };
 
   const handleAddWorkerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWorkerForm.nombre || !newWorkerForm.rut) return;
 
-    // Generate initial documentos from templates with destino === 'trabajador'
-    const workerTemplates = getPlantillas().filter(p => p.destino === 'trabajador');
-    const workerDocs = workerTemplates.map((p, idx) => ({
+    // Get requirements for the active project
+    const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
+    const workerDocs = projectReqs.map((r, idx) => ({
       id: `wdoc_${Date.now()}_${idx}`,
-      nombre: p.nombre,
-      categoria: p.categoria as 'Laboral' | 'Prevención' | 'Tributario',
+      nombre: r.nombre,
+      categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
       estado: 'pendiente' as const,
-      vencimiento: '—'
+      vencimiento: '—',
+      proyectoId: selectedProyectoId
     }));
-
-    const newWorker = {
-      nombre: newWorkerForm.nombre,
-      rut: newWorkerForm.rut,
-      estado: 'pendiente' as const,
-      cargo: newWorkerForm.cargo || 'Operario',
-      faena: newWorkerForm.faena,
-      cumplimiento: 0,
-      documentos: workerDocs
-    };
 
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
     if (currentIdx !== -1) {
-      if (!list[currentIdx].trabajadores) {
-        list[currentIdx].trabajadores = [];
+      const existingWorkerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === newWorkerForm.rut);
+      if (existingWorkerIdx !== undefined && existingWorkerIdx !== -1) {
+        const existingWorker = list[currentIdx].trabajadores![existingWorkerIdx];
+        const otherProjId = existingWorker.documentos?.[0]?.proyectoId || selectedProyectoId;
+        const globalState = calcularEstadoTrabajador(existingWorker, otherProjId);
+        if (globalState !== 'aprobado') {
+          const motivo = getMotivoBloqueoTrabajador(existingWorker, otherProjId);
+          showToast(`No se puede asignar: El trabajador ${existingWorker.nombre} está ${globalState === 'rechazado' ? 'Bloqueado' : 'En proceso'} (${motivo}).`, 'error');
+          return;
+        }
+
+        if (!existingWorker.documentos) existingWorker.documentos = [];
+        const alreadyHasDocs = existingWorker.documentos.some(d => d.proyectoId === selectedProyectoId);
+        if (!alreadyHasDocs) {
+          existingWorker.documentos = [...existingWorker.documentos, ...workerDocs];
+        }
+        existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
+      } else {
+        const newWorker = {
+          nombre: newWorkerForm.nombre,
+          rut: newWorkerForm.rut,
+          estado: 'pendiente' as const,
+          cargo: newWorkerForm.cargo || 'Operario',
+          faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || 'Planta Norte',
+          cumplimiento: 0,
+          documentos: workerDocs
+        };
+        if (!list[currentIdx].trabajadores) {
+          list[currentIdx].trabajadores = [];
+        }
+        list[currentIdx].trabajadores!.push(newWorker);
       }
-      list[currentIdx].trabajadores!.push(newWorker);
       saveContratistas(list);
+
+      const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
+        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+      ) || [];
+      setTrabajadoresData(projectWorkers);
     }
 
-    setTrabajadoresData(prev => [...prev, newWorker]);
     setNewWorkerForm({
       nombre: '',
       rut: '',
@@ -193,15 +302,77 @@ export default function ContratistaPortal() {
             <button 
               className="btn btn-primary w-full justify-center py-2.5 text-[15.4px]"
               onClick={() => {
-                setInvitacionAceptada(true);
-                setShowWelcomeAlert(true);
-                showToast('Bienvenido al proyecto');
+                const invs = getInvitaciones();
+                const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
+                if (pending) {
+                  pending.estado = 'aceptada';
+                  saveInvitaciones(invs);
+                  
+                  // Associate contractor to project
+                  const projsList = getProyectos();
+                  const pIdx = projsList.findIndex(p => p.id === pending.proyectoId);
+                  if (pIdx !== -1 && !projsList[pIdx].contratistas.includes(contratistaLogueado.id)) {
+                    projsList[pIdx].contratistas.push(contratistaLogueado.id);
+                    saveProyectos(projsList);
+                  }
+
+                  // Associate project to contractor
+                  const contrList = getContratistas();
+                  const cIdx = contrList.findIndex(c => c.id === contratistaLogueado.id);
+                  if (cIdx !== -1) {
+                    const cObj = contrList[cIdx];
+                    if (!cObj.proyectos.includes(pending.proyectoId)) {
+                      cObj.proyectos.push(pending.proyectoId);
+                    }
+                    
+                    // Create default documents for the contractor for this project
+                    const companyReqs = getRequisitos().filter(r => r.proyectoId === pending.proyectoId && r.destino === 'empresa' && r.activo !== false);
+                    const newCompanyDocs = companyReqs.map((r, idx) => ({
+                      id: `cdoc_${Date.now()}_${idx}`,
+                      nombre: r.nombre,
+                      categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
+                      estado: 'pendiente' as const,
+                      vencimiento: '—',
+                      proyectoId: pending.proyectoId
+                    }));
+                    if (!cObj.documentos) cObj.documentos = [];
+                    cObj.documentos = [...cObj.documentos, ...newCompanyDocs];
+                    
+                    saveContratistas(contrList);
+                  }
+                  
+                  setInvitacionAceptada(true);
+                  setTieneProyecto(true);
+                  setSelectedProyectoId(pending.proyectoId);
+                  setShowWelcomeAlert(true);
+                  showToast('Invitación aceptada. Proyecto asociado.');
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 1000);
+                } else {
+                  setInvitacionAceptada(true);
+                  showToast('Invitación procesada');
+                }
               }}
             >
               Aceptar y comenzar
             </button>
-            <button className="btn btn-ghost w-full justify-center text-gray-500 hover:text-navy py-2.5 text-[15.4px]"
-              onClick={() => showToast('Invitación rechazada', 'error')}>
+            <button 
+              className="btn btn-ghost w-full justify-center text-gray-500 hover:text-navy py-2.5 text-[15.4px]"
+              onClick={() => {
+                const invs = getInvitaciones();
+                const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
+                if (pending) {
+                  pending.estado = 'rechazada';
+                  saveInvitaciones(invs);
+                }
+                setTieneProyecto(false);
+                showToast('Invitación rechazada', 'error');
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              }}
+            >
               Rechazar invitación
             </button>
           </div>
@@ -214,7 +385,16 @@ export default function ContratistaPortal() {
     <div className="h-screen flex flex-col font-sans bg-cream2 text-navy">
       {/* TOPBAR */}
       <div className="topbar">
-        <div className="logo flex-shrink-0">Acre<b>dita</b></div>
+        <div className="logo flex-shrink-0 flex items-center">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="lg:hidden text-cream hover:text-white mr-3 focus:outline-none"
+            title="Abrir menú"
+          >
+            <Menu size={20} className="text-cream" />
+          </button>
+          Acre<b>dita</b>
+        </div>
         <div className="flex items-center gap-4">
           <div className="relative">
             <button 
@@ -227,7 +407,7 @@ export default function ContratistaPortal() {
             {showNotif && <div className="fixed inset-0 z-[299]" onClick={() => setShowNotif(false)} />}
             
             {showNotif && (
-              <div className="absolute right-0 top-11 w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300]">
+              <div className="absolute top-11 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300] right-3 sm:right-0">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-cream3 text-left">
                   <span className="font-semibold text-navy text-[15px]">Notificaciones</span>
@@ -317,7 +497,7 @@ export default function ContratistaPortal() {
       )}
 
       {/* MOBILE QUICK ACCESS BANNER */}
-      <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex gap-3">
+      <div className="hidden bg-white border-b border-gray-100 px-4 py-3 gap-3">
         <button onClick={() => setActiveTab('subir')}
           className="flex-1 btn btn-primary text-sm py-2 flex items-center justify-center gap-2">
           <Upload size={16}/> Subir documento
@@ -330,7 +510,7 @@ export default function ContratistaPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <aside className="hidden md:flex sidebar flex-col">
+        <aside className="hidden lg:flex sidebar flex-col">
           <div className="sb-org">
             <div className="sb-org-name">Servicios Norte Ltda.</div>
             <div className="sb-org-sub">RUT 78.112.445-9 · 3 proyectos activos</div>
@@ -352,14 +532,56 @@ export default function ContratistaPortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto">
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
         </aside>
 
+        {/* Mobile Sidebar Drawer Overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div 
+              className="fixed inset-0 bg-black/60 z-[998] lg:hidden" 
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] lg:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
+              <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
+                <div>
+                  <div className="sb-org-name">Servicios Norte Ltda.</div>
+                  <div className="sb-org-sub">RUT 78.112.445-9 · 3 proyectos activos</div>
+                </div>
+                <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="sb-label">Principal</div>
+              {menuItems.map(item => (
+                <React.Fragment key={item.id}>
+                  {item.section && <div className="sb-label mt-2">{item.section}</div>}
+                  <button 
+                    onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                    className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
+                  >
+                    <item.icon size={18} className="shrink-0" /> 
+                    <span className="flex-1">{item.label}</span>
+                    {item.badge && <span className="sb-badge bg-brown">{item.badge}</span>}
+                  </button>
+                </React.Fragment>
+              ))}
+              
+              <div className="sb-bottom">
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                  <LogOut size={18} /> Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* MAIN CONTENT */}
-        <div className="main pb-24 md:pb-0">
+        <div className="main pb-24 lg:pb-0">
           
           {/* DASHBOARD */}
           {activeTab === 'dashboard' && (
@@ -367,7 +589,19 @@ export default function ContratistaPortal() {
               <div className="page-header">
                 <div>
                   <h2 className="page-title">Mi dashboard - {contratistaLogueado.nombre}</h2>
-                  <p className="page-sub">RUT: {contratistaLogueado.rut} · Proyecto: {misProyectos[0]?.nombre || 'Planta Norte'}</p>
+                  <div className="flex items-center gap-3 mt-1 text-[12.5px]">
+                    <span className="text-gray-500 font-medium">RUT: {contratistaLogueado.rut}</span>
+                    <span className="text-gray-300">|</span>
+                    <select
+                      value={selectedProyectoId}
+                      onChange={(e) => setSelectedProyectoId(e.target.value)}
+                      className="text-[12.5px] border border-cream3 rounded-md px-2 py-0.5 bg-white text-navy focus:outline-none focus:border-brown font-semibold cursor-pointer"
+                    >
+                      {misProyectos.map(p => (
+                        <option key={p.id} value={p.id}>Proyecto: {p.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               
@@ -419,10 +653,25 @@ export default function ContratistaPortal() {
                   {/* Right side: Payment Status secondary info */}
                   <div className="w-full md:w-56 bg-white border border-cream3 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                     <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Estado de Pago</span>
-                    <span className={`badge ${numRechazados > 0 ? 'b-red' : (numPendientes > 0 || numPorVencer > 0) ? 'b-yellow' : 'b-green'} text-xs font-bold py-1 px-3`}>
-                      {numRechazados > 0 ? 'Pago Retenido' : (numPendientes > 0 || numPorVencer > 0) ? 'Pago en Revisión' : 'Pago Habilitado'}
-                    </span>
-                    <span className="text-[10px] text-gray-400 mt-2 leading-relaxed">Sujeto al cumplimiento de requisitos contractuales</span>
+                    {(() => {
+                      const status = calcularEstadoAcreditacion(contratistaLogueado, selectedProyectoId);
+                      const isAprobado = status === 'Aprobado';
+                      return (
+                        <span className={`badge ${isAprobado ? 'b-green' : 'b-red'} text-xs font-bold py-1 px-3 mb-3`}>
+                          {isAprobado ? 'Pago Habilitado' : 'Pago Retenido'}
+                        </span>
+                      );
+                    })()}
+                    <button 
+                      className="btn btn-secondary btn-sm w-full py-1 text-[11px] font-semibold"
+                      onClick={() => {
+                        setFichaTipo('empresa');
+                        setFichaTrabajador(null);
+                        setShowFichaAcreditacion(true);
+                      }}
+                    >
+                      Ver Ficha
+                    </button>
                   </div>
                 </div>
               </div>
@@ -448,9 +697,9 @@ export default function ContratistaPortal() {
                            </div>
                            <p className="text-[12.1px] text-red-600 mt-1"><strong>Motivo:</strong> {d.motivo || d.observacion || 'Rechazado por auditoría'}</p>
                          </div>
-                         <button className="btn btn-primary btn-sm shrink-0" onClick={() => setActiveTab('subir')}>
-                           Corregir
-                         </button>
+                          <button className="btn btn-primary btn-sm shrink-0" onClick={() => { setActiveTab('subir'); setSelectedDocumentForPanel(d); }}>
+                            Corregir
+                          </button>
                        </div>
                      ))}
                      
@@ -589,33 +838,59 @@ export default function ContratistaPortal() {
               </div>
               
               <div className="md:hidden flex flex-col gap-3">
-                {documentosData.map(doc => (
-                  <div key={doc.id} className="card p-4 flex flex-col gap-2 cursor-pointer hover:shadow-sm transition-all" onClick={() => setSelectedDocumentForPanel(doc)}>
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium text-sm text-navy">{doc.nombre}</span>
-                      <span className={`badge ${
-                        doc.estado === 'aprobado' ? 'b-green' :
-                        doc.estado === 'rechazado' ? 'b-red' : 
-                        doc.estado === 'por_vencer' ? 'b-yellow' : 
-                        doc.estado === 'revision' ? 'b-blue' : 'b-gray'
-                      }`}>{doc.estado === 'por_vencer' ? 'Por vencer' : doc.estado === 'revision' ? 'En revisión' : doc.estado}</span>
+                {documentosData.map(doc => {
+                  const isVencido = esVencidoPorFecha(doc.vencimiento);
+                  const req = getRequisitos().find(r => r.proyectoId === selectedProyectoId && (doc.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(doc.nombre.toLowerCase())));
+                  const alertaDias = req ? req.alertaDias : 30;
+                  const isPorVencer = esPorVencerPorFecha(doc.vencimiento, alertaDias);
+                  const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+
+                  let badgeColor = 'b-gray';
+                  let statusLabel = doc.estado;
+                  let subtext = doc.vencimiento && doc.vencimiento !== '—' ? `Vence: ${doc.vencimiento}` : 'Sin vencimiento';
+
+                  if (doc.estado === 'aprobado') {
+                    if (isVencido) {
+                      badgeColor = 'b-red';
+                      statusLabel = 'Vencido';
+                      subtext = 'Tu documento está vencido';
+                    } else if (isPorVencer) {
+                      badgeColor = 'b-yellow';
+                      statusLabel = 'Por vencer';
+                      subtext = `Tu documento vence en ${diasRestantes} días`;
+                    } else {
+                      badgeColor = 'b-green';
+                      statusLabel = 'Aprobado';
+                    }
+                  } else if (doc.estado === 'rechazado') {
+                    badgeColor = 'b-red';
+                    statusLabel = 'Rechazado';
+                  } else if (doc.estado === 'revision') {
+                    badgeColor = 'b-blue';
+                    statusLabel = 'En revisión';
+                  }
+
+                  return (
+                    <div key={doc.id} className="card p-4 flex flex-col gap-2 cursor-pointer hover:shadow-sm transition-all" onClick={() => setSelectedDocumentForPanel(doc)}>
+                      <div className="flex justify-between items-start">
+                        <span className="font-medium text-sm text-navy">{doc.nombre}</span>
+                        <span className={`badge ${badgeColor} text-xs`}>{statusLabel}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">{subtext}</span>
+                      {doc.observacion && <span className="text-xs text-red-500">{doc.observacion}</span>}
                     </div>
-                    {doc.vencimiento && (
-                      <span className="text-xs text-gray-400">Vence: {doc.vencimiento}</span>
-                    )}
-                    {doc.observacion && <span className="text-xs text-red-500">{doc.observacion}</span>}
-                    <button 
-                      className="btn btn-primary btn-sm w-full mt-1 flex items-center justify-center gap-2" 
-                      onClick={(e) => { e.stopPropagation(); showToast('Documento subido correctamente'); }}
-                    >
-                      <Upload size={14}/> Subir archivo
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="card hidden md:block">
                 {documentosData.map(doc => {
+                  const isVencido = esVencidoPorFecha(doc.vencimiento);
+                  const req = getRequisitos().find(r => r.proyectoId === selectedProyectoId && (doc.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(doc.nombre.toLowerCase())));
+                  const alertaDias = req ? req.alertaDias : 30;
+                  const isPorVencer = esPorVencerPorFecha(doc.vencimiento, alertaDias);
+                  const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+
                   let RowIcon = Clock;
                   let iconColorClass = 'text-gray-400';
                   let rowBgClass = '';
@@ -623,54 +898,60 @@ export default function ContratistaPortal() {
                   let badgeLabel = 'Pendiente';
                   let subtext = `Sin subir · Vence el ${doc.vencimiento}`;
                   let actionBtn = (
-                    <button className="btn btn-secondary btn-sm" onClick={() => showToast('Documento subido correctamente')}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
                       <Upload size={14} /> Subir
                     </button>
                   );
 
+                  let effectiveEstado = doc.estado;
                   if (doc.estado === 'aprobado') {
+                    if (isVencido) effectiveEstado = 'vencido';
+                    else if (isPorVencer) effectiveEstado = 'por_vencer';
+                  }
+
+                  if (effectiveEstado === 'aprobado') {
                     RowIcon = FileCheck;
                     iconColorClass = 'text-[#2a6a3a]';
                     badgeClass = 'b-green';
                     badgeLabel = 'Aprobado';
                     subtext = 'Subido · Validación automática';
                     actionBtn = (
-                      <button className="btn btn-ghost btn-sm" onClick={() => showToast('Visualizando documento')}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
                         <Eye size={14}/>
                       </button>
                     );
-                  } else if (doc.estado === 'por_vencer') {
+                  } else if (effectiveEstado === 'por_vencer') {
                     RowIcon = AlertTriangle;
                     iconColorClass = 'text-[#c08000]';
                     rowBgClass = 'bg-[#fffdf5] -mx-4 px-4 py-3 border-y border-cream3 rounded-md';
                     badgeClass = 'b-yellow';
                     badgeLabel = 'Por vencer';
-                    subtext = doc.observacion || `Vence el ${doc.vencimiento}`;
+                    subtext = `Tu documento vence en ${diasRestantes} días`;
                     actionBtn = (
-                      <button className="btn btn-primary btn-sm" onClick={() => showToast('Subiendo renovación')}>
+                      <button className="btn btn-primary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
                         <Upload size={14} /> Renovar
                       </button>
                     );
-                  } else if (doc.estado === 'rechazado') {
+                  } else if (effectiveEstado === 'rechazado' || effectiveEstado === 'vencido') {
                     RowIcon = X;
                     iconColorClass = 'text-[#c02020]';
                     rowBgClass = 'bg-[#fff8f8] -mx-4 px-4 py-3 border-b border-cream3 rounded-md';
                     badgeClass = 'b-red';
-                    badgeLabel = 'Rechazado';
-                    subtext = doc.observacion || 'Documento rechazado.';
+                    badgeLabel = effectiveEstado === 'vencido' ? 'Vencido' : 'Rechazado';
+                    subtext = effectiveEstado === 'vencido' ? 'Tu documento está vencido' : (doc.observacion || 'Documento rechazado.');
                     actionBtn = (
-                      <button className="btn btn-danger btn-sm" onClick={() => showToast('Subiendo corrección')}>
+                      <button className="btn btn-danger btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
                         <Upload size={14} /> Corregir
                       </button>
                     );
-                  } else if (doc.estado === 'revision') {
+                  } else if (effectiveEstado === 'revision') {
                     RowIcon = Clock;
                     iconColorClass = 'text-blue-500';
                     badgeClass = 'b-blue';
                     badgeLabel = 'En revisión';
                     subtext = 'Enviado para revisión por auditoría';
                     actionBtn = (
-                      <button className="btn btn-ghost btn-sm" onClick={() => showToast('Documento en revisión')}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
                         <Eye size={14}/>
                       </button>
                     );
@@ -702,7 +983,7 @@ export default function ContratistaPortal() {
                   <div className="text-[15.4px] font-medium text-navy mb-1">Arrastra el archivo aquí o haz clic para seleccionar</div>
                   <div className="text-[13.2px] text-gray-500">PDF, JPG o PNG · máx. 10 MB</div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <div className="form-group">
                     <label className="form-label">Tipo de documento</label>
                     <select className="form-input">
@@ -719,7 +1000,7 @@ export default function ContratistaPortal() {
                     </select>
                   </div>
                 </div>
-                <button className="btn btn-primary w-full py-2.5 mt-2" onClick={() => showToast('Documento subido correctamente')}><Upload size={16} /> Subir y validar</button>
+                <button className="btn btn-primary w-full py-2.5 mt-2 cursor-not-allowed opacity-55" disabled title="Usa la sección 'Mis proyectos' o la Ficha para subir documentos de forma interactiva"><Upload size={16} /> Subir y validar [Demo]</button>
               </div>
             </div>
           )}
@@ -876,8 +1157,8 @@ export default function ContratistaPortal() {
                   <div className="card">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="section-title mb-0">Documentos de la Empresa</h3>
-                      <button className="btn btn-ghost btn-sm" onClick={() => showToast('Documento subido correctamente')}>
-                        <CloudUpload size={14} className="mr-1" /> Subir Maestro
+                      <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo">
+                        <CloudUpload size={14} className="mr-1" /> Subir Maestro [Demo]
                       </button>
                     </div>
 
@@ -895,7 +1176,7 @@ export default function ContratistaPortal() {
                             <span className="badge b-gray py-0.5 px-2 text-[11px] text-gray-600">Usado en 2 faenas</span>
                           </div>
                         </div>
-                        <button className="text-gray-400 hover:text-navy p-1 transition"><Eye size={15} /></button>
+                        <button className="text-gray-300 cursor-not-allowed p-1" disabled title="Visor deshabilitado en demo"><Eye size={15} /></button>
                       </div>
 
                       {/* Documento 2 */}
@@ -911,7 +1192,7 @@ export default function ContratistaPortal() {
                             <span className="badge b-gray py-0.5 px-2 text-[11px] text-gray-600">Usado en 3 faenas</span>
                           </div>
                         </div>
-                        <button className="text-gray-400 hover:text-navy p-1 transition"><Eye size={15} /></button>
+                        <button className="text-gray-300 cursor-not-allowed p-1" disabled title="Visor deshabilitado en demo"><Eye size={15} /></button>
                       </div>
 
                       {/* Documento 3 */}
@@ -928,7 +1209,7 @@ export default function ContratistaPortal() {
                             <span className="badge b-yellow py-0.5 px-2 text-[11px]">Renovación Requerida</span>
                           </div>
                         </div>
-                        <button className="btn btn-secondary btn-sm px-2 py-1 text-[11px]">Actualizar</button>
+                        <button className="btn btn-secondary btn-sm px-2 py-1 text-[11px] cursor-not-allowed opacity-50" disabled title="Actualización deshabilitada en demo">Actualizar</button>
                       </div>
                     </div>
                   </div>
@@ -939,7 +1220,7 @@ export default function ContratistaPortal() {
                   <div className="card">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="section-title mb-0">Nómina y Carpetas de Trabajadores</h3>
-                      <button className="btn btn-primary btn-sm flex items-center">
+                      <button className="btn btn-primary btn-sm flex items-center" onClick={() => setShowAddWorkerModal(true)}>
                         <Plus size={14} className="mr-1" /> Registrar Trabajador
                       </button>
                     </div>
@@ -956,7 +1237,7 @@ export default function ContratistaPortal() {
                           <div className="text-[13.2px] font-semibold text-[#2a6a3a]">4 / 4 Docs</div>
                           <div className="text-[11px] text-gray-400">Habilitado</div>
                         </div>
-                        <button className="btn btn-ghost btn-sm px-2.5" title="Ver Carpeta Completa">
+                        <button className="btn btn-ghost btn-sm px-2.5 cursor-not-allowed opacity-50" disabled title="No disponible en demo">
                           <Folder size={14} />
                         </button>
                       </div>
@@ -972,7 +1253,7 @@ export default function ContratistaPortal() {
                           <div className="text-[13.2px] font-semibold text-[#a07000]">3 / 4 Docs</div>
                           <div className="text-[11px] text-[#a07000] font-medium">1 por vencer</div>
                         </div>
-                        <button className="btn btn-ghost btn-sm px-2.5" title="Ver Carpeta Completa">
+                        <button className="btn btn-ghost btn-sm px-2.5 cursor-not-allowed opacity-50" disabled title="No disponible en demo">
                           <Folder size={14} />
                         </button>
                       </div>
@@ -988,7 +1269,7 @@ export default function ContratistaPortal() {
                           <div className="text-[13.2px] font-semibold text-[#c02020]">2 / 4 Docs</div>
                           <div className="text-[11px] text-[#c02020] font-medium">1 Rechazado</div>
                         </div>
-                        <button className="btn btn-secondary btn-sm px-2.5 bg-brown hover:bg-brown/90 text-white" title="Resolver Pendientes">
+                        <button className="btn btn-secondary btn-sm px-2.5 bg-gray-300 text-gray-500 cursor-not-allowed border-none" disabled title="No disponible en demo">
                           <Upload size={14} />
                         </button>
                       </div>
@@ -1116,8 +1397,8 @@ export default function ContratistaPortal() {
                       </div>
                     </div>
 
-                    <button className="btn btn-primary w-full py-3 text-[15.4px] justify-center shadow-md hover:shadow-lg">
-                      <Send size={18} className="mr-2" /> Solicitar Cotización Gratuita
+                    <button className="btn btn-primary w-full py-3 text-[15.4px] justify-center cursor-not-allowed opacity-55" disabled title="No disponible en demo">
+                      <Send size={18} className="mr-2" /> Solicitar Cotización [Demo]
                     </button>
                     
                     <p className="text-center text-[11px] text-gray-400 mt-4">
@@ -1154,9 +1435,25 @@ export default function ContratistaPortal() {
                     const list = getContratistas();
                     const cObj = list.find(c => c.id === contratistaLogueado.id);
                     const freshWorker = cObj?.trabajadores?.find(w => w.rut === selectedWorkerForDocs.rut);
-                    const statusVal = freshWorker ? calcularEstadoTrabajador(freshWorker) : 'pendiente';
+                    const statusVal = freshWorker ? calcularEstadoTrabajador(freshWorker, selectedProyectoId) : 'pendiente';
                     const badgeClass = statusVal === 'aprobado' ? 'b-green' : statusVal === 'rechazado' ? 'b-red' : 'b-yellow';
-                    return <span className={`badge ${badgeClass} text-xs font-bold py-1.5 px-3`}>{statusVal === 'aprobado' ? 'Habilitado' : statusVal === 'rechazado' ? 'Bloqueado' : 'Pendiente'}</span>;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className={`badge ${badgeClass} text-xs font-bold py-1.5 px-3`}>
+                          {statusVal === 'aprobado' ? 'Habilitado' : statusVal === 'rechazado' ? 'Bloqueado' : 'Pendiente'}
+                        </span>
+                        <button 
+                          className="btn btn-secondary btn-sm px-2.5 py-1 text-[11px] font-semibold"
+                          onClick={() => {
+                            setFichaTipo('trabajador');
+                            setFichaTrabajador(freshWorker);
+                            setShowFichaAcreditacion(true);
+                          }}
+                        >
+                          Ver Ficha
+                        </button>
+                      </div>
+                    );
                   })()}
                 </div>
 
@@ -1167,10 +1464,10 @@ export default function ContratistaPortal() {
                       const list = getContratistas();
                       const cObj = list.find(c => c.id === contratistaLogueado.id);
                       const freshWorker = cObj?.trabajadores?.find(w => w.rut === selectedWorkerForDocs.rut);
-                      const docsList = freshWorker?.documentos || [];
+                      const docsList = (freshWorker?.documentos || []).filter(d => d.proyectoId === selectedProyectoId);
                       
                       if (docsList.length === 0) {
-                        return <p className="text-gray-500 text-[13.5px] p-4 text-center">No hay requisitos configurados para este trabajador.</p>;
+                        return <p className="text-gray-500 text-[13.5px] p-4 text-center">No hay requisitos configurados para este trabajador en este proyecto.</p>;
                       }
 
                       return docsList.map(doc => {
@@ -1289,10 +1586,13 @@ export default function ContratistaPortal() {
                       <option>Habilitados (Al día)</option>
                       <option>Con problemas (Rojo)</option>
                     </select>
-                    <select className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer">
-                      <option>Todas las faenas</option>
+                    <select
+                      value={selectedProyectoId}
+                      onChange={(e) => setSelectedProyectoId(e.target.value)}
+                      className="form-input py-2 text-[13.2px] border-none bg-cream2/50 cursor-pointer"
+                    >
                       {misProyectos.map(p => (
-                        <option key={p.id}>{p.nombre}</option>
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
                       ))}
                     </select>
                   </div>
@@ -1301,7 +1601,7 @@ export default function ContratistaPortal() {
                 {/* GRID DE PERFILES DE TRABAJADORES */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   {trabajadoresData.map((worker: any) => {
-                    const workerEstado = calcularEstadoTrabajador(worker);
+                    const workerEstado = calcularEstadoTrabajador(worker, selectedProyectoId);
                     let statusColor = 'border-t-[#2a6a3a]';
                     let badge = <span className="badge b-green" title="Habilitado para ingreso">Al día</span>;
                     let cardBg = 'bg-[#f4fbf6]';
@@ -1375,6 +1675,30 @@ export default function ContratistaPortal() {
                       .substring(0, 2)
                       .toUpperCase();
 
+                    const projObj = misProyectos.find(p => p.id === selectedProyectoId);
+                    const projectName = projObj ? projObj.nombre : 'Proyecto';
+
+                    const motive = workerEstado !== 'aprobado' ? getMotivoBloqueoTrabajador(worker, selectedProyectoId) : '';
+
+                    const workerReqs = getRequisitos().filter(r => 
+                      r.proyectoId === selectedProyectoId && 
+                      r.destino === 'trabajador' && 
+                      r.activo !== false &&
+                      r.obligatorio === true
+                    );
+                    const approvedReqsCount = workerReqs.filter(req => {
+                      const doc = worker.documentos?.find(d => 
+                        d.proyectoId === selectedProyectoId && 
+                        (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+                         req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+                      );
+                      return doc && doc.estado === 'aprobado' && !esVencidoPorFecha(doc.vencimiento);
+                    }).length;
+                    
+                    const dynamicCompliance = workerReqs.length > 0
+                      ? Math.round((approvedReqsCount / workerReqs.length) * 100)
+                      : 0;
+
                     return (
                       <div key={worker.rut} className={`card hover:shadow-md transition-shadow group border-t-4 ${statusColor}`}>
                         <div className="flex justify-between items-start mb-3">
@@ -1388,21 +1712,25 @@ export default function ContratistaPortal() {
                           {badge}
                         </div>
                         
-                        <div className="flex items-center gap-1.5 text-[13.2px] text-gray-600 mb-4">
+                        <div className="flex items-center gap-1.5 text-[13.2px] text-gray-600 mb-2">
                           <Briefcase size={14} className="text-gray-400" /> {worker.cargo || 'Operario'}
+                        </div>
+
+                        <div className="space-y-1.5 mb-4 text-[12.5px] text-gray-600 border-t border-cream pt-2">
+                          <div><strong>Proyecto:</strong> {projectName}</div>
+                          <div><strong>Asignación:</strong> <span className="text-green-700 font-semibold">✓ Asignado</span></div>
+                          <div><strong>Puede trabajar:</strong> <span className={workerEstado === 'aprobado' ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>{workerEstado === 'aprobado' ? 'Sí' : 'No'}</span></div>
+                          {motive && <div className="text-red-600 font-medium"><strong>Motivo:</strong> {motive}</div>}
                         </div>
 
                         <div className={`rounded-lg p-3 mb-4 border ${cardBg} ${cardBorder}`}>
                           <div className="flex justify-between items-center text-[12.1px] mb-1.5">
                             <span className={`${textColor} font-medium`}>Cumplimiento General</span>
-                            <span className={`font-bold ${textColor}`}>{worker.cumplimiento || 100}%</span>
+                            <span className={`font-bold ${textColor}`}>{dynamicCompliance}%</span>
                           </div>
                           <div className={`prog-wrap h-1.5 ${barBg}`}>
-                            <div className={`prog-fill ${barColor}`} style={{ width: `${worker.cumplimiento || 100}%` }}></div>
+                            <div className={`prog-fill ${barColor}`} style={{ width: `${dynamicCompliance}%` }}></div>
                           </div>
-                          <p className="text-[11px] text-gray-500 mt-2">
-                            {worker.detalle || `Asignado a: ${worker.faena || 'Torre Mackenna'}`}
-                          </p>
                         </div>
 
                         {actionBtn}
@@ -1422,8 +1750,8 @@ export default function ContratistaPortal() {
                   <h2 className="page-title">Configuración de la Cuenta</h2>
                   <p className="page-sub">Administra tu perfil comercial, alertas automáticas y seguridad</p>
                 </div>
-                <button className="btn btn-primary shadow-sm" onClick={() => showToast('Cambios guardados')}>
-                  <Save size={16} className="mr-2" /> Guardar Cambios
+                <button className="btn btn-primary shadow-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo">
+                  <Save size={16} className="mr-2" /> Guardar [Demo]
                 </button>
               </div>
 
@@ -1431,13 +1759,22 @@ export default function ContratistaPortal() {
                 
                 {/* MENÚ LATERAL DE CONFIGURACIÓN */}
                 <div className="lg:col-span-1 flex flex-col gap-1.5">
-                  <button className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white border border-cream3 text-navy font-medium text-[14.3px] shadow-sm">
+                  <button 
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'perfil' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
+                    onClick={() => setActiveConfigTab('perfil')}
+                  >
                     <Building2 size={18} className="text-brown" /> Perfil Comercial
                   </button>
-                  <button className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-gray-500 hover:bg-cream hover:text-navy transition font-medium text-[14.3px]">
+                  <button 
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'alertas' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
+                    onClick={() => setActiveConfigTab('alertas')}
+                  >
                     <Bell size={18} /> Alertas y Avisos
                   </button>
-                  <button className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-gray-500 hover:bg-cream hover:text-navy transition font-medium text-[14.3px]">
+                  <button 
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'seguridad' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
+                    onClick={() => setActiveConfigTab('seguridad')}
+                  >
                     <Shield size={18} /> Seguridad y Accesos
                   </button>
                 </div>
@@ -1446,91 +1783,124 @@ export default function ContratistaPortal() {
                 <div className="lg:col-span-3 flex flex-col gap-4">
                   
                   {/* BLOQUE 1: DATOS DE LA EMPRESA */}
-                  <div className="card">
-                    <h3 className="section-title mb-4">Información de la Empresa</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="form-group">
-                        <label className="form-label">Razón Social</label>
-                        <input className="form-input" defaultValue="Servicios Integrales Lagos Ltda." />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">RUT Empresa</label>
-                        <input className="form-input" defaultValue="76.543.210-K" disabled />
-                      </div>
-                      <div className="form-group md:col-span-2">
-                        <label className="form-label">Dirección Comercial</label>
-                        <input className="form-input" defaultValue="Av. Providencia 1234, Oficina 502, Santiago" />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Giro Principal</label>
-                        <input className="form-input" defaultValue="Obras menores en construcción" />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Representante Legal</label>
-                        <input className="form-input" defaultValue="Roberto Lagos" />
+                  {activeConfigTab === 'perfil' && (
+                    <div className="card">
+                      <h3 className="section-title mb-4">Información de la Empresa</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="form-group">
+                          <label className="form-label">Razón Social</label>
+                          <input className="form-input" defaultValue="Servicios Integrales Lagos Ltda." />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">RUT Empresa</label>
+                          <input className="form-input" defaultValue="76.543.210-K" disabled />
+                        </div>
+                        <div className="form-group md:col-span-2">
+                          <label className="form-label">Dirección Comercial</label>
+                          <input className="form-input" defaultValue="Av. Providencia 1234, Oficina 502, Santiago" />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Giro Principal</label>
+                          <input className="form-input" defaultValue="Obras menores en construcción" />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Representante Legal</label>
+                          <input className="form-input" defaultValue="Roberto Lagos" />
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* BLOQUE 2: CENTRO DE NOTIFICACIONES */}
-                  <div className="card">
-                    <div className="flex items-start gap-3 mb-5">
-                      <div className="w-10 h-10 rounded-xl bg-cream flex items-center justify-center shrink-0 text-brown">
-                        <Bell size={20} />
+                  {activeConfigTab === 'alertas' && (
+                    <div className="card">
+                      <div className="flex items-start gap-3 mb-5">
+                        <div className="w-10 h-10 rounded-xl bg-cream flex items-center justify-center shrink-0 text-brown">
+                          <Bell size={20} />
+                        </div>
+                        <div>
+                          <h3 className="section-title mb-1">Centro de Alertas</h3>
+                          <p className="text-[13.2px] text-gray-500">Configura cómo y cuándo quieres que Acredita te avise sobre el estado de tu documentación.</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="section-title mb-1">Centro de Alertas</h3>
-                        <p className="text-[13.2px] text-gray-500">Configura cómo y cuándo quieres que Acredita te avise sobre el estado de tu documentación.</p>
+
+                      <div className="flex flex-col gap-0 border border-cream3 rounded-xl overflow-hidden">
+                        {/* Alerta 1 */}
+                        <div className="flex items-center justify-between p-4 bg-white border-b border-cream3">
+                          <div>
+                            <div className="text-[14.3px] font-medium text-navy">Rechazo de Documentos</div>
+                            <div className="text-[12.1px] text-gray-500">Aviso inmediato si un Mandante rechaza una subida.</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              className={`flex items-center gap-1.5 text-[12.1px] font-medium px-2 py-1 rounded-md transition ${canalAlertas.rechazoEmail ? 'text-brown bg-cream' : 'text-gray-400 bg-gray-50'}`}
+                              onClick={() => setCanalAlertas(prev => ({ ...prev, rechazoEmail: !prev.rechazoEmail }))}
+                            >
+                              <Mail size={14} /> Email
+                            </button>
+                            <ToggleRight size={28} className="text-[#2a6a3a] cursor-pointer" />
+                          </div>
+                        </div>
+
+                        {/* Alerta 2 */}
+                        <div className="flex items-center justify-between p-4 bg-white border-b border-cream3">
+                          <div>
+                            <div className="text-[14.3px] font-medium text-navy">Alerta Preventiva de Vencimiento</div>
+                            <div className="text-[12.1px] text-gray-500">Aviso 15 y 5 días antes de que caduque un certificado.</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              className={`flex items-center gap-1.5 text-[12.1px] font-medium px-2 py-1 rounded-md transition ${canalAlertas.vencimientoEmail ? 'text-brown bg-cream' : 'text-gray-400 bg-gray-50'}`}
+                              onClick={() => setCanalAlertas(prev => ({ ...prev, vencimientoEmail: !prev.vencimientoEmail }))}
+                            >
+                              <Mail size={14} /> Email
+                            </button>
+                            <button 
+                              className={`flex items-center gap-1.5 text-[12.1px] font-medium px-2 py-1 rounded-md transition ${canalAlertas.vencimientoWhatsapp ? 'text-brown bg-cream' : 'text-gray-400 bg-gray-50'}`}
+                              onClick={() => setCanalAlertas(prev => ({ ...prev, vencimientoWhatsapp: !prev.vencimientoWhatsapp }))}
+                            >
+                              <Smartphone size={14} /> WhatsApp
+                            </button>
+                            <ToggleRight size={28} className="text-[#2a6a3a] cursor-pointer" />
+                          </div>
+                        </div>
+
+                        {/* Alerta 3 */}
+                        <div className="flex items-center justify-between p-4 bg-white">
+                          <div>
+                            <div className="text-[14.3px] font-medium text-navy">Aprobación Exitosa</div>
+                            <div className="text-[12.1px] text-gray-500">Resumen cuando todos los documentos de una faena están al día.</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              className={`flex items-center gap-1.5 text-[12.1px] font-medium px-2 py-1 rounded-md transition ${canalAlertas.aprobacionEmail ? 'text-brown bg-cream' : 'text-gray-400 bg-gray-50'}`}
+                              onClick={() => setCanalAlertas(prev => ({ ...prev, aprobacionEmail: !prev.aprobacionEmail }))}
+                            >
+                              <Mail size={14} /> Email
+                            </button>
+                            <ToggleRight size={28} className="text-gray-300 cursor-pointer" />
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="flex flex-col gap-0 border border-cream3 rounded-xl overflow-hidden">
-                      {/* Alerta 1 */}
-                      <div className="flex items-center justify-between p-4 bg-white border-b border-cream3">
-                        <div>
-                          <div className="text-[14.3px] font-medium text-navy">Rechazo de Documentos</div>
-                          <div className="text-[12.1px] text-gray-500">Aviso inmediato si un Mandante rechaza una subida.</div>
+                  {/* BLOQUE 3: SEGURIDAD Y ACCESOS */}
+                  {activeConfigTab === 'seguridad' && (
+                    <div className="card">
+                      <h3 className="section-title mb-4">Seguridad y Accesos</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="form-group">
+                          <label className="form-label">Contraseña Actual</label>
+                          <input className="form-input" type="password" placeholder="••••••••" />
                         </div>
-                        <div className="flex items-center gap-3">
-                          <button className="flex items-center gap-1.5 text-[12.1px] font-medium text-brown bg-cream px-2 py-1 rounded-md">
-                            <Mail size={14} /> Email
-                          </button>
-                          <ToggleRight size={28} className="text-[#2a6a3a] cursor-pointer" />
-                        </div>
-                      </div>
-
-                      {/* Alerta 2 */}
-                      <div className="flex items-center justify-between p-4 bg-white border-b border-cream3">
-                        <div>
-                          <div className="text-[14.3px] font-medium text-navy">Alerta Preventiva de Vencimiento</div>
-                          <div className="text-[12.1px] text-gray-500">Aviso 15 y 5 días antes de que caduque un certificado.</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button className="flex items-center gap-1.5 text-[12.1px] font-medium text-brown bg-cream px-2 py-1 rounded-md">
-                            <Mail size={14} /> Email
-                          </button>
-                          <button className="flex items-center gap-1.5 text-[12.1px] font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded-md">
-                            <Smartphone size={14} /> WhatsApp
-                          </button>
-                          <ToggleRight size={28} className="text-[#2a6a3a] cursor-pointer" />
-                        </div>
-                      </div>
-
-                      {/* Alerta 3 */}
-                      <div className="flex items-center justify-between p-4 bg-white">
-                        <div>
-                          <div className="text-[14.3px] font-medium text-navy">Aprobación Exitosa</div>
-                          <div className="text-[12.1px] text-gray-500">Resumen cuando todos los documentos de una faena están al día.</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button className="flex items-center gap-1.5 text-[12.1px] font-medium text-brown bg-cream px-2 py-1 rounded-md">
-                            <Mail size={14} /> Email
-                          </button>
-                          <ToggleRight size={28} className="text-gray-300 cursor-pointer" />
+                        <div className="form-group">
+                          <label className="form-label">Nueva Contraseña</label>
+                          <input className="form-input" type="password" placeholder="Mínimo 8 caracteres" />
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                 </div>
               </div>
@@ -1561,6 +1931,21 @@ export default function ContratistaPortal() {
         </div>
       )}
 
+      {showFichaAcreditacion && (
+        <FichaAcreditacion
+          tipo={fichaTipo}
+          contratista={contratistaLogueado}
+          trabajador={fichaTrabajador}
+          proyectoId={selectedProyectoId}
+          onClose={() => setShowFichaAcreditacion(false)}
+          rol="contratista"
+          onCorregirDocumento={(doc) => {
+            setSelectedDocumentForPanel(doc);
+            setShowFichaAcreditacion(false);
+          }}
+        />
+      )}
+
       {selectedDocumentForPanel && (
         <DocumentDetailPanel 
           doc={selectedDocumentForPanel} 
@@ -1572,7 +1957,7 @@ export default function ContratistaPortal() {
 
       {showAddWorkerModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddWorkerModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] overflow-hidden font-sans" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-semibold text-navy text-[17.6px] flex items-center gap-2">
                 <UserPlus size={18} className="text-brown" /> Agregar Trabajador
@@ -1585,7 +1970,91 @@ export default function ContratistaPortal() {
               </button>
             </div>
             
-            <form onSubmit={handleAddWorkerSubmit} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleAddWorkerSubmit} className="p-6 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
+              {(() => {
+                const list = getContratistas();
+                const currentC = list.find(c => c.id === contratistaLogueado.id);
+                const existingWorkers = currentC?.trabajadores || [];
+                const unassignedWorkers = existingWorkers.filter(w => !w.documentos?.some(d => d.proyectoId === selectedProyectoId));
+
+                if (unassignedWorkers.length === 0) return null;
+
+                return (
+                  <div className="border-b border-cream3 pb-4 mb-2">
+                    <label className="block text-[13px] font-bold text-navy mb-2">Asignar de la plantilla de la empresa</label>
+                    <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
+                      {unassignedWorkers.map(w => {
+                        const globalProjId = w.documentos?.[0]?.proyectoId || selectedProyectoId;
+                        const globalState = calcularEstadoTrabajador(w, globalProjId);
+                        const isAprobado = globalState === 'aprobado';
+                        
+                        const stateBadge = globalState === 'aprobado' ? 'b-green' : globalState === 'rechazado' ? 'b-red' : 'b-yellow';
+                        const statusLabel = globalState === 'aprobado' ? 'Aprobado' : globalState === 'rechazado' ? 'Bloqueado' : 'En proceso';
+                        const motivo = globalState !== 'aprobado' ? getMotivoBloqueoTrabajador(w, globalProjId) : '';
+
+                        return (
+                          <div key={w.rut} className="flex justify-between items-center p-2.5 bg-cream/30 border border-cream3 rounded-lg text-[12.5px] font-sans">
+                            <div className="flex-1 min-w-0 mr-2">
+                              <div className="font-semibold text-navy truncate">{w.nombre}</div>
+                              <div className="text-[11px] text-gray-500 font-mono">{w.rut}</div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className={`badge ${stateBadge} text-[9px] py-0 px-1`}>{statusLabel}</span>
+                                {motivo && <span className="text-[10px] text-red-600 font-semibold truncate max-w-[130px]" title={motivo}>{motivo}</span>}
+                              </div>
+                            </div>
+                            {isAprobado ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
+                                  const workerDocs = projectReqs.map((r, idx) => ({
+                                    id: `wdoc_${Date.now()}_${idx}`,
+                                    nombre: r.nombre,
+                                    categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
+                                    estado: 'pendiente' as const,
+                                    vencimiento: '—',
+                                    proyectoId: selectedProyectoId
+                                  }));
+
+                                  const listData = getContratistas();
+                                  const currentIdx = listData.findIndex(c => c.id === contratistaLogueado.id);
+                                  if (currentIdx !== -1) {
+                                    const workerIdx = listData[currentIdx].trabajadores?.findIndex(tw => tw.rut === w.rut);
+                                    if (workerIdx !== undefined && workerIdx !== -1) {
+                                      const wk = listData[currentIdx].trabajadores![workerIdx];
+                                      if (!wk.documentos) wk.documentos = [];
+                                      wk.documentos = [...wk.documentos, ...workerDocs];
+                                      wk.estado = calcularEstadoTrabajador(wk, selectedProyectoId);
+                                      saveContratistas(listData);
+
+                                      const updatedWorkers = listData[currentIdx].trabajadores?.filter(tw => 
+                                        tw.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+                                      ) || [];
+                                      setTrabajadoresData(updatedWorkers);
+                                      showToast(`Trabajador ${w.nombre} asignado con éxito`);
+                                      setShowAddWorkerModal(false);
+                                    }
+                                  }
+                                }}
+                                className="btn btn-primary btn-sm py-1 px-2.5 text-[11px] shrink-0 font-medium"
+                              >
+                                Asignar
+                              </button>
+                            ) : (
+                              <span className="badge b-gray py-1 px-2 text-[10.5px] text-gray-500 font-semibold cursor-not-allowed shrink-0">
+                                [No habilitado]
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="text-[13px] font-bold text-navy border-t border-cream pt-2 mt-1">Registrar Nuevo Trabajador</div>
+
               <div>
                 <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Nombre Completo</label>
                 <input 
@@ -1671,7 +2140,7 @@ function DocumentDetailPanel({ doc, onClose, onUpload, showToast }: DocumentDeta
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 fade-in" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-[460px] overflow-hidden font-sans" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-[460px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-cream">
           <h3 className="font-medium text-navy text-[17px] flex items-center gap-2">
@@ -1706,36 +2175,51 @@ function DocumentDetailPanel({ doc, onClose, onUpload, showToast }: DocumentDeta
           {/* Details based on status */}
           {doc.estado === 'rechazado' && (
             <>
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-semibold text-red-700">Qué pasó</span>
-                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3.5 text-[13.5px] leading-relaxed">
-                  {doc.observacion || doc.motivo || 'El documento no cumple con los requisitos del mandante.'}
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-2 font-bold text-[14.5px]">
+                  <span>❌ Documento rechazado</span>
                 </div>
-              </div>
-              
-              <div className="flex flex-col gap-3">
-                <span className="text-[13px] font-semibold text-navy">Qué hacer ahora</span>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <span className="w-5 h-5 shrink-0 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center mt-0.5">1</span>
-                    <span className="text-[13px] text-gray-600">Revisa el motivo del rechazo indicado arriba.</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="w-5 h-5 shrink-0 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center mt-0.5">2</span>
-                    <span className="text-[13px] text-gray-600">Corrige el documento (firma, fecha, resolución de escaneo, según aplique).</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="w-5 h-5 shrink-0 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center mt-0.5">3</span>
-                    <span className="text-[13px] text-gray-600">Sube la versión corregida en formato PDF.</span>
-                  </div>
+                <div className="text-[13px] font-medium text-red-800">
+                  {doc.nombre}
                 </div>
               </div>
 
+              {/* Motivo */}
+              {(doc.motivoRechazo || doc.motivo) && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[12.5px] font-semibold text-gray-500 uppercase tracking-wider">Motivo</span>
+                  <div className="bg-gray-50 border border-gray-200 text-gray-800 rounded-lg p-3 text-[13.5px] leading-relaxed">
+                    {doc.motivoRechazo || doc.motivo}
+                  </div>
+                </div>
+              )}
+
+              {/* ¿Qué ocurrió? */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[12.5px] font-semibold text-gray-500 uppercase tracking-wider">¿Qué ocurrió?</span>
+                <div className="bg-gray-50 border border-gray-200 text-gray-800 rounded-lg p-3 text-[13.5px] leading-relaxed">
+                  {doc.explicacionRechazo || doc.observacion || doc.motivo || 'El documento no cumple con los requisitos del mandante.'}
+                </div>
+              </div>
+
+              {/* ¿Cómo solucionarlo? */}
+              {doc.solucionRechazo && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[12.5px] font-semibold text-gray-500 uppercase tracking-wider">¿Cómo solucionarlo?</span>
+                  <div className="bg-gray-50 border border-gray-200 text-gray-800 rounded-lg p-3 text-[13.5px] leading-relaxed">
+                    {doc.solucionRechazo}
+                  </div>
+                </div>
+              )}
+
               <button 
-                className="btn btn-danger w-full mt-2 flex items-center justify-center gap-2 py-2.5 font-medium" 
-                onClick={() => { onUpload(doc.id, 'Subiendo corrección'); onClose(); }}
+                className="btn btn-primary w-full mt-2 flex items-center justify-center gap-2 py-2.5 font-medium shadow-sm" 
+                onClick={() => { 
+                  onUpload(doc.id, 'Documento reemplazado con éxito. Queda en estado de revisión.'); 
+                  onClose(); 
+                }}
               >
-                <Upload size={16} /> Subir corrección
+                <Upload size={16} /> Reemplazar documento
               </button>
             </>
           )}
@@ -1779,6 +2263,34 @@ function DocumentDetailPanel({ doc, onClose, onUpload, showToast }: DocumentDeta
             </>
           )}
 
+          {doc.estado === 'revision' && (
+            <>
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-4 text-[13.8px] leading-relaxed flex flex-col gap-1.5 font-sans mb-3">
+                <div>El documento ha sido enviado y se encuentra en cola de revisión por el equipo auditor de Acredita.</div>
+                {doc.subido && (
+                  <div><span className="font-semibold text-blue-950">Fecha de envío:</span> {doc.subido}</div>
+                )}
+              </div>
+
+              {/* Mock Viewer Section */}
+              <div className="border border-cream3 rounded-xl p-4 bg-gray-50 flex flex-col items-center justify-center text-center py-6 font-sans mb-3">
+                <FileText size={32} className="text-gray-400 mb-2" />
+                <div className="font-semibold text-navy text-[13.5px] truncate max-w-[280px]">{doc.archivoReferencia || `mock_file_${doc.id}.pdf`}</div>
+                <div className="text-[11px] text-gray-500 mt-1">Vista previa no disponible en entorno demo</div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider">Detalles del Requisito</span>
+                <div className="bg-gray-50 border border-gray-200 text-gray-700 rounded-lg p-3 text-[13.5px]">
+                  <div><span className="font-semibold">Categoría:</span> {doc.categoria || 'Laboral'}</div>
+                  {doc.vencimiento && doc.vencimiento !== '—' && (
+                    <div><span className="font-semibold">Fecha de vencimiento declarada:</span> {doc.vencimiento}</div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
           {doc.estado === 'por_vencer' && (
             <>
               <div className="flex flex-col gap-2">
@@ -1817,34 +2329,19 @@ function DocumentDetailPanel({ doc, onClose, onUpload, showToast }: DocumentDeta
 
           {doc.estado === 'aprobado' && (
             <>
-              <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg p-4 text-[13.8px] leading-relaxed flex flex-col gap-1.5">
+              <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg p-4 text-[13.8px] leading-relaxed flex flex-col gap-1.5 mb-3 font-sans">
                 <div><span className="font-semibold text-green-950">Vigencia:</span> Vigente hasta {doc.vencimiento || 'Indefinido'}</div>
                 {doc.revisor && (
                   <div><span className="font-semibold text-green-950">Revisado por:</span> {doc.revisor}</div>
                 )}
               </div>
 
-              <button 
-                className="btn btn-ghost w-full mt-2 flex items-center justify-center gap-2 py-2.5 font-medium border border-cream3 text-navy font-sans" 
-                onClick={() => { showToast('Visualizando documento'); onClose(); }}
-              >
-                <Eye size={16} /> Ver documento
-              </button>
-            </>
-          )}
-
-          {doc.estado === 'revision' && (
-            <>
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-4 text-[13.8px] leading-relaxed flex flex-col gap-1.5">
-                <div>Subido el <span className="font-semibold">{doc.subido || '05 May 2026'}</span>. Un revisor lo validará pronto.</div>
+              {/* Mock Viewer Section */}
+              <div className="border border-cream3 rounded-xl p-4 bg-gray-50 flex flex-col items-center justify-center text-center py-6 font-sans">
+                <FileText size={32} className="text-gray-400 mb-2" />
+                <div className="font-semibold text-navy text-[13.5px] truncate max-w-[280px]">{doc.archivoReferencia || `${doc.nombre}.pdf`}</div>
+                <div className="text-[11px] text-gray-500 mt-1">Vista previa no disponible en entorno demo</div>
               </div>
-
-              <button 
-                className="btn w-full mt-2 flex items-center justify-center gap-2 py-2.5 font-medium bg-gray-100 text-gray-400 cursor-not-allowed border-none" 
-                disabled
-              >
-                En revisión
-              </button>
             </>
           )}
         </div>

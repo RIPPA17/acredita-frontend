@@ -54,6 +54,21 @@ export interface Documento {
   motivoRechazo?: string;
   explicacionRechazo?: string;
   solucionRechazo?: string;
+  proyectoId?: string;  // Associated project context
+  archivoReferencia?: string;
+}
+
+export interface Requisito {
+  id: string; // e.g. `${proyectoId}_${plantillaId}`
+  nombre: string;
+  categoria: 'Laboral' | 'Tributario' | 'Prevención';
+  destino: 'empresa' | 'trabajador';
+  obligatorio: boolean;
+  frecuencia: string;
+  alertaDias: number;
+  criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia';
+  proyectoId: string;
+  activo?: boolean;
 }
 
 export interface Contratista {
@@ -64,4 +79,18 @@ export interface Contratista {
   documentos: Documento[];
   trabajadores?: Trabajador[];
   isNew?: boolean;
+}
+
+export interface Invitacion {
+  id: string;
+  contratistaId: string;
+  contratistaNombre: string;
+  contratistaRut: string;
+  proyectoId: string;
+  proyectoNombre: string;
+  mandanteId: string;
+  mandanteNombre: string;
+  estado: 'pendiente' | 'aceptada' | 'rechazada';
+  mensaje?: string;
+  fecha: string;
 }
