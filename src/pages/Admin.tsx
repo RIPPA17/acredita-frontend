@@ -792,7 +792,7 @@ export default function AdminPortal() {
           )}
 
           {activeTab === "reglas" && (
-            <ReglasTab reglas={reglas} setReglas={setReglas} />
+            <ReglasTab reglas={reglas} setReglas={setReglas} showToast={showToast} />
           )}
 
           {activeTab === "auditoria" && (

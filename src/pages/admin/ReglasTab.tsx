@@ -13,9 +13,11 @@ type Regla = {
 export default function ReglasTab({
   reglas,
   setReglas,
+  showToast,
 }: {
   reglas: Regla[];
   setReglas: (v: Regla[]) => void;
+  showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const hasError = reglas.some(r => r.alertaDias >= r.diasVigencia);
 
@@ -30,7 +32,7 @@ export default function ReglasTab({
           </p>
         </div>
         <button
-          onClick={() => { saveReglas(reglas); alert("Cambios guardados con éxito"); }}
+          onClick={() => { saveReglas(reglas); showToast("Cambios guardados con éxito"); }}
           disabled={hasError}
           className={`btn btn-primary ${hasError ? 'opacity-50 pointer-events-none' : ''}`}
         >
