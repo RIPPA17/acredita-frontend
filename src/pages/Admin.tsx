@@ -366,12 +366,12 @@ export default function AdminPortal() {
 
   const menuItems: Array<{ id: string; label: string; icon: any; badge?: number; section?: string; badgeTipo?: string; badgePunto?: boolean }> = [
     { id: "dashboard", label: "Inicio", icon: LayoutDashboard },
-    { id: "cola", label: "Cola de Revisión", icon: ClipboardList, badge: pendingDocsCount },
+    { id: "cola", label: "Cola de revisión", icon: ClipboardList, badge: pendingDocsCount },
     { id: "acreditaciones", label: "Acreditaciones", icon: ShieldCheck, section: "Operación" },
     { id: "mandantes", label: "Mandantes", icon: Building2, section: "Directorios" },
     { id: "contratistas", label: "Contratistas", icon: Users },
     { id: "plantillas", label: "Plantillas", icon: FileCode2, section: "Configuración" },
-    { id: "reglas", label: "Reglas vigencia", icon: SlidersHorizontal },
+    { id: "reglas", label: "Reglas de vigencia", icon: SlidersHorizontal },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
     { id: "auditoria", label: "Auditoría", icon: ShieldAlert, badgePunto: hayAccesosFallidos, badgeTipo: "alerta" },
   ];

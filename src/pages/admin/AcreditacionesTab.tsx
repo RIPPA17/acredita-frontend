@@ -26,7 +26,7 @@ export default function AcreditacionesTab({
               <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Contratista</th>
               <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Proyecto(s)</th>
               <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Requisitos de Empresa</th>
-              <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Personal Acreditado</th>
+              <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Personal acreditado</th>
               <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Estado Acreditación</th>
             </tr>
           </thead>

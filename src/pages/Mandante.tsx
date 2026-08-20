@@ -596,7 +596,7 @@ export default function MandantePortal() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
             <div className="flex justify-between items-center p-4 border-b border-cream">
-              <h3 className="font-medium text-navy text-[17.6px]">Invitar Contratista</h3>
+              <h3 className="font-medium text-navy text-[17.6px]">Invitar contratista</h3>
               <button 
                 onClick={() => setShowInvitarModal(false)}
                 className="text-gray-400 hover:text-gray-600"

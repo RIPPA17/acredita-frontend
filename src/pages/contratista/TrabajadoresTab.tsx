@@ -66,7 +66,7 @@ export default function TrabajadoresTab({
                   setShowFichaAcreditacion(true);
                 }}
               >
-                Ver Ficha
+                Ver ficha
               </button>
             </div>
           );
@@ -177,7 +177,7 @@ export default function TrabajadoresTab({
       <div className="page-header mb-6">
         <div>
           <h2 className="page-title flex items-center gap-2">
-            <Users className="text-brown" size={22} /> Directorio de Trabajadores
+            <Users className="text-brown" size={22} /> Directorio de trabajadores
           </h2>
           <p className="page-sub">Gestiona la documentación y habilitación de tu personal en terreno</p>
         </div>
@@ -230,7 +230,7 @@ export default function TrabajadoresTab({
               onClick={() => setSelectedWorkerForDocs(worker)}
               className="btn btn-ghost w-full border border-cream3 text-gray-600 hover:text-navy"
             >
-              <FolderOpen size={16} className="mr-2" /> Ver Carpeta
+              <FolderOpen size={16} className="mr-2" /> Ver carpeta
             </button>
           );
 

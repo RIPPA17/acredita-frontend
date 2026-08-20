@@ -50,9 +50,9 @@ export default function ReportesTab({
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="stat"><div className="stat-n">{totalC}</div><div className="stat-l">Total contratistas</div></div>
-              <div className="stat s-green"><div className="stat-n">{okC}</div><div className="stat-l">Empresas Acreditadas</div></div>
-              <div className="stat s-green"><div className="stat-n">{approvedW} / {totalW}</div><div className="stat-l">Trabajadores Acreditados</div></div>
-              <div className="stat s-green"><div className="stat-n">{rate}%</div><div className="stat-l">Tasa Acreditación General</div></div>
+              <div className="stat s-green"><div className="stat-n">{okC}</div><div className="stat-l">Empresas acreditadas</div></div>
+              <div className="stat s-green"><div className="stat-n">{approvedW} / {totalW}</div><div className="stat-l">Trabajadores acreditados</div></div>
+              <div className="stat s-green"><div className="stat-n">{rate}%</div><div className="stat-l">Tasa de acreditación general</div></div>
             </div>
 
             <div className="card p-0 overflow-x-auto mb-6">
@@ -62,8 +62,8 @@ export default function ReportesTab({
                   <tr>
                     <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Contratista</th>
                     <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Proyecto</th>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Requisitos Empresa</th>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Personal Acreditado</th>
+                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Requisitos empresa</th>
+                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Personal acreditado</th>
                     <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Estado</th>
                     <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium text-right">Acción</th>
                   </tr>

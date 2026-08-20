@@ -70,7 +70,7 @@ export default function DashboardTab({
     <div className="fade-in space-y-6">
       <div className="page-header">
         <div>
-          <h2 className="page-title text-navy font-bold text-[22px]">Centro de Operaciones</h2>
+          <h2 className="page-title text-navy font-bold text-[22px]">Centro de operaciones</h2>
           <p className="page-sub text-gray-500 text-[13.5px]">
             Lunes 18 de mayo 2026 · Monitoreo y control de Acreditaciones
           </p>
@@ -197,7 +197,7 @@ export default function DashboardTab({
             <div className="card border border-cream3 shadow-sm bg-white font-sans">
               <div className="mb-3">
                 <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2">
-                  <Bell size={18} className="text-orange-500 animate-pulse" />
+                  <Bell size={18} className="text-orange-500" />
                   Alertas de vigencia
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">Alertas de vencimiento basadas en proyectos y criticidad de requisitos.</p>

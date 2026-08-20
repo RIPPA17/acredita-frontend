@@ -160,7 +160,7 @@ export default function DashboardTab({
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="page-title text-navy font-bold text-[22px]">Dashboard de Control</h2>
+          <h2 className="page-title text-navy font-bold text-[22px]">Panel de control</h2>
           <p className="page-sub text-gray-500 text-[13.5px]">{formattedDate} · Resumen general de acreditaciones</p>
         </div>
         <div className="flex gap-2">
@@ -179,27 +179,27 @@ export default function DashboardTab({
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="stat s-primary">
           <div className="stat-n">{overallPercent}%</div>
-          <div className="stat-l">Acreditación General</div>
+          <div className="stat-l">Acreditación general</div>
         </div>
         <div className="stat s-green">
           <div className="stat-n">{countContractors}</div>
-          <div className="stat-l">Contratistas Totales</div>
+          <div className="stat-l">Contratistas totales</div>
         </div>
         <div className="stat s-blue">
           <div className="stat-n">{countWorkers}</div>
-          <div className="stat-l">Trabajadores Totales</div>
+          <div className="stat-l">Trabajadores totales</div>
         </div>
         <div className="stat s-green">
           <div className="stat-n">{countApprovedWorkers}</div>
-          <div className="stat-l">Trabajadores Aprobados</div>
+          <div className="stat-l">Trabajadores aprobados</div>
         </div>
         <div className="stat s-yellow">
           <div className="stat-n">{countPendingWorkers}</div>
-          <div className="stat-l">Trabajadores En Proceso</div>
+          <div className="stat-l">Trabajadores en proceso</div>
         </div>
         <div className="stat s-red">
           <div className="stat-n">{countBlockedWorkers}</div>
-          <div className="stat-l">Trabajadores Bloqueados</div>
+          <div className="stat-l">Trabajadores bloqueados</div>
         </div>
       </div>
 
@@ -207,12 +207,15 @@ export default function DashboardTab({
 
         <div className="space-y-6">
           <div className="card bg-white border border-cream3 shadow-sm p-5">
-            <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
-              <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
-                <AlertCircle size={18} className="text-red-500" />
-                Contratistas que requieren atención
-              </h3>
-              <span className="badge b-red text-xs font-semibold">{attentionContractors.length} empresas</span>
+            <div className="flex justify-between items-start mb-4 border-b border-cream3 pb-3 gap-4">
+              <div>
+                <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
+                  <AlertCircle size={18} className="text-red-500" />
+                  Contratistas que requieren atención
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">Empresas que aún no completan su acreditación en este proyecto.</p>
+              </div>
+              <span className="badge b-red text-xs font-semibold shrink-0">{attentionContractors.length} empresas</span>
             </div>
 
             {attentionContractors.length > 0 ? (
@@ -291,7 +294,7 @@ export default function DashboardTab({
                         className="btn btn-primary btn-sm shrink-0"
                         onClick={() => setClienteSeleccionado(c)}
                       >
-                        Ver
+                        Ver detalle
                       </button>
                     </div>
                   );
@@ -309,14 +312,14 @@ export default function DashboardTab({
                   onClick={() => setDashboardSubTab('contratistas')}
                   className={`text-[15px] font-bold pb-1 border-b-2 transition-all ${dashboardSubTab === 'contratistas' ? 'border-brown text-navy' : 'border-transparent text-gray-400'}`}
                 >
-                  Empresas Contratistas
+                  Empresas contratistas
                 </button>
                 <span className="text-gray-300">|</span>
                 <button
                   onClick={() => setDashboardSubTab('trabajadores')}
                   className={`text-[15px] font-bold pb-1 border-b-2 transition-all ${dashboardSubTab === 'trabajadores' ? 'border-brown text-navy' : 'border-transparent text-gray-400'}`}
                 >
-                  Trabajadores del Proyecto
+                  Trabajadores del proyecto
                 </button>
               </div>
 
@@ -369,7 +372,7 @@ export default function DashboardTab({
                                 className="text-brown hover:underline text-[12px] font-semibold"
                                 onClick={() => setClienteSeleccionado(c)}
                               >
-                                Ver Ficha
+                                Ver detalle
                               </button>
                             </td>
                           </tr>
@@ -444,7 +447,7 @@ export default function DashboardTab({
                             </td>
                             <td className="px-3 py-2.5">
                               <span className={`badge ${isHabilitado ? 'b-green' : 'b-red'} text-[10.5px]`}>
-                                {isHabilitado ? '✓ Habilitado' : '❌ No habilitado'}
+                                {isHabilitado ? 'Habilitado' : 'No habilitado'}
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-gray-500 italic">{blockReason}</td>
@@ -458,7 +461,7 @@ export default function DashboardTab({
                                   }
                                 }}
                               >
-                                Ver Ficha
+                                Ver detalle
                               </button>
                             </td>
                           </tr>
@@ -476,12 +479,15 @@ export default function DashboardTab({
 
         <div className="space-y-6">
           <div className="card bg-white border border-cream3 shadow-sm p-5 font-sans">
-            <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
-              <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
-                <XCircle size={18} className="text-red-600 animate-pulse" />
-                Problemas críticos
-              </h3>
-              <span className="badge b-red text-xs font-semibold">{criticalProblems.length} bloqueos</span>
+            <div className="flex justify-between items-start mb-4 border-b border-cream3 pb-3 gap-4">
+              <div>
+                <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
+                  <XCircle size={18} className="text-red-600" />
+                  Problemas críticos
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">Documentos puntuales que hoy bloquean el ingreso o el pago.</p>
+              </div>
+              <span className="badge b-red text-xs font-semibold shrink-0">{criticalProblems.length} bloqueos</span>
             </div>
 
             {criticalProblems.length > 0 ? (
@@ -490,7 +496,10 @@ export default function DashboardTab({
                   <div key={idx} className="p-3 bg-red-50/40 border border-red-100 rounded-xl space-y-2 text-[12.5px]">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="font-bold text-red-700">🔴 {prob.name}</span>
+                        <span className="font-bold text-red-700 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" aria-hidden="true"></span>
+                          {prob.name}
+                        </span>
                         <div className="text-[11px] text-gray-500 mt-0.5">Empresa: {prob.contratista}</div>
                       </div>
                       <button
@@ -509,12 +518,11 @@ export default function DashboardTab({
                     </div>
                     <div className="text-[12px] text-red-900 font-medium">Causa: <span className="underline">{prob.issue}</span></div>
                     <div className="border-t border-red-100/60 pt-1.5 mt-1">
-                      <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">Impacto:</div>
-                      <div className="grid grid-cols-2 gap-1 text-[11px] text-red-600 font-medium">
-                        <span>🔴 Bloquea ingreso</span>
-                        <span>🔴 Bloquea trabajo</span>
-                        <span>🔴 Bloquea asignación</span>
-                        <span>🔴 Bloquea pago</span>
+                      <div className="text-[11px] font-semibold text-red-700 mb-1.5">Mientras no se resuelva, bloquea:</div>
+                      <div className="flex flex-wrap gap-1.5 text-[10.5px] text-red-700 font-medium">
+                        {['Ingreso', 'Trabajo', 'Asignación', 'Pago'].map(tag => (
+                          <span key={tag} className="bg-red-100/70 border border-red-200 rounded-md px-1.5 py-0.5">{tag}</span>
+                        ))}
                       </div>
                     </div>
                   </div>

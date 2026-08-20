@@ -82,31 +82,41 @@ export default function DashboardTab({
 
       {/* Tu Acreditación Card */}
       <div className="card bg-cream border border-cream3 p-5">
-        <h3 className="section-title text-[15px] font-bold text-navy mb-4 flex items-center justify-between gap-2 w-full">
-          <span className="flex items-center gap-2">
-            <CheckCircle size={18} className="text-green-600" />
-            Tu Acreditación
-          </span>
-          {(() => {
-            const status = calcularEstadoAcreditacion(contratistaLogueado);
-            const badgeClass = status === 'Aprobado' ? 'b-green' : status === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
-            return <span className={`badge ${badgeClass} text-[11px]`}>{status === 'Aprobado' ? 'Acreditado' : status === 'Vencido/Bloqueado' ? 'Bloqueado' : status}</span>;
-          })()}
-        </h3>
+        {(() => {
+          const status = calcularEstadoAcreditacion(contratistaLogueado);
+          const isAprobado = status === 'Aprobado';
+          const isBloqueado = status === 'Vencido/Bloqueado';
+          // The icon has to agree with the badge: a green check next to a red
+          // "Bloqueado" badge reads as "everything is fine" at a glance.
+          const StatusIcon = isAprobado ? CheckCircle : isBloqueado ? XCircle : Clock;
+          const iconColor = isAprobado ? 'text-green-600' : isBloqueado ? 'text-red-600' : 'text-yellow-600';
+          const badgeClass = isAprobado ? 'b-green' : isBloqueado ? 'b-red' : 'b-yellow';
+          return (
+            <h3 className="section-title text-[15px] font-bold text-navy mb-4 flex items-center justify-between gap-2 w-full">
+              <span className="flex items-center gap-2">
+                <StatusIcon size={18} className={iconColor} />
+                Tu acreditación
+              </span>
+              <span className={`badge ${badgeClass} text-[11px]`}>
+                {isAprobado ? 'Acreditado' : isBloqueado ? 'Bloqueado' : status}
+              </span>
+            </h3>
+          );
+        })()}
 
         <div className="flex flex-col md:flex-row gap-6 items-center">
           {/* Left side: indicators */}
           <div className="flex-1 w-full flex flex-col gap-4">
             <div>
               <div className="flex justify-between items-center text-[13.2px] font-semibold text-navy mb-1.5">
-                <span>Requisitos de Empresa</span>
+                <span>Requisitos de empresa</span>
                 <span className="text-gray-500 font-medium">{numAprobados} / {documentosData.length} aprobados</span>
               </div>
               <div className="prog-wrap"><div className="prog-fill" style={{ width: `${documentosData.length > 0 ? Math.round((numAprobados / documentosData.length) * 100) : 100}%` }}></div></div>
             </div>
             <div>
               <div className="flex justify-between items-center text-[13.2px] font-semibold text-navy mb-1.5">
-                <span>Acreditación de Personal</span>
+                <span>Acreditación de personal</span>
                 <span className="text-gray-500 font-medium">{approvedWorkers} / {totalWorkers} trabajadores acreditados</span>
               </div>
               <div className="prog-wrap"><div className="prog-fill" style={{ width: `${totalWorkers > 0 ? Math.round((approvedWorkers / totalWorkers) * 100) : 100}%`, backgroundColor: '#2a6a3a' }}></div></div>
@@ -115,13 +125,13 @@ export default function DashboardTab({
 
           {/* Right side: Payment Status secondary info */}
           <div className="w-full md:w-56 bg-white border border-cream3 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-            <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Estado de Pago</span>
+            <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Estado de pago</span>
             {(() => {
               const status = calcularEstadoAcreditacion(contratistaLogueado, selectedProyectoId);
               const isAprobado = status === 'Aprobado';
               return (
                 <span className={`badge ${isAprobado ? 'b-green' : 'b-red'} text-xs font-bold py-1 px-3 mb-3`}>
-                  {isAprobado ? 'Pago Habilitado' : 'Pago Retenido'}
+                  {isAprobado ? 'Pago habilitado' : 'Pago retenido'}
                 </span>
               );
             })()}
@@ -133,7 +143,7 @@ export default function DashboardTab({
                 setShowFichaAcreditacion(true);
               }}
             >
-              Ver Ficha
+              Ver ficha
             </button>
           </div>
         </div>
@@ -217,7 +227,7 @@ export default function DashboardTab({
         <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
           <h3 className="section-title mb-0 flex items-center gap-2">
             <Users size={18} className="text-navy" />
-            Personal Acreditado
+            Personal acreditado
           </h3>
           <span className="badge b-gray font-semibold">{totalWorkers} trabajadores</span>
         </div>

@@ -726,7 +726,7 @@ export default function ContratistaPortal() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-semibold text-navy text-[17.6px] flex items-center gap-2">
-                <UserPlus size={18} className="text-brown" /> Agregar Trabajador
+                <UserPlus size={18} className="text-brown" /> Agregar trabajador
               </h3>
               <button 
                 onClick={() => setShowAddWorkerModal(false)}
@@ -819,7 +819,7 @@ export default function ContratistaPortal() {
                 );
               })()}
 
-              <div className="text-[13px] font-bold text-navy border-t border-cream pt-2 mt-1">Registrar Nuevo Trabajador</div>
+              <div className="text-[13px] font-bold text-navy border-t border-cream pt-2 mt-1">Registrar nuevo trabajador</div>
 
               <div>
                 <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Nombre Completo</label>
