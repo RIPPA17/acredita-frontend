@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Documento } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import DocumentDetailPanel from './contratista/DocumentDetailPanel';
 import DashboardTab from './contratista/DashboardTab';
@@ -211,6 +212,10 @@ export default function ContratistaPortal() {
   const handleAddWorkerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWorkerForm.nombre || !newWorkerForm.rut) return;
+    if (!isValidRut(newWorkerForm.rut)) {
+      showToast('RUT inválido, revisa el formato y dígito verificador', 'error');
+      return;
+    }
 
     // Get requirements for the active project
     const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);

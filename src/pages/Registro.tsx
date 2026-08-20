@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Bell, Clock, CheckCircle } from 'lucide-react';
+import { isValidRut } from '../utils/rut';
 
 export default function RegistroPage() {
   const navigate = useNavigate();
@@ -20,9 +21,15 @@ export default function RegistroPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   
   const [errorPassword, setErrorPassword] = useState(false);
+  const [errorRut, setErrorRut] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidRut(rut)) {
+      setErrorRut(true);
+      return;
+    }
+    setErrorRut(false);
     if (password !== confirmPassword) {
       setErrorPassword(true);
       return;
@@ -152,9 +159,12 @@ export default function RegistroPage() {
                       value={rut}
                       onChange={(e) => setRut(e.target.value)}
                       className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all" 
-                      placeholder={isContratista ? "12.345.678-9" : "76.123.456-7"} 
-                      required 
+                      placeholder={isContratista ? "12.345.678-9" : "76.123.456-7"}
+                      required
                     />
+                    {errorRut && (
+                      <div className="text-red-500 text-xs mt-1">RUT inválido, revisa el formato y dígito verificador</div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">{isContratista ? 'Empresa o razón social' : 'Empresa'}</label>

@@ -114,7 +114,11 @@ export default function ReglasTab({
                 </td>
                 <td className="px-4 py-4 text-right">
                   <button
-                    onClick={() => setReglas(reglas.filter(r => r.id !== regla.id))}
+                    onClick={() => {
+                      if (window.confirm(`¿Eliminar la regla de "${regla.documento || 'este documento'}"? Esta acción no se puede deshacer.`)) {
+                        setReglas(reglas.filter(r => r.id !== regla.id));
+                      }
+                    }}
                     className="text-gray-400 hover:text-red-500"
                   >
                     <Trash2 size={16} />

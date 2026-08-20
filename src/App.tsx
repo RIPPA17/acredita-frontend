@@ -12,6 +12,8 @@ import LoginPage from './pages/Login';
 import RegistroPage from './pages/Registro';
 import ActivacionPage from './pages/Activacion';
 import InvitacionPage from './pages/Invitacion';
+import NotFoundPage from './pages/NotFound';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
@@ -28,16 +30,19 @@ export default function App() {
         </div>
       )}
 
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/registro" element={<RegistroPage />} />
-        <Route path="/activacion" element={<ActivacionPage />} />
-        <Route path="/invitacion" element={<InvitacionPage />} />
-        <Route path="/admin/*" element={<AdminPortal />} />
-        <Route path="/mandante/*" element={<MandantePortal />} />
-        <Route path="/contratista/*" element={<ContratistaPortal />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/registro" element={<RegistroPage />} />
+          <Route path="/activacion" element={<ActivacionPage />} />
+          <Route path="/invitacion" element={<InvitacionPage />} />
+          <Route path="/admin/*" element={<AdminPortal />} />
+          <Route path="/mandante/*" element={<MandantePortal />} />
+          <Route path="/contratista/*" element={<ContratistaPortal />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
