@@ -48,6 +48,12 @@ import ColaRevisionTab from './admin/ColaRevisionTab';
 import { buildColaDocs } from './admin/colaUtils';
 import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS, GLOBAL_PLANTILLA_DOCUMENTOS } from './admin/globalData';
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
+import MandantesTab from './admin/MandantesTab';
+import ContratistasTab from './admin/ContratistasTab';
+import AcreditacionesTab from './admin/AcreditacionesTab';
+import PlantillasTab from './admin/PlantillasTab';
+import ReglasTab from './admin/ReglasTab';
+import AuditoriaTab from './admin/AuditoriaTab';
 
 const getDocumentosEmpresa = (cliente: any) => {
   const cObj = GLOBAL_CONTRATISTAS.find(c => 
@@ -1193,722 +1199,66 @@ export default function AdminPortal() {
 
           {/* Simple Placeholders for other tabs to save space */}
           {activeTab === "mandantes" && (
-            <div className="fade-in">
-              <div className="page-header">
-                <div>
-                  <h2 className="page-title">Mandantes</h2>
-                  <p className="page-sub">Empresas propietarias de proyectos que requieren acreditación de sus contratistas</p>
-                </div>
-                <button className="btn btn-primary" onClick={() => setShowInvitarModal(true)}>
-                  <Plus size={16} /> Invitar Mandante
-                </button>
-              </div>
-
-              {/* Breadcrumb */}
-              <div className="flex items-center gap-1.5 text-[13px] text-gray-500 mb-4">
-                <span
-                  onClick={() => { setMandanteActivo(null); setProyectoActivo(null); }}
-                  className={`cursor-pointer hover:text-brown transition-colors ${!mandanteActivo ? "text-navy font-medium" : ""}`}
-                >
-                  Mandantes
-                </span>
-                {mandanteActivo && (
-                  <>
-                    <ChevronRight size={14} className="text-gray-300" />
-                    <span
-                      onClick={() => setProyectoActivo(null)}
-                      className={`cursor-pointer hover:text-brown transition-colors ${!proyectoActivo ? "text-navy font-medium" : ""}`}
-                    >
-                      {mandanteActivo.empresa}
-                    </span>
-                  </>
-                )}
-                {proyectoActivo && (
-                  <>
-                    <ChevronRight size={14} className="text-gray-300" />
-                    <span className="text-navy font-medium">{proyectoActivo.nombre}</span>
-                  </>
-                )}
-              </div>
-
-              {/* Nivel 1: Lista de mandantes */}
-              {!mandanteActivo && (
-                <div className="grid grid-cols-2 gap-3">
-                  {ARBOL_MANDANTES.map((m, i) => (
-                    <div
-                      key={i}
-                      onClick={() => setMandanteActivo(m)}
-                      className="card p-4 cursor-pointer hover:border-brown hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="text-[14.5px] font-semibold text-navy">{m.empresa}</h4>
-                          <p className="text-[12.5px] text-gray-500 mt-0.5">{m.rut}</p>
-                        </div>
-                        <ChevronRight size={18} className="text-gray-300" />
-                      </div>
-                      <p className="text-[12px] text-gray-400 mt-3">{m.proyectos.length} proyecto{m.proyectos.length !== 1 ? "s" : ""}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Nivel 2: Proyectos del mandante */}
-              {mandanteActivo && !proyectoActivo && (
-                <div className="grid grid-cols-2 gap-3">
-                  {mandanteActivo.proyectos.map((p: any, i: number) => (
-                    <div
-                      key={i}
-                      onClick={() => setProyectoActivo(p)}
-                      className="card p-4 cursor-pointer hover:border-brown hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-[14.5px] font-semibold text-navy">{p.nombre}</h4>
-                        <span className={`badge ${p.badge}`}>{p.badgeLabel}</span>
-                      </div>
-                      <p className="text-[12px] text-gray-400 mt-3">{p.empresas.length} empresa{p.empresas.length !== 1 ? "s" : ""} asignada{p.empresas.length !== 1 ? "s" : ""}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Nivel 3: Empresas del proyecto */}
-              {proyectoActivo && (
-                <div className="flex flex-col gap-2">
-                  {proyectoActivo.empresas.map((e: any, i: number) => (
-                    <div
-                      key={i}
-                      onClick={() => setClienteSeleccionado(e)}
-                      className="card p-4 cursor-pointer hover:border-brown hover:shadow-md transition-all flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-brown text-white flex items-center justify-center font-semibold text-[14px] shrink-0">{e.iniciales}</div>
-                        <div>
-                          <h4 className="text-[14.3px] font-medium text-navy">{e.empresa}</h4>
-                          <p className="text-[12.3px] text-gray-500">{e.rut} · {e.rol}</p>
-                        </div>
-                      </div>
-                      <span className={`badge ${e.cumplimiento === "100% Aprobado" ? "b-green bg-green-100 text-green-800" : e.cumplimiento?.includes("Vencido") ? "b-red bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800 border-none"}`}>
-                        {e.cumplimiento}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <MandantesTab
+              setShowInvitarModal={setShowInvitarModal}
+              mandanteActivo={mandanteActivo}
+              setMandanteActivo={setMandanteActivo}
+              proyectoActivo={proyectoActivo}
+              setProyectoActivo={setProyectoActivo}
+              ARBOL_MANDANTES={ARBOL_MANDANTES}
+              setClienteSeleccionado={setClienteSeleccionado}
+            />
           )}
 
           {activeTab === "contratistas" && (
-            <div className="fade-in">
-              <div className="page-header">
-                <div>
-                  <h2 className="page-title">Contratistas</h2>
-                  <p className="page-sub">Empresas contratistas y subcontratistas asignadas a proyectos</p>
-                </div>
-                <select className="form-input py-1.5 min-w-[200px]">
-                  <option>Todos los proyectos</option>
-                  <option>Proyecto Costanera Norte</option>
-                  <option>Proyecto Minera Los Andes</option>
-                  <option>Ampliación Planta Solar</option>
-                </select>
-              </div>
-
-              <div className="card max-w-full overflow-x-auto p-0">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Empresa</th>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">RUT</th>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Rol</th>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Proyectos Asignados</th>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Estado</th>
-                      <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Cumplimiento</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {EMPRESAS_CONTRATISTAS.map((c, i) => (
-                      <tr
-                        key={i}
-                        onClick={() => setClienteSeleccionado(c)}
-                        className="hover:bg-gray-50 border-b border-cream cursor-pointer"
-                      >
-                        <td className="px-4 py-3 text-[14.3px]"><div className="font-medium text-navy">{c.empresa}</div></td>
-                        <td className="px-4 py-3 text-[14.3px] text-gray-600">{c.rut}</td>
-                        <td className="px-4 py-3 text-[14.3px]">
-                          <span className={`badge ${c.rol === "Subcontratista" ? "border border-cream3 bg-cream2 text-gray-600" : "border border-cream3 bg-white text-gray-700"}`}>
-                            {c.rol}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-[14.3px]">
-                          <div className="flex flex-wrap gap-1">
-                            {c.proyectos.map((p: string, j: number) => (
-                              <span key={j} className="badge b-gray bg-cream">{p}</span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-[14.3px]">
-                          <span className="badge b-green bg-green-100 text-green-800">{c.estado}</span>
-                        </td>
-                        <td className="px-4 py-3 text-[14.3px]">
-                          <span className={`badge ${c.cumplimiento === "100% Aprobado" ? "b-green bg-green-100 text-green-800" : c.cumplimiento?.includes("Vencido") ? "b-red bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800 border-none"}`}>
-                            {c.cumplimiento}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <ContratistasTab
+              EMPRESAS_CONTRATISTAS={EMPRESAS_CONTRATISTAS}
+              setClienteSeleccionado={setClienteSeleccionado}
+            />
           )}
-          {activeTab === "plantillas" && (() => {
-            const plantillasFiltradas = PLANTILLAS
-              .filter(p => activeFilterPlantillas === "Todas" || p.categoria === activeFilterPlantillas || (activeFilterPlantillas === "Premium / Asesoría" && p.tipo === "upsell"))
-              .filter(p => p.nombre.toLowerCase().includes(busquedaPlantilla.toLowerCase()));
+          {activeTab === "plantillas" && (
+            <PlantillasTab
+              PLANTILLAS={PLANTILLAS}
+              activeFilterPlantillas={activeFilterPlantillas}
+              setActiveFilterPlantillas={setActiveFilterPlantillas}
+              busquedaPlantilla={busquedaPlantilla}
+              setBusquedaPlantilla={setBusquedaPlantilla}
+              showSubirPlantillaModal={showSubirPlantillaModal}
+              setShowSubirPlantillaModal={setShowSubirPlantillaModal}
+              newTemplateName={newTemplateName}
+              setNewTemplateName={setNewTemplateName}
+              newTemplateCategory={newTemplateCategory}
+              setNewTemplateCategory={setNewTemplateCategory}
+              handleAddTemplate={handleAddTemplate}
+            />
+          )}
 
-            return (
-              <div className="fade-in relative">
-                <div className="page-header">
-                  <div>
-                    <h2 className="page-title">Gestión de Plantillas</h2>
-                    <p className="page-sub">
-                      Documentos base y oferta de servicio de redacción para
-                      contratistas
-                    </p>
-                  </div>
-                  <button onClick={() => setShowSubirPlantillaModal(true)} className="btn btn-primary">
-                    <Plus size={16} /> Subir nueva plantilla
-                  </button>
-                </div>
+          {activeTab === "reglas" && (
+            <ReglasTab reglas={reglas} setReglas={setReglas} />
+          )}
 
-                <div className="alert alert-info mb-6">
-                  <Sparkles size={18} className="shrink-0 text-brown" />
-                  <div>
-                    <strong>Servicio de Redacción y Asesoría:</strong> Las
-                    plantillas complejas pueden ofrecer a los contratistas la
-                    opción de pagar por nuestra asesoría legal experta, en lugar
-                    de descargar el formato vacío. Esto representa una oportunidad
-                    de upsell para la plataforma.
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mb-6">
-                  {["Todas", "Laboral", "Prevención", "Premium / Asesoría"].map(f => (
-                    <button 
-                      key={f}
-                      onClick={() => setActiveFilterPlantillas(f)}
-                      className={`btn btn-sm ${activeFilterPlantillas === f ? 'bg-white border border-cream3 text-navy font-medium shadow-sm' : 'btn-ghost'}`}>
-                      {f}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="card-grid mb-8">
-                  {plantillasFiltradas.slice(0, 3).map(p => (
-                    <div key={p.id} className={`card flex flex-col h-full hover:shadow-md transition-shadow ${p.tipo === 'upsell' ? 'border-l-4 border-l-brown bg-gradient-to-br from-white to-orange-50/30' : ''}`}>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${p.tipo === 'upsell' ? 'bg-[#f0e4da]' : 'bg-cream'}`}>
-                          <FileText className={p.tipo === 'upsell' ? 'text-[#9A694E]' : (p.categoria === 'Laboral' ? 'text-blue-600' : 'text-navy')} size={20} />
-                        </div>
-                        <span className={`badge border font-medium ${p.tipo === 'upsell' ? 'border-brown/30 bg-[#f0e4da] text-[#7a5038]' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                          {p.categoria}
-                        </span>
-                      </div>
-                      <h3 className="text-[16.5px] font-semibold text-navy mb-1.5 leading-tight">
-                        {p.nombre}
-                      </h3>
-                      <p className={`text-[13.2px] mb-4 flex-1 ${p.tipo === 'upsell' ? 'text-gray-600' : 'text-gray-500'}`}>
-                        {p.descripcion}
-                      </p>
-                      <div className={`pt-3 flex flex-col gap-2 mt-auto ${p.tipo === 'upsell' ? 'border-t border-brown/10' : 'border-t border-cream'}`}>
-                        {p.tipo === 'upsell' ? (
-                          <>
-                            <div className="flex items-center gap-1.5 text-brown mb-1.5">
-                              <Sparkles size={14} className="fill-brown/20" />
-                              <span className="text-[12.1px] font-medium uppercase tracking-wide">
-                                Servicio de Redacción Disponible
-                              </span>
-                            </div>
-                            <button className="btn btn-primary btn-sm w-full py-1.5 text-[12.5px] cursor-not-allowed opacity-55" disabled title="Próximamente en producción">Solicitar asesoría [Demo]</button>
-                          </>
-                        ) : (
-                          <div className="flex items-center justify-between">
-                             <span className="text-[12.1px] text-gray-400 font-medium tracking-wide uppercase">
-                              Plantilla Gratuita
-                            </span>
-                            <button className="btn btn-secondary btn-sm cursor-not-allowed opacity-55" disabled title="Vista previa no disponible en entorno demo">
-                              <Download size={14} /> Ver plantilla
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="section-title mb-0">Listado de Plantillas Activas</h3>
-                  <input
-                    type="text"
-                    placeholder="Buscar plantilla por nombre..."
-                    value={busquedaPlantilla}
-                    onChange={e => setBusquedaPlantilla(e.target.value)}
-                    className="form-input text-[13px] py-1.5 w-[250px]"
-                  />
-                </div>
-                
-                <div className="card p-0 overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Nombre de Plantilla</th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Categoría</th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Actualización</th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Descargas / Usos</th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {plantillasFiltradas.length > 0 ? plantillasFiltradas.map(p => (
-                        <tr key={p.id} className="hover:bg-gray-50 border-b border-cream">
-                          <td className="px-4 py-3 text-[14.3px] font-medium text-navy flex items-center gap-1.5">
-                            {p.nombre}
-                            {p.tipo === 'upsell' && <Sparkles size={14} className="text-brown shrink-0" />}
-                          </td>
-                          <td className="px-4 py-3 text-[14.3px]">
-                            <span className={`badge border ${p.tipo === 'upsell' ? 'border-brown/30 bg-[#f0e4da] text-[#7a5038]' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                              {p.categoria}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-[13.2px] text-gray-500">{p.actualizacion}</td>
-                          <td className="px-4 py-3 text-[13.2px] text-gray-600">{p.descargas}</td>
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
-                            <button className="text-gray-300 cursor-not-allowed mr-3" disabled title="Edición deshabilitada en demo"><Edit2 size={16} /></button>
-                            <button className="text-gray-300 cursor-not-allowed" disabled title="Eliminación deshabilitada en demo"><Trash2 size={16} /></button>
-                          </td>
-                        </tr>
-                      )) : (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-[13.2px] text-gray-500">
-                            No se encontraron plantillas.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {showSubirPlantillaModal && (
-                  <>
-                    <div className="fixed inset-0 z-[399] bg-black/20" onClick={() => setShowSubirPlantillaModal(false)} />
-                    <div className="fixed left-1/2 top-1/2 z-[400] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl border border-cream3">
-                      <div className="flex justify-between items-center mb-5">
-                        <h3 className="text-[18px] font-semibold text-navy">Subir Nueva Plantilla</h3>
-                        <button onClick={() => setShowSubirPlantillaModal(false)} className="text-gray-400 hover:text-navy"><XCircle size={20}/></button>
-                      </div>
-                      
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <label className="block text-[12.5px] font-medium text-navy mb-1.5">Nombre de la plantilla</label>
-                          <input 
-                            type="text" 
-                            value={newTemplateName} 
-                            onChange={(e) => setNewTemplateName(e.target.value)} 
-                            className="form-input" 
-                            placeholder="Ej: Contrato de confidencialidad" 
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[12.5px] font-medium text-navy mb-1.5">Categoría</label>
-                          <select 
-                            value={newTemplateCategory} 
-                            onChange={(e) => setNewTemplateCategory(e.target.value)} 
-                            className="form-input"
-                          >
-                            <option value="Laboral">Laboral</option>
-                            <option value="Prevención">Prevención</option>
-                            <option value="Premium / Asesoría">Premium / Asesoría</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[12.5px] font-medium text-navy mb-1.5">Tipo de plantilla</label>
-                          <select className="form-input">
-                            <option value="gratuita">Gratuita (Descarga directa)</option>
-                            <option value="upsell">Upsell (Servicio de redacción)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[12.5px] font-medium text-navy mb-1.5">Archivo base</label>
-                          <div className="border border-dashed border-cream3 rounded-lg p-6 bg-cream2/50 text-center flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-cream2 transition-colors">
-                            <FileText size={24} className="text-gray-400" />
-                            <p className="text-[12.5px] text-gray-500">Haz clic para buscar o arrastra el archivo aquí<br/>.docx, .pdf, .xls</p>
-                          </div>
-                        </div>
-                        <button onClick={handleAddTemplate} className="btn btn-primary w-full mt-2 py-2.5">
-                          Guardar plantilla
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })()}
-
-          {activeTab === "reglas" && (() => {
-            const hasError = reglas.some(r => r.alertaDias >= r.diasVigencia);
-            
-            return (
-              <div className="fade-in">
-                <div className="page-header">
-                  <div>
-                    <h2 className="page-title">Reglas de vigencia</h2>
-                    <p className="page-sub">
-                      Define la caducidad global por tipo de documento y alertas
-                      automatizadas.
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => { saveReglas(reglas); alert("Cambios guardados con éxito"); }}
-                    disabled={hasError}
-                    className={`btn btn-primary ${hasError ? 'opacity-50 pointer-events-none' : ''}`}
-                  >
-                    Guardar cambios
-                  </button>
-                </div>
-
-                <div className="card p-0 overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Tipo de documento
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Días de vigencia
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Alerta anticipada (días)
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Criticidad
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Efecto
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium text-right">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reglas.map(regla => (
-                        <tr key={regla.id} className="border-b border-cream">
-                          <td className="px-4 py-4 text-[14.3px] font-medium text-navy">
-                            {regla.isNew ? (
-                              <input 
-                                type="text"
-                                className="form-input w-full min-w-[150px]"
-                                placeholder="Nombre de documento..."
-                                value={regla.documento}
-                                onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, documento: e.target.value } : r))}
-                              />
-                            ) : (
-                              <span>{regla.documento}</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              className="form-input w-24"
-                              value={regla.diasVigencia}
-                              onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, diasVigencia: Number(e.target.value) } : r))}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              className={`form-input w-24 ${regla.alertaDias >= regla.diasVigencia ? "outline outline-1 outline-red-400 border-red-400" : ""}`}
-                              value={regla.alertaDias}
-                              onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, alertaDias: Number(e.target.value) } : r))}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            <select 
-                              className="form-input w-full min-w-[160px]"
-                              value={regla.criticidad}
-                              onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, criticidad: e.target.value as any } : r))}
-                            >
-                              <option value="bloquea_pago">Bloquea pago</option>
-                              <option value="bloquea_acceso">Bloquea acceso</option>
-                              <option value="advertencia">Solo advertencia</option>
-                            </select>
-                          </td>
-                          <td className="px-4 py-4">
-                            {regla.criticidad === "bloquea_pago" && <span className="badge bg-yellow-100 text-yellow-800">⚠ Bloquea pago</span>}
-                            {regla.criticidad === "bloquea_acceso" && <span className="badge bg-red-100 text-red-800">✕ Bloquea acceso</span>}
-                            {regla.criticidad === "advertencia" && <span className="badge bg-gray-100 text-gray-600">~ Solo aviso</span>}
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            <button 
-                              onClick={() => setReglas(reglas.filter(r => r.id !== regla.id))}
-                              className="text-gray-400 hover:text-red-500"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="p-4 border-t border-cream">
-                    <button 
-                      onClick={() => setReglas([...reglas, { id: Date.now(), documento: "", diasVigencia: 30, alertaDias: 7, criticidad: "advertencia", isNew: true }])}
-                      className="btn btn-ghost btn-sm mt-2"
-                    >
-                      <Plus size={14} className="mr-1" /> Añadir nueva regla
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {activeTab === "auditoria" && (() => {
-            const filteredLogs = auditoriaLogs.filter(log => {
-              if (filtroAccionLog !== "Todas las Acciones") {
-                const mapAccion: Record<string, string> = { 
-                  "Aprobaciones": "aprobacion", "Rechazos": "rechazo", "Subidas de doc": "subida", "Inicios de sesión": "acceso_fallido" 
-                };
-                if (log.accion !== mapAccion[filtroAccionLog]) return false;
-              }
-              if (filtroActorLog !== "Todos los Actores" && log.rol !== filtroActorLog) return false;
-              if (filtroFechaLog) {
-                const parts = filtroFechaLog.split("-");
-                if (parts.length === 3) {
-                  const dayStr = parts[2];
-                  if (!log.fecha.startsWith(dayStr + " ") && !log.fecha.startsWith(parseInt(dayStr, 10) + " ")) return false;
-                }
-              }
-              if (busquedaLog) {
-                const lowerSrc = busquedaLog.toLowerCase();
-                if (!log.empresa.toLowerCase().includes(lowerSrc) && !log.detalle.toLowerCase().includes(lowerSrc)) return false;
-              }
-              return true;
-            });
-
-            const renderAccion = (accion: string) => {
-              switch (accion) {
-                case "aprobacion": return <><CheckCircle size={15} className="inline mr-1 text-green-600" /> Aprobación Documento</>;
-                case "rechazo": return <><XCircle size={15} className="inline mr-1 text-red-500" /> Rechazo Documento</>;
-                case "subida": return <><Upload size={15} className="inline mr-1 text-blue-500" /> Subida de Documento</>;
-                case "acceso_fallido": return <><ShieldAlert size={15} className="inline mr-1 text-red-700" /> Intento de Acceso Base</>;
-                case "alerta": return <><Bell size={15} className="inline mr-1 text-amber-500" /> Alerta Automática</>;
-                default: return <>{accion}</>;
-              }
-            };
-
-            const renderResultado = (resultado: string) => {
-              switch (resultado) {
-                case "exitoso": return <span className="badge bg-green-100 text-green-800 text-[11px]">Exitoso</span>;
-                case "bloqueado": return <span className="badge bg-red-100 text-red-800 text-[11px]">Bloqueado</span>;
-                case "informativo": return <span className="badge bg-cream text-gray-600 text-[11px]">Informativo</span>;
-                default: return null;
-              }
-            };
-
-            return (
-              <div className="fade-in">
-                <div className="page-header">
-                  <div>
-                    <h2 className="page-title">Auditoría</h2>
-                    <p className="page-sub">
-                      Registro detallado (log) de toda la actividad en la
-                      plataforma.
-                    </p>
-                  </div>
-                  <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="Exportación deshabilitada en demo">
-                    <Download size={14} className="mr-1" /> Exportar log [Demo]
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <select 
-                    className="form-input py-1.5 min-w-[150px] text-[13.2px]"
-                    value={filtroAccionLog}
-                    onChange={e => setFiltroAccionLog(e.target.value)}
-                  >
-                    <option>Todas las Acciones</option>
-                    <option>Aprobaciones</option>
-                    <option>Rechazos</option>
-                    <option>Subidas de doc</option>
-                    <option>Inicios de sesión</option>
-                  </select>
-                  <select 
-                    className="form-input py-1.5 min-w-[150px] text-[13.2px]"
-                    value={filtroActorLog}
-                    onChange={e => setFiltroActorLog(e.target.value)}
-                  >
-                    <option>Todos los Actores</option>
-                    <option value="Revisor">Revisor</option>
-                    <option value="Contratista">Contratista</option>
-                    <option value="Sistema Automático">Sistema Automático</option>
-                  </select>
-                  <input
-                    type="date"
-                    className="form-input py-1.5 min-w-[150px] text-[13.2px]"
-                    value={filtroFechaLog}
-                    onChange={e => setFiltroFechaLog(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="form-input py-1.5 flex-1 min-w-[200px] text-[13.2px]"
-                    placeholder="Buscar por RUT o nombre de empresa..."
-                    value={busquedaLog}
-                    onChange={e => setBusquedaLog(e.target.value)}
-                  />
-                </div>
-
-                <div className="mb-2 text-[12.5px] text-gray-500 font-medium">
-                  Mostrando {filteredLogs.length} de {auditoriaLogs.length} eventos
-                </div>
-
-                <div className="card p-0 overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Acción
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Actor
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Empresa / Proyecto
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Detalle
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Fecha y Hora
-                        </th>
-                        <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">
-                          Resultado
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLogs.map(log => (
-                        <React.Fragment key={log.id}>
-                          <tr 
-                            className="hover:bg-gray-50 border-b border-cream cursor-pointer"
-                            onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                          >
-                            <td className="px-4 py-4 text-[13.2px] font-medium text-navy flex items-center">
-                              {renderAccion(log.accion)}
-                            </td>
-                            <td className="px-4 py-4 text-[13.2px] text-gray-600">
-                              <div className="font-medium text-navy">{log.actor}</div>
-                              <div className="text-[11px] text-gray-400 mt-0.5">{log.rol}{log.ip ? ` · IP: ${log.ip}` : ''}</div>
-                            </td>
-                            <td className="px-4 py-4 text-[13.2px] text-gray-600">
-                              <div className="font-bold text-[13px] text-navy">{log.empresa}</div>
-                              {log.proyecto && <div className="text-[11px] text-gray-500 mt-0.5">· {log.proyecto}</div>}
-                            </td>
-                            <td className="px-4 py-4 text-[13.2px] text-gray-600 max-w-[200px] truncate" title={log.detalle}>
-                              {log.detalle}
-                            </td>
-                            <td className="px-4 py-4 text-[13.2px] text-gray-500 whitespace-nowrap">
-                              {log.fecha}
-                            </td>
-                            <td className="px-4 py-4 text-[13.2px]">
-                              {renderResultado(log.resultado)}
-                            </td>
-                          </tr>
-                          {expandedLogId === log.id && (
-                            <tr className="bg-cream2 border-b border-cream">
-                              <td colSpan={6} className="px-6 py-5">
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-[13px]">
-                                  <div>
-                                    <span className="block text-gray-400 font-semibold mb-1 text-[11px] uppercase tracking-wide">Detalle de la acción</span>
-                                    <p className="text-navy leading-relaxed">{log.detalle}</p>
-                                  </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-semibold mb-1 text-[11px] uppercase tracking-wide">Contexto Operativo</span>
-                                    <p className="text-navy">{log.empresa} {log.proyecto ? `· ${log.proyecto}` : ''}</p>
-                                  </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-semibold mb-1 text-[11px] uppercase tracking-wide">Metadatos</span>
-                                    <p className="text-navy">{log.fecha}</p>
-                                    {log.ip ? <p className="text-gray-500 mt-0.5">IP: {log.ip}</p> : null}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
+          {activeTab === "auditoria" && (
+            <AuditoriaTab
+              auditoriaLogs={auditoriaLogs}
+              filtroAccionLog={filtroAccionLog}
+              setFiltroAccionLog={setFiltroAccionLog}
+              filtroActorLog={filtroActorLog}
+              setFiltroActorLog={setFiltroActorLog}
+              filtroFechaLog={filtroFechaLog}
+              setFiltroFechaLog={setFiltroFechaLog}
+              busquedaLog={busquedaLog}
+              setBusquedaLog={setBusquedaLog}
+              expandedLogId={expandedLogId}
+              setExpandedLogId={setExpandedLogId}
+            />
+          )}
 
           {activeTab === "acreditaciones" && (
-            <div className="fade-in space-y-4">
-              <div className="page-header">
-                <div>
-                  <h2 className="page-title text-navy font-bold text-[22px]">Estados de Acreditación</h2>
-                  <p className="page-sub text-gray-500 text-[13.5px]">Monitoreo de contratistas y progreso de cumplimiento</p>
-                </div>
-              </div>
-              
-              <div className="card p-0 overflow-x-auto bg-white shadow-sm border border-cream3">
-                <table className="table w-full text-left">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Contratista</th>
-                      <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Proyecto(s)</th>
-                      <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Requisitos de Empresa</th>
-                      <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Personal Acreditado</th>
-                      <th className="px-4 py-3 bg-cream2 text-navy text-[13.2px] font-semibold border-b border-cream3">Estado Acreditación</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {GLOBAL_CONTRATISTAS.map(c => {
-                      const approvedDocs = c.documentos.filter(d => d.estado === 'aprobado').length;
-                      const totalDocs = c.documentos.length;
-                      const workers = c.trabajadores || [];
-                      const approvedWorkers = workers.filter(w => w.estado === 'aprobado').length;
-                      
-                      const stateLabel = calcularEstadoAcreditacion(c);
-                      const badgeClass = stateLabel === 'Aprobado' ? 'b-green' : stateLabel === 'Vencido/Bloqueado' ? 'b-red' : 'b-yellow';
-                      
-                      return (
-                        <tr key={c.id} className="border-b border-cream hover:bg-gray-50 last:border-0 font-sans cursor-pointer" onClick={() => setSelectedAcreditacionContratista(c)}>
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-navy text-[14px]">{c.nombre}</div>
-                            <div className="text-[11.5px] text-gray-500">RUT: {c.rut}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {c.proyectos.map(pId => {
-                                const proj = GLOBAL_PROYECTOS.find(p => p.id === pId);
-                                return <span key={pId} className="badge b-gray text-[10.5px] font-medium">{proj ? proj.nombre : pId}</span>;
-                              })}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-[13px] text-navy font-semibold">{approvedDocs} / {totalDocs}</td>
-                          <td className="px-4 py-3 text-[13px] text-navy font-semibold">{approvedWorkers} / {workers.length}</td>
-                          <td className="px-4 py-3"><span className={`badge ${badgeClass} text-[11px]`}>{stateLabel}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <AcreditacionesTab
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
+            />
           )}
 
           {activeTab === "facturacion" && (
