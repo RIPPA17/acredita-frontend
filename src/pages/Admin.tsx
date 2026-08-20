@@ -56,6 +56,7 @@ import ReglasTab from './admin/ReglasTab';
 import AuditoriaTab from './admin/AuditoriaTab';
 import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
+import DocumentoDetailModal from './admin/DocumentoDetailModal';
 
 const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p, idx) => ({
   id: idx + 1,
@@ -737,7 +738,6 @@ export default function AdminPortal() {
               filtroActividad={filtroActividad}
               setFiltroActividad={setFiltroActividad}
               ACTIVIDAD_RECIENTE={ACTIVIDAD_RECIENTE}
-              actividadSeleccionada={actividadSeleccionada}
               setActividadSeleccionada={setActividadSeleccionada}
             />
           )}
@@ -1018,6 +1018,11 @@ export default function AdminPortal() {
           GLOBAL_MANDANTES={GLOBAL_MANDANTES}
         />
       )}
+
+      <DocumentoDetailModal
+        actividadSeleccionada={actividadSeleccionada}
+        setActividadSeleccionada={setActividadSeleccionada}
+      />
 
       {selectedAcreditacionContratista && (
         <FichaAcreditacion
