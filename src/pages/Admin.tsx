@@ -419,7 +419,7 @@ export default function AdminPortal() {
         <div className="logo flex-shrink-0 flex items-center">
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="lg:hidden text-cream hover:text-white mr-3 focus:outline-none"
+            className="md:hidden text-cream hover:text-white mr-3 focus:outline-none"
             title="Abrir menú"
           >
             <Menu size={20} className="text-cream" />
@@ -638,7 +638,7 @@ export default function AdminPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <div className="sidebar hidden lg:flex">
+        <div className="sidebar hidden md:flex">
           <div className="sb-org">
             <div className="sb-org-name">Panel Administración</div>
             <div className="sb-org-sub">Acredita · Equipo revisor</div>
@@ -678,10 +678,10 @@ export default function AdminPortal() {
         {mobileMenuOpen && (
           <>
             <div 
-              className="fixed inset-0 bg-black/60 z-[998] lg:hidden" 
+              className="fixed inset-0 bg-black/60 z-[998] md:hidden" 
               onClick={() => setMobileMenuOpen(false)} 
             />
-            <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] lg:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
+            <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] md:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
               <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
                 <div>
                   <div className="sb-org-name">Panel Administración</div>
