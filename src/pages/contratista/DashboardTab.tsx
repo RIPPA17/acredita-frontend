@@ -144,7 +144,7 @@ export default function DashboardTab({
         <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
           <h3 className="section-title mb-0 flex items-center gap-2">
             <AlertCircle size={18} className="text-red-600" />
-            Requisitos por completar ("Te falta")
+            Requisitos por completar
           </h3>
           <span className="badge b-red font-semibold">{numRechazados + numPendientes + numPorVencer} pendientes</span>
         </div>

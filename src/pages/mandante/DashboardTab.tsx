@@ -177,7 +177,7 @@ export default function DashboardTab({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div className="stat s-brown">
+        <div className="stat s-primary">
           <div className="stat-n">{overallPercent}%</div>
           <div className="stat-l">Acreditación General</div>
         </div>
@@ -210,7 +210,7 @@ export default function DashboardTab({
             <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
               <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
                 <AlertCircle size={18} className="text-red-500" />
-                CONTRATISTAS QUE REQUIEREN ATENCIÓN
+                Contratistas que requieren atención
               </h3>
               <span className="badge b-red text-xs font-semibold">{attentionContractors.length} empresas</span>
             </div>
@@ -479,7 +479,7 @@ export default function DashboardTab({
             <div className="flex justify-between items-center mb-4 border-b border-cream3 pb-3">
               <h3 className="section-title mb-0 flex items-center gap-2 font-bold text-[16px] text-navy">
                 <XCircle size={18} className="text-red-600 animate-pulse" />
-                PROBLEMAS CRÍTICOS
+                Problemas críticos
               </h3>
               <span className="badge b-red text-xs font-semibold">{criticalProblems.length} bloqueos</span>
             </div>
@@ -528,7 +528,7 @@ export default function DashboardTab({
           <div className="card bg-white border border-cream3 shadow-sm p-5 font-sans">
             <h3 className="section-title mb-4 pb-3 border-b border-cream3 text-navy font-bold text-[16px] flex items-center gap-2">
               <Activity size={18} className="text-brown" />
-              ACTIVIDAD DE ACREDITA (EN PROYECTO)
+              Actividad de acreditación
             </h3>
             <div className="grid grid-cols-2 gap-3 text-center text-[13px]">
               <div className="bg-green-50 border border-green-100 p-3 rounded-xl">

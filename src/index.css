@@ -141,13 +141,29 @@
   .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 1.2rem; }
   
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
-  .stat { background: var(--navy); border-radius: var(--rl); padding: 1rem 1.1rem; color: var(--cream); }
-  .stat.s-brown { background: var(--brown); }
-  .stat.s-green { background: #2a6a3a; }
-  .stat.s-orange { background: #7a4a1a; }
-  .stat.s-red { background: #7a2a2a; }
-  .stat-n { font-size: 28.6px; font-weight: 600; line-height: 1; }
-  .stat-l { font-size: 12.7px; margin-top: 5px; opacity: 0.7; }
+  /* Light KPI cards: calm surface + a colored accent rail, so a whole row of
+     them reads as one quiet group instead of competing saturated blocks. */
+  .stat { position: relative; background: white; border: 0.5px solid var(--cream3); border-radius: var(--rl); padding: 1rem 1.1rem 1rem 1.25rem; color: var(--navy); overflow: hidden; }
+  .stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--cream3); }
+  .stat.s-brown::before  { background: var(--brown); }
+  .stat.s-green::before  { background: #2a8040; }
+  .stat.s-blue::before   { background: #2f6fb0; }
+  .stat.s-yellow::before { background: #d99f00; }
+  .stat.s-orange::before { background: #d47a1a; }
+  .stat.s-red::before    { background: #c73b3b; }
+  .stat-n { font-size: 28.6px; font-weight: 600; line-height: 1; color: var(--navy); }
+  .stat-l { font-size: 12.7px; margin-top: 6px; color: #7a7a6a; }
+  .stat.s-brown  .stat-n { color: var(--brown); }
+  .stat.s-green  .stat-n { color: #1e7a3c; }
+  .stat.s-blue   .stat-n { color: #2f6fb0; }
+  .stat.s-yellow .stat-n { color: #b58600; }
+  .stat.s-orange .stat-n { color: #c26a12; }
+  .stat.s-red    .stat-n { color: #b83232; }
+  /* Hero metric: one filled brand card per dashboard to anchor the hierarchy. */
+  .stat.s-primary { background: var(--brown); border-color: var(--brown); }
+  .stat.s-primary::before { display: none; }
+  .stat.s-primary .stat-n { color: var(--brown-text, white); font-size: 32px; }
+  .stat.s-primary .stat-l { color: rgba(255,255,255,0.82); }
   
   .proj-card { background: white; border-radius: var(--rl); border: 0.5px solid var(--cream3); border-left: 4px solid var(--brown); padding: 1.1rem; cursor: pointer; transition: transform 0.15s; }
   .proj-card:hover { transform: translateY(-2px); }

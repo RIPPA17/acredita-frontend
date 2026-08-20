@@ -79,7 +79,7 @@ export default function DashboardTab({
 
       <div className="space-y-6">
         <div className="stats">
-          <div className="stat s-orange cursor-pointer hover:opacity-95 transition-opacity" onClick={() => { setActiveTab("cola"); }}>
+          <div className="stat s-primary cursor-pointer hover:opacity-95 transition-opacity" onClick={() => { setActiveTab("cola"); }}>
             <div className="stat-n">{countPending}</div>
             <div className="stat-l font-sans">Pendientes de revisión</div>
           </div>
@@ -108,7 +108,7 @@ export default function DashboardTab({
                 <div>
                   <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2">
                     <ClipboardList size={18} className="text-orange-500" />
-                    PENDIENTES DE REVISIÓN
+                    Pendientes de revisión
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">El trabajo está pendiente de Acredita en la cola común.</p>
                 </div>
@@ -141,7 +141,7 @@ export default function DashboardTab({
                 <div>
                   <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2 font-sans">
                     <Clock size={18} className="text-yellow-600" />
-                    ESPERANDO CORRECCIÓN DEL CONTRATISTA
+                    Esperando corrección del contratista
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">Documentos revisados y rechazados por Acredita que esperan corrección.</p>
                 </div>
@@ -198,7 +198,7 @@ export default function DashboardTab({
               <div className="mb-3">
                 <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2">
                   <Bell size={18} className="text-orange-500 animate-pulse" />
-                  ALERTAS DE VIGENCIA
+                  Alertas de vigencia
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">Alertas de vencimiento basadas en proyectos y criticidad de requisitos.</p>
               </div>
@@ -255,7 +255,7 @@ export default function DashboardTab({
               <div className="mb-3">
                 <h3 className="section-title mb-0 text-navy font-bold text-[16px] flex items-center gap-2">
                   <ShieldAlert size={18} className="text-[#a32d2d]" />
-                  REQUIEREN DECISIÓN
+                  Requieren decisión
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">Casos complejos que requieren intervención del Jefe de Verificadores.</p>
                 <span className="text-[10px] text-gray-400 italic block mt-1">* Concepto operacional (Dato mock de simulación)</span>
@@ -284,7 +284,7 @@ export default function DashboardTab({
             <div className="card border border-cream3 shadow-sm bg-white font-sans">
               <h3 className="section-title mb-3 text-navy font-bold text-[16px] flex items-center gap-2">
                 <Clock size={18} className="text-gray-500" />
-                ACTIVIDAD DE LA OPERACIÓN (HOY)
+                Actividad de la operación
               </h3>
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-[#eaf3de] border border-[#cde3b0] p-2.5 rounded-lg">
