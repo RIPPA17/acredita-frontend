@@ -12,6 +12,12 @@
   --color-cream: var(--cream);
   --color-cream-2: var(--cream2);
   --color-cream-3: var(--cream3);
+  /* Hyphen-less aliases: the app's components use bg-cream2/border-cream3 (no
+     hyphen) in ~330 places, which without these never matched Tailwind's
+     generated bg-cream-2/border-cream-3 utilities and silently rendered no
+     background/border at all. */
+  --color-cream2: var(--cream2);
+  --color-cream3: var(--cream3);
   --color-alert-warn: #fdf5df;
   --color-alert-danger: #fde8e8;
   --color-alert-info: #dceef8;
