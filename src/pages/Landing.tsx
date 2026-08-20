@@ -459,27 +459,27 @@ export default function LandingPage() {
           <div className="md:col-span-2">
             <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Producto</h5>
             <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
-              <a href="#" className="hover:text-cream transition-colors">Cómo funciona</a>
-              <a href="#" className="hover:text-cream transition-colors">Para mandantes</a>
-              <a href="#" className="hover:text-cream transition-colors">Para contratistas</a>
+              <a href="#como-funciona" className="hover:text-cream transition-colors">Cómo funciona</a>
+              <a href="#beneficios" className="hover:text-cream transition-colors">Para mandantes</a>
+              <a href="#beneficios" className="hover:text-cream transition-colors">Para contratistas</a>
             </div>
           </div>
           <div className="md:col-span-2">
             <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Empresa</h5>
             <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
-              <a href="#" className="hover:text-cream transition-colors">Nosotros</a>
-              <a href="#" className="hover:text-cream transition-colors">Blog</a>
-              <a href="#" className="hover:text-cream transition-colors">Contacto</a>
-              <a href="#" className="hover:text-cream transition-colors">Trabaja con nosotros</a>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Nosotros</span>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Blog</span>
+              <a href="#contacto" className="hover:text-cream transition-colors">Contacto</a>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Trabaja con nosotros</span>
             </div>
           </div>
           <div className="md:col-span-3">
             <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Legal</h5>
             <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
-              <a href="#" className="hover:text-cream transition-colors">Términos de uso</a>
-              <a href="#" className="hover:text-cream transition-colors">Privacidad</a>
-              <a href="#" className="hover:text-cream transition-colors">Seguridad</a>
-              <a href="#" className="hover:text-cream transition-colors">Cookies</a>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Términos de uso</span>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Privacidad</span>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Seguridad</span>
+              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Cookies</span>
             </div>
           </div>
         </div>

@@ -138,7 +138,7 @@ export default function LoginPage() {
               </div>
               
               <div className="flex justify-end mb-2">
-                <a href="#" className="text-[13.2px] text-brown font-medium hover:underline" onClick={(e) => e.preventDefault()}>¿Olvidaste tu contraseña?</a>
+                <span className="text-[13.2px] text-gray-400 font-medium cursor-not-allowed" title="No disponible en demo">¿Olvidaste tu contraseña? [Demo]</span>
               </div>
 
               <button type="submit" className="btn btn-primary w-full justify-center py-2.5 text-[15.4px]">
