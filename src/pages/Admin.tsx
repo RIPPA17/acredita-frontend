@@ -58,18 +58,6 @@ import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import DocumentoDetailModal from './admin/DocumentoDetailModal';
 
-const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p, idx) => ({
-  id: idx + 1,
-  nombre: p.nombre,
-  categoria: p.categoria,
-  tipo: idx % 2 === 0 ? "gratuita" : "upsell",
-  actualizacion: "10 May 2026",
-  descargas: idx % 2 === 0 ? "342 descargas" : "85 solicitudes",
-  descripcion: p.nombre.toLowerCase().includes('contrato') 
-    ? "Formato estándar de contrato individual para trabajadores contratados por obra o faena, con cláusulas legales al día." 
-    : "Matriz de identificación de peligros y evaluación de riesgos. Requiere conocimiento técnico especializado."
-}));
-
 type Regla = {
   id: number;
   documento: string;
@@ -180,6 +168,18 @@ export default function AdminPortal() {
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
   const GLOBAL_PLANTILLA_DOCUMENTOS = getPlantillas();
+
+  const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p, idx) => ({
+    id: idx + 1,
+    nombre: p.nombre,
+    categoria: p.categoria,
+    tipo: idx % 2 === 0 ? "gratuita" : "upsell",
+    actualizacion: "10 May 2026",
+    descargas: idx % 2 === 0 ? "342 descargas" : "85 solicitudes",
+    descripcion: p.nombre.toLowerCase().includes('contrato')
+      ? "Formato estándar de contrato individual para trabajadores contratados por obra o faena, con cláusulas legales al día."
+      : "Matriz de identificación de peligros y evaluación de riesgos. Requiere conocimiento técnico especializado."
+  }));
 
   const ACTIVIDAD_RECIENTE: any[] = [];
   let actId = 1;
