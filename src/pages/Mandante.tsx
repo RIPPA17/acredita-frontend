@@ -101,7 +101,7 @@ export default function MandantePortal() {
       alertaDias: r.alertaDias
     })));
     setContractorsData(buildContractorsData(allContratistas, activeProjectId));
-  }, [selectedProjectId, allProyectos]);
+  }, [activeProjectId]);
 
   const buildContractorsData = (contratistasList: Contratista[], projId: string) => {
     const projReqs = getRequisitos().filter(r => r.proyectoId === projId && r.activo !== false);
