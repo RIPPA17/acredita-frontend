@@ -15,6 +15,16 @@ export default function LandingPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const [demoForm, setDemoForm] = useState({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' });
+  const [demoEnviado, setDemoEnviado] = useState(false);
+
+  const handleSubmitDemo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!demoForm.nombre.trim() || !demoForm.empresa.trim() || !demoForm.correo.trim()) return;
+    setDemoEnviado(true);
+    showToast('Solicitud enviada. Nuestro equipo te contactará pronto.');
+  };
+
   return (
     <div className="bg-white min-h-screen text-navy">
       {/* NAV */}
@@ -293,51 +303,104 @@ export default function LandingPage() {
         </div>
         <div className="grid md:grid-cols-2 gap-12 max-w-[900px] mx-auto mt-12 items-start">
           <div className="bg-white/5 p-8 rounded-2xl border border-white/10 text-cream">
-            <div className="form-group">
-              <label className="form-label text-[15.4px]">Nombre completo</label>
-              <input className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white" placeholder="Jorge Morales" />
-            </div>
-            <div className="form-group mt-4">
-              <label className="form-label text-[15.4px]">Empresa</label>
-              <input className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white" placeholder="Constructora Ejemplo SA" />
-            </div>
-            <div className="form-group mt-4">
-              <label className="form-label text-[15.4px]">Industria</label>
-              <select className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white">
-                <option value="" className="bg-navy">Selecciona una industria...</option>
-                <option value="construccion" className="bg-navy">Construcción</option>
-                <option value="mineria" className="bg-navy">Minería</option>
-                <option value="energia" className="bg-navy">Energía</option>
-                <option value="manufactura" className="bg-navy">Manufactura</option>
-                <option value="logistica" className="bg-navy">Logística y Transporte</option>
-                <option value="retail" className="bg-navy">Retail</option>
-                <option value="telecomunicaciones" className="bg-navy">Telecomunicaciones</option>
-                <option value="servicios" className="bg-navy">Servicios Generales</option>
-                <option value="otro" className="bg-navy">Otro</option>
-              </select>
-            </div>
-            <div className="form-group mt-4">
-              <label className="form-label text-[15.4px]">Correo corporativo</label>
-              <input className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white" placeholder="jorge@empresa.cl" />
-            </div>
-            <div className="form-group mt-4">
-              <label className="form-label text-[15.4px]">¿Cuántos trabajadores tiene la empresa?</label>
-              <select className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white">
-                <option value="" className="bg-navy">Selecciona una opción...</option>
-                <option value="1-50" className="bg-navy">1 - 50</option>
-                <option value="51-200" className="bg-navy">51 - 200</option>
-                <option value="201-500" className="bg-navy">201 - 500</option>
-                <option value="501-1000" className="bg-navy">501 - 1000</option>
-                <option value="1001-2000" className="bg-navy">1001 - 2000</option>
-                <option value="2001-3000" className="bg-navy">2001 - 3000</option>
-                <option value="3000+" className="bg-navy">Más de 3000</option>
-              </select>
-            </div>
-            <div className="form-group mt-4 mb-6">
-              <label className="form-label text-[15.4px]">Mensaje (opcional)</label>
-              <textarea className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white resize-none" rows={3} placeholder="Cuéntanos sobre tu caso..."></textarea>
-            </div>
-            <button className="btn btn-primary w-full justify-center text-[16.5px] py-3 cursor-not-allowed opacity-60" disabled title="Próximamente disponible">Solicitar demo [Próximamente]</button>
+            {demoEnviado ? (
+              <div className="text-center py-6">
+                <div className="bg-brown/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle size={32} className="text-brown" />
+                </div>
+                <h4 className="text-[19.8px] font-medium text-cream mb-2">¡Solicitud enviada!</h4>
+                <p className="text-[#9aabb8] text-[14.5px] leading-relaxed mb-6">
+                  Gracias, {demoForm.nombre.split(' ')[0]}. Nuestro equipo revisará tu solicitud y te contactará a {demoForm.correo} a la brevedad.
+                </p>
+                <button
+                  onClick={() => { setDemoEnviado(false); setDemoForm({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' }); }}
+                  className="btn btn-outline"
+                >
+                  Enviar otra solicitud
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitDemo}>
+                <div className="form-group">
+                  <label className="form-label text-[15.4px]">Nombre completo</label>
+                  <input
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
+                    placeholder="Jorge Morales"
+                    value={demoForm.nombre}
+                    onChange={(e) => setDemoForm({ ...demoForm, nombre: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group mt-4">
+                  <label className="form-label text-[15.4px]">Empresa</label>
+                  <input
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
+                    placeholder="Constructora Ejemplo SA"
+                    value={demoForm.empresa}
+                    onChange={(e) => setDemoForm({ ...demoForm, empresa: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group mt-4">
+                  <label className="form-label text-[15.4px]">Industria</label>
+                  <select
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
+                    value={demoForm.industria}
+                    onChange={(e) => setDemoForm({ ...demoForm, industria: e.target.value })}
+                  >
+                    <option value="" className="bg-navy">Selecciona una industria...</option>
+                    <option value="construccion" className="bg-navy">Construcción</option>
+                    <option value="mineria" className="bg-navy">Minería</option>
+                    <option value="energia" className="bg-navy">Energía</option>
+                    <option value="manufactura" className="bg-navy">Manufactura</option>
+                    <option value="logistica" className="bg-navy">Logística y Transporte</option>
+                    <option value="retail" className="bg-navy">Retail</option>
+                    <option value="telecomunicaciones" className="bg-navy">Telecomunicaciones</option>
+                    <option value="servicios" className="bg-navy">Servicios Generales</option>
+                    <option value="otro" className="bg-navy">Otro</option>
+                  </select>
+                </div>
+                <div className="form-group mt-4">
+                  <label className="form-label text-[15.4px]">Correo corporativo</label>
+                  <input
+                    type="email"
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
+                    placeholder="jorge@empresa.cl"
+                    value={demoForm.correo}
+                    onChange={(e) => setDemoForm({ ...demoForm, correo: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group mt-4">
+                  <label className="form-label text-[15.4px]">¿Cuántos trabajadores tiene la empresa?</label>
+                  <select
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
+                    value={demoForm.tamano}
+                    onChange={(e) => setDemoForm({ ...demoForm, tamano: e.target.value })}
+                  >
+                    <option value="" className="bg-navy">Selecciona una opción...</option>
+                    <option value="1-50" className="bg-navy">1 - 50</option>
+                    <option value="51-200" className="bg-navy">51 - 200</option>
+                    <option value="201-500" className="bg-navy">201 - 500</option>
+                    <option value="501-1000" className="bg-navy">501 - 1000</option>
+                    <option value="1001-2000" className="bg-navy">1001 - 2000</option>
+                    <option value="2001-3000" className="bg-navy">2001 - 3000</option>
+                    <option value="3000+" className="bg-navy">Más de 3000</option>
+                  </select>
+                </div>
+                <div className="form-group mt-4 mb-6">
+                  <label className="form-label text-[15.4px]">Mensaje (opcional)</label>
+                  <textarea
+                    className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white resize-none"
+                    rows={3}
+                    placeholder="Cuéntanos sobre tu caso..."
+                    value={demoForm.mensaje}
+                    onChange={(e) => setDemoForm({ ...demoForm, mensaje: e.target.value })}
+                  ></textarea>
+                </div>
+                <button type="submit" className="btn btn-primary w-full justify-center text-[16.5px] py-3">Solicitar demo</button>
+              </form>
+            )}
           </div>
           <div className="flex flex-col gap-6 pt-4 text-cream">
             <div className="flex items-start gap-4">
