@@ -14,6 +14,7 @@ import ActivacionPage from './pages/Activacion';
 import InvitacionPage from './pages/Invitacion';
 import NotFoundPage from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
@@ -37,9 +38,22 @@ export default function App() {
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/activacion" element={<ActivacionPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
-          <Route path="/admin/*" element={<AdminPortal />} />
-          <Route path="/mandante/*" element={<MandantePortal />} />
-          <Route path="/contratista/*" element={<ContratistaPortal />} />
+          
+          <Route path="/admin/*" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminPortal />
+            </ProtectedRoute>
+          } />
+          <Route path="/mandante/*" element={
+            <ProtectedRoute allowedRoles={['mandante']}>
+              <MandantePortal />
+            </ProtectedRoute>
+          } />
+          <Route path="/contratista/*" element={
+            <ProtectedRoute allowedRoles={['contratista']}>
+              <ContratistaPortal />
+            </ProtectedRoute>
+          } />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </ErrorBoundary>

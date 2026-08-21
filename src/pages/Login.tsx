@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ShieldCheck, Bell, Clock } from 'lucide-react';
+import { loginUser } from '../data/localStorageDb';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -12,15 +13,35 @@ export default function LoginPage() {
   });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (rol === 'mandante') {
-      navigate('/mandante');
+    setErrorMsg('');
+    const success = loginUser(email, password, rol);
+    if (success) {
+      if (rol === 'mandante') {
+        navigate('/mandante');
+      } else if (rol === 'contratista') {
+        navigate('/contratista');
+      } else if (rol === 'admin') {
+        navigate('/admin');
+      }
+    } else {
+      setErrorMsg('Credenciales inválidas para el perfil seleccionado');
+    }
+  };
+
+  const handleAutofill = () => {
+    if (rol === 'admin') {
+      setEmail('admin@acredita.cl');
+      setPassword('admin123');
+    } else if (rol === 'mandante') {
+      setEmail('andina@andina.cl');
+      setPassword('andina123');
     } else if (rol === 'contratista') {
-      navigate('/contratista');
-    } else if (rol === 'admin') {
-      navigate('/admin');
+      setEmail('norte@serviciosnorte.cl');
+      setPassword('norte123');
     }
   };
 
@@ -136,17 +157,35 @@ export default function LoginPage() {
                   required 
                 />
               </div>
-              
               <div className="flex justify-end mb-2">
                 <span className="text-[13.2px] text-gray-400 font-medium cursor-not-allowed" title="No disponible en demo">¿Olvidaste tu contraseña? [Demo]</span>
               </div>
+
+              {errorMsg && (
+                <div className="text-[#c03030] text-[13px] font-medium text-center bg-red-50 border border-red-200 rounded-lg p-2.5">
+                  {errorMsg}
+                </div>
+              )}
 
               <button type="submit" className="btn btn-primary w-full justify-center py-2.5 text-[15.4px]">
                 Ingresar
               </button>
             </form>
             
-            <div className="mt-8 text-center text-[13.2px] text-gray-500">
+            <div className="mt-4 p-3.5 bg-[#faf9f8] border border-cream3 rounded-xl text-[12px] text-navy/80">
+              <div className="font-semibold mb-1 flex justify-between items-center text-[12.5px] text-navy">
+                <span>Demo Credenciales ({rol === 'admin' ? 'Auditor' : rol === 'mandante' ? 'Mandante' : 'Contratista'})</span>
+                <button type="button" onClick={handleAutofill} className="text-brown hover:underline font-bold">
+                  Autocompletar
+                </button>
+              </div>
+              <div className="font-mono text-gray-600 leading-relaxed mt-1">
+                Email: <span className="text-navy">{rol === 'admin' ? 'admin@acredita.cl' : rol === 'mandante' ? 'andina@andina.cl' : 'norte@serviciosnorte.cl'}</span><br />
+                Clave: <span className="text-navy">{rol === 'admin' ? 'admin123' : rol === 'mandante' ? 'andina123' : 'norte123'}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center text-[13.2px] text-gray-500">
               ¿No tienes una cuenta? <Link to={`/registro?rol=${rol}`} className="text-brown font-medium hover:underline">Regístrate gratis</Link>
             </div>
           </div>
