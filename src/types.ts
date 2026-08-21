@@ -92,5 +92,7 @@ export interface Invitacion {
   mandanteNombre: string;
   estado: 'pendiente' | 'aceptada' | 'rechazada';
   mensaje?: string;
+  email?: string;
   fecha: string;
+  fechaCreacion?: string;
 }

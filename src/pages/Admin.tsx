@@ -10,6 +10,7 @@ import {
   CreditCard,
   ShieldCheck,
   LogOut,
+  Key,
   AlertCircle,
   AlertTriangle,
   CheckCircle,
@@ -41,7 +42,7 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, calcularPrioridadDocumento, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, calcularPrioridadDocumento, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, registrarAuditoria, getAuditLogs, saveAuditLogs, consultarAuditoria, getCurrentSession, actualizarEstadoDocumento } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 
@@ -297,61 +298,26 @@ function ColaRevisionTab({
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
     if (cObj) {
-      if (current.origen === 'Trabajador') {
-        const worker = cObj.trabajadores?.find(w => w.nombre === current.trabajadorNombre || w.rut === current.trabajadorRut);
-        if (worker) {
-          const docObj = worker.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
-          if (docObj) {
-            if (action === "approve") {
-              docObj.estado = 'aprobado';
-              docObj.revisor = 'Verificador Acredita';
-              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-              docObj.motivo = undefined;
-              docObj.observacion = undefined;
-              docObj.motivoRechazo = undefined;
-              docObj.explicacionRechazo = undefined;
-              docObj.solucionRechazo = undefined;
-              setAprobadosHoy((a) => a + 1);
-            } else if (action === "reject") {
-              docObj.estado = 'rechazado';
-              docObj.motivoRechazo = motivoRechazo;
-              docObj.explicacionRechazo = explicacionRechazo;
-              docObj.solucionRechazo = solucionRechazo;
-              docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
-              docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
-              docObj.revisor = 'Verificador Acredita';
-              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-              setRechazadosHoy((r) => r + 1);
-            }
-            worker.estado = calcularEstadoTrabajador(worker, current.proyectoId);
-            saveContratistas(list);
-          }
+      const session = getCurrentSession();
+      const res = actualizarEstadoDocumento(
+        cObj.id,
+        current.proyectoId,
+        current.docId,
+        action === "approve" ? "approve" : "reject",
+        {
+          motivoRechazo,
+          explicacionRechazo,
+          solucionRechazo,
+          usuarioEmail: session?.email,
+          usuarioRol: session?.role
         }
-      } else {
-        const docObj = cObj.documentos.find(d => d.id === current.docId || d.nombre === current.title);
-        if (docObj) {
-          if (action === "approve") {
-            docObj.estado = 'aprobado';
-            docObj.revisor = 'Verificador Acredita';
-            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-            docObj.motivo = undefined;
-            docObj.observacion = undefined;
-            docObj.motivoRechazo = undefined;
-            docObj.explicacionRechazo = undefined;
-            docObj.solucionRechazo = undefined;
-            setAprobadosHoy((a) => a + 1);
-          } else if (action === "reject") {
-            docObj.estado = 'rechazado';
-            docObj.motivoRechazo = motivoRechazo;
-            docObj.explicacionRechazo = explicacionRechazo;
-            docObj.solucionRechazo = solucionRechazo;
-            docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
-            docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
-            docObj.revisor = 'Verificador Acredita';
-            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-            setRechazadosHoy((r) => r + 1);
-          }
-          saveContratistas(list);
+      );
+
+      if (res.success) {
+        if (action === "approve") {
+          setAprobadosHoy((a) => a + 1);
+        } else {
+          setRechazadosHoy((r) => r + 1);
         }
       }
     }
@@ -1417,13 +1383,24 @@ export default function AdminPortal() {
   };
   const [reglas, setReglas] = useState<Regla[]>(() => getReglas());
 
-  const [auditoriaLogs] = useState<LogEntry[]>([
-    { id: 1, accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" },
-    { id: 2, accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor", empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" },
-    { id: 3, accion: "subida", actor: "Jorge Morales", rol: "Contratista", empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo", ip: "190.16.22.4" },
-    { id: 4, accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido", empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" },
-    { id: 5, accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático", empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" }
-  ]);
+  const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>(() => {
+    const list = getAuditLogs();
+    if (list.length === 0) {
+      const defaultLogs = [
+        { id: "log_demo_1", accion: "aprobacion", actor: "admin@acredita.cl", rol: "admin", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" },
+        { id: "log_demo_2", accion: "rechazo", actor: "admin@acredita.cl", rol: "admin", empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" }
+      ];
+      saveAuditLogs(defaultLogs as any);
+      return defaultLogs;
+    }
+    return list;
+  });
+
+  React.useEffect(() => {
+    if (activeTab === "auditoria") {
+      setAuditoriaLogs(getAuditLogs());
+    }
+  }, [activeTab]);
   const [filtroAccionLog, setFiltroAccionLog] = useState("Todas las Acciones");
   const [filtroActorLog, setFiltroActorLog] = useState("Todos los Actores");
   const [filtroFechaLog, setFiltroFechaLog] = useState("");
@@ -1829,7 +1806,7 @@ export default function AdminPortal() {
             </React.Fragment>
           ))}
 <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
@@ -1877,7 +1854,7 @@ export default function AdminPortal() {
                 </React.Fragment>
               ))}
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -2831,10 +2808,14 @@ export default function AdminPortal() {
           {activeTab === "auditoria" && (() => {
             const filteredLogs = auditoriaLogs.filter(log => {
               if (filtroAccionLog !== "Todas las Acciones") {
-                const mapAccion: Record<string, string> = { 
-                  "Aprobaciones": "aprobacion", "Rechazos": "rechazo", "Subidas de doc": "subida", "Inicios de sesión": "acceso_fallido" 
+                const mapAccion: Record<string, string[]> = { 
+                  "Aprobaciones": ["aprobacion", "aprobacion_documento"], 
+                  "Rechazos": ["rechazo", "rechazo_documento"], 
+                  "Subidas de doc": ["subida", "carga_documento", "reemplazo_documento"], 
+                  "Inicios de sesión": ["acceso_fallido", "login_exitoso"] 
                 };
-                if (log.accion !== mapAccion[filtroAccionLog]) return false;
+                const allowed = mapAccion[filtroAccionLog];
+                if (allowed && !allowed.includes(log.accion)) return false;
               }
               if (filtroActorLog !== "Todos los Actores" && log.rol !== filtroActorLog) return false;
               if (filtroFechaLog) {
@@ -2853,12 +2834,30 @@ export default function AdminPortal() {
 
             const renderAccion = (accion: string) => {
               switch (accion) {
-                case "aprobacion": return <><CheckCircle size={15} className="inline mr-1 text-green-600" /> Aprobación Documento</>;
-                case "rechazo": return <><XCircle size={15} className="inline mr-1 text-red-500" /> Rechazo Documento</>;
-                case "subida": return <><Upload size={15} className="inline mr-1 text-blue-500" /> Subida de Documento</>;
-                case "acceso_fallido": return <><ShieldAlert size={15} className="inline mr-1 text-red-700" /> Intento de Acceso Base</>;
-                case "alerta": return <><Bell size={15} className="inline mr-1 text-amber-500" /> Alerta Automática</>;
-                default: return <>{accion}</>;
+                case "aprobacion":
+                case "aprobacion_documento": 
+                  return <><CheckCircle size={15} className="inline mr-1 text-green-600" /> Aprobación Documento</>;
+                case "rechazo":
+                case "rechazo_documento": 
+                  return <><XCircle size={15} className="inline mr-1 text-red-500" /> Rechazo Documento</>;
+                case "subida": 
+                  return <><Upload size={15} className="inline mr-1 text-blue-500" /> Subida de Documento</>;
+                case "acceso_fallido": 
+                  return <><ShieldAlert size={15} className="inline mr-1 text-red-700" /> Intento de Acceso Base</>;
+                case "alerta": 
+                  return <><Bell size={15} className="inline mr-1 text-amber-500" /> Alerta Automática</>;
+                case "login_exitoso": 
+                  return <><Key size={15} className="inline mr-1 text-blue-600" /> Inicio Sesión</>;
+                case "logout": 
+                  return <><LogOut size={15} className="inline mr-1 text-gray-500" /> Cierre Sesión</>;
+                case "creacion_invitacion": 
+                  return <><Mail size={15} className="inline mr-1 text-indigo-500" /> Envío Invitación</>;
+                case "aceptacion_invitacion": 
+                  return <><CheckCircle size={15} className="inline mr-1 text-emerald-500" /> Aceptación Invitación</>;
+                case "rechazo_invitacion": 
+                  return <><XCircle size={15} className="inline mr-1 text-rose-500" /> Rechazo Invitación</>;
+                default: 
+                  return <>{accion.replace(/_/g, ' ')}</>;
               }
             };
 

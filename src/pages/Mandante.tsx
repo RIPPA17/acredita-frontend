@@ -8,7 +8,7 @@ import {
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
   Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, esTrabajadorAsignado, getCurrentSession, logoutUser, crearInvitacion, registrarAuditoria } from '../data/localStorageDb';
 import { Contratista } from '../types';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 
@@ -39,7 +39,8 @@ export default function MandantePortal() {
   const allContratistas = getContratistas();
   const allPlantillas = getPlantillas();
 
-  const mandanteLogueado = allMandantes.find(m => m.id === 'andina') || allMandantes[0];
+  const session = getCurrentSession();
+  const mandanteLogueado = allMandantes.find(m => m.id === session?.mandanteId) || allMandantes[0];
   const misProyectos = allProyectos.filter(p => p.mandanteId === mandanteLogueado.id);
 
   const PROYECTOS_AJUSTES = misProyectos.map(p => ({
@@ -83,12 +84,32 @@ export default function MandantePortal() {
   const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
-  const [formInvitacion, setFormInvitacion] = useState({correo: '', proyecto: '', mensaje: ''});
+  const [formInvitacion, setFormInvitacion] = useState({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
   const [documentRequirements, setDocumentRequirements] = useState<any[]>([]);
 
-  const activeProjectId = selectedProjectId || misProyectos[0]?.id || 'costanera';
+  // Aislamiento de datos: Filtrar el proyecto seleccionado si no pertenece al mandante logueado
+  const isProjValido = selectedProjectId ? misProyectos.some(p => p.id === selectedProjectId) : false;
+  const activeProjectId = isProjValido ? selectedProjectId! : (misProyectos[0]?.id || '');
+
+  // Aislamiento de datos: Contratistas permitidos para este mandante
+  const permitidosContratistasIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    misProyectos.forEach(p => {
+      p.contratistas?.forEach(cid => ids.add(cid));
+    });
+    return ids;
+  }, [misProyectos]);
+
+  // Si vistaContratistas es un ID de contratista que no pertenece a los proyectos del mandante, hacemos fallback
+  const activeContractorId = (vistaContratistas !== 'proyectos' && vistaContratistas !== 'config_req') ? vistaContratistas : null;
+  React.useEffect(() => {
+    if (activeContractorId && !permitidosContratistasIds.has(activeContractorId)) {
+      setVistaContratistas('proyectos');
+    }
+  }, [vistaContratistas, permitidosContratistasIds, activeContractorId]);
 
   React.useEffect(() => {
+    if (!activeProjectId) return;
     const reqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
     setDocumentRequirements(reqs.map(r => ({
       id: r.id,
@@ -101,7 +122,7 @@ export default function MandantePortal() {
       alertaDias: r.alertaDias
     })));
     setContractorsData(buildContractorsData(allContratistas, activeProjectId));
-  }, [selectedProjectId, allProyectos]);
+  }, [activeProjectId, allProyectos]);
 
   const buildContractorsData = (contratistasList: Contratista[], projId: string) => {
     const projReqs = getRequisitos().filter(r => r.proyectoId === projId && r.activo !== false);
@@ -184,6 +205,18 @@ export default function MandantePortal() {
 
     const currentReqs = getRequisitos();
     saveRequisitos([...currentReqs, newReq]);
+
+    const session = getCurrentSession();
+    registrarAuditoria({
+      usuarioId: session?.email || mandanteLogueado.id,
+      rol: 'mandante',
+      accion: 'cambio_requisitos',
+      entidad: 'requisito',
+      entidadId: newReq.id,
+      proyectoId: activeProjectId,
+      estadoNuevo: 'activo',
+      detalle: `Agregado requisito ${newReq.nombre} para ${newReq.destino} con criticidad ${newReq.criticidad}`
+    });
 
     // Reload states
     const updatedReqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
@@ -451,7 +484,7 @@ export default function MandantePortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
@@ -490,7 +523,7 @@ export default function MandantePortal() {
               ))}
               
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -512,7 +545,7 @@ export default function MandantePortal() {
             
             const projWorkers = projContractors.flatMap(c => 
               (c.trabajadores || []).filter(w => 
-                w.documentos?.some(d => d.proyectoId === activeProjectId)
+                esTrabajadorAsignado(w, activeProjectId, allProyectos)
               )
             );
 
@@ -559,8 +592,8 @@ export default function MandantePortal() {
               const workerReqs = projReqs.filter(r => r.destino === 'trabajador');
               const cWorkers = c.trabajadores || [];
               cWorkers.forEach(w => {
-                const hasProjDocs = w.documentos?.some(d => d.proyectoId === activeProjectId);
-                if (!hasProjDocs) return;
+                const isAssigned = esTrabajadorAsignado(w, activeProjectId, allProyectos);
+                if (!isAssigned) return;
 
                 workerReqs.forEach(req => {
                   const doc = w.documentos?.find(d => 
@@ -1299,8 +1332,23 @@ export default function MandantePortal() {
                                 const list = getRequisitos();
                                 const rIdx = list.findIndex(r => r.id === req.id);
                                 if (rIdx !== -1) {
+                                  const prevActivo = list[rIdx].activo;
                                   list[rIdx].activo = !list[rIdx].activo;
                                   saveRequisitos(list);
+
+                                  const session = getCurrentSession();
+                                  registrarAuditoria({
+                                    usuarioId: session?.email || mandanteLogueado.id,
+                                    rol: 'mandante',
+                                    accion: 'cambio_requisitos',
+                                    entidad: 'requisito',
+                                    entidadId: req.id,
+                                    proyectoId: selectedProjectId,
+                                    estadoAnterior: prevActivo ? 'activo' : 'inactivo',
+                                    estadoNuevo: list[rIdx].activo ? 'activo' : 'inactivo',
+                                    detalle: `Requisito ${req.nombre} ${list[rIdx].activo ? 'activado' : 'desactivado'}`
+                                  });
+
                                   showToast(list[rIdx].activo ? 'Requisito activado' : 'Requisito desactivado');
                                   setDocumentRequirements([]);
                                 }
@@ -1310,8 +1358,23 @@ export default function MandantePortal() {
                                 const list = getRequisitos();
                                 const rIdx = list.findIndex(r => r.id === req.id);
                                 if (rIdx !== -1) {
+                                  const prevObligatorio = list[rIdx].obligatorio;
                                   list[rIdx].obligatorio = !list[rIdx].obligatorio;
                                   saveRequisitos(list);
+
+                                  const session = getCurrentSession();
+                                  registrarAuditoria({
+                                    usuarioId: session?.email || mandanteLogueado.id,
+                                    rol: 'mandante',
+                                    accion: 'cambio_requisitos',
+                                    entidad: 'requisito',
+                                    entidadId: req.id,
+                                    proyectoId: selectedProjectId,
+                                    estadoAnterior: prevObligatorio ? 'obligatorio' : 'opcional',
+                                    estadoNuevo: list[rIdx].obligatorio ? 'obligatorio' : 'opcional',
+                                    detalle: `Requisito ${req.nombre} marcado como ${list[rIdx].obligatorio ? 'obligatorio' : 'opcional'}`
+                                  });
+
                                   showToast(list[rIdx].obligatorio ? 'Requisito marcado como obligatorio' : 'Requisito marcado como opcional');
                                   setDocumentRequirements([]);
                                 }
@@ -1321,8 +1384,23 @@ export default function MandantePortal() {
                                 const list = getRequisitos();
                                 const rIdx = list.findIndex(r => r.id === req.id);
                                 if (rIdx !== -1) {
+                                  const prevDestino = list[rIdx].destino;
                                   list[rIdx].destino = newDest;
                                   saveRequisitos(list);
+
+                                  const session = getCurrentSession();
+                                  registrarAuditoria({
+                                    usuarioId: session?.email || mandanteLogueado.id,
+                                    rol: 'mandante',
+                                    accion: 'cambio_requisitos',
+                                    entidad: 'requisito',
+                                    entidadId: req.id,
+                                    proyectoId: selectedProjectId,
+                                    estadoAnterior: prevDestino,
+                                    estadoNuevo: newDest,
+                                    detalle: `Destinatario de requisito ${req.nombre} cambiado a ${newDest}`
+                                  });
+
                                   showToast('Destinatario de requisito modificado');
                                   setDocumentRequirements([]);
                                 }
@@ -1443,8 +1521,22 @@ export default function MandantePortal() {
                         const projList = getProyectos();
                         const pIdx = projList.findIndex(p => p.id === selectedProjectId);
                         if (pIdx !== -1) {
+                          const prevEstado = projList[pIdx].estado;
                           projList[pIdx].estado = 'Archivado';
                           saveProyectos(projList);
+                          
+                          const session = getCurrentSession();
+                          registrarAuditoria({
+                            usuarioId: session?.email || mandanteLogueado.id,
+                            rol: 'mandante',
+                            accion: 'modificacion_proyecto',
+                            entidad: 'proyecto',
+                            entidadId: selectedProjectId,
+                            proyectoId: selectedProjectId,
+                            estadoAnterior: prevEstado,
+                            estadoNuevo: 'Archivado',
+                            detalle: `Proyecto ${projList[pIdx].nombre} archivado por mandante`
+                          });
                         }
                         setProyectoArchivado(true);
                         showToast('Proyecto archivado', 'error');
@@ -1947,7 +2039,7 @@ export default function MandantePortal() {
                 const okC = contractorsData.filter(c => {
                   const statusValues = Object.values(c.status).filter(s => s !== 'na');
                   const contractorObj = allContratistas.find(co => co.id === c.id);
-                  const workers = (contractorObj?.trabajadores || []).filter(w => w.documentos?.some(d => d.proyectoId === activeProjectId));
+                  const workers = (contractorObj?.trabajadores || []).filter(w => esTrabajadorAsignado(w, activeProjectId, allProyectos));
                   const allWOk = workers.length > 0 ? workers.every(w => calcularEstadoTrabajador(w, activeProjectId) === 'aprobado') : true;
                   return statusValues.length > 0 && statusValues.every(s => s === 'ok') && allWOk;
                 }).length;
@@ -1957,7 +2049,7 @@ export default function MandantePortal() {
                 allContratistas.filter(c => 
                   c.proyectos.includes(activeProjectId)
                 ).forEach(c => {
-                  const workers = (c.trabajadores || []).filter(w => w.documentos?.some(d => d.proyectoId === activeProjectId));
+                  const workers = (c.trabajadores || []).filter(w => esTrabajadorAsignado(w, activeProjectId, allProyectos));
                   totalW += workers.length;
                   approvedW += workers.filter(w => calcularEstadoTrabajador(w, activeProjectId) === 'aprobado').length;
                 });
@@ -1991,7 +2083,7 @@ export default function MandantePortal() {
                             const totalCount = Object.values(c.status).filter(s => s !== 'na').length;
                             
                             const cObj = allContratistas.find(co => co.id === c.id);
-                            const workers = (cObj?.trabajadores || []).filter(w => w.documentos?.some(d => d.proyectoId === activeProjectId));
+                            const workers = (cObj?.trabajadores || []).filter(w => esTrabajadorAsignado(w, activeProjectId, allProyectos));
                             const approvedWorkersCount = workers.filter(w => calcularEstadoTrabajador(w, activeProjectId) === 'aprobado').length;
                             
                             const statusTextVal = cObj ? calcularEstadoAcreditacion(cObj, activeProjectId) : 'No acreditado';
@@ -2279,36 +2371,28 @@ export default function MandantePortal() {
             <div className="p-6">
               <form onSubmit={(e) => {
                 e.preventDefault();
-                setShowInvitarModal(false);
-                const matchedProject = allProyectos.find(p => p.nombre === formInvitacion.proyecto) || allProyectos[0];
                 
-                const targetCId = 'tecnicosur';
-                const targetCName = 'Técnico Sur SpA';
-                const targetCRut = '76.452.193-4';
-                
-                const newInv = {
-                  id: 'inv_' + Date.now(),
-                  contratistaId: targetCId,
-                  contratistaNombre: targetCName,
-                  contratistaRut: targetCRut,
-                  proyectoId: matchedProject.id,
-                  proyectoNombre: matchedProject.nombre,
-                  mandanteId: 'andina',
-                  mandanteNombre: 'Constructora Andina SA',
-                  estado: 'pendiente' as const,
-                  mensaje: formInvitacion.mensaje,
-                  fecha: new Date().toLocaleDateString('es-CL')
-                };
+                const res = crearInvitacion(
+                  mandanteLogueado.id,
+                  formInvitacion.proyectoId,
+                  formInvitacion.contratistaId,
+                  formInvitacion.correo,
+                  formInvitacion.mensaje
+                );
 
-                const invs = getInvitaciones();
-                invs.push(newInv);
-                saveInvitaciones(invs);
+                if (!res.success) {
+                  showToast(res.error || 'Error al enviar invitación', 'error');
+                  return;
+                }
+
+                setShowInvitarModal(false);
+                const newInv = res.invitacion!;
 
                 // Add placeholder/pending row to the local state list for display
                 setContractorsData(prev => [...prev, {
                   id: newInv.id,
-                  name: targetCName,
-                  rut: targetCRut,
+                  name: newInv.contratistaNombre,
+                  rut: newInv.contratistaRut,
                   reqs: { contrato: true, odi: true, mutual: true } as any,
                   status: { contrato: 'pending', odi: 'pending', mutual: 'pending' } as any,
                   isPending: true,
@@ -2316,8 +2400,30 @@ export default function MandantePortal() {
                 } as any]);
 
                 showToast(`Invitación enviada a ${formInvitacion.correo}`);
-                setFormInvitacion({correo: '', proyecto: '', mensaje: ''});
+                setFormInvitacion({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
               }} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contratista a invitar</label>
+                  <select 
+                    value={formInvitacion.contratistaId}
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      setFormInvitacion({
+                        ...formInvitacion,
+                        contratistaId: cid,
+                        correo: cid === 'tecnicosur' ? 'tecnico@tecnicosur.cl' : cid === 'servicios-norte' ? 'norte@serviciosnorte.cl' : ''
+                      });
+                    }}
+                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                    required
+                  >
+                    <option value="">Selecciona un contratista...</option>
+                    {allContratistas.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Correo del contratista</label>
                   <input 
@@ -2329,20 +2435,22 @@ export default function MandantePortal() {
                     required 
                   />
                 </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Proyecto al que se invita</label>
                   <select 
-                    value={formInvitacion.proyecto}
-                    onChange={(e) => setFormInvitacion({...formInvitacion, proyecto: e.target.value})}
+                    value={formInvitacion.proyectoId}
+                    onChange={(e) => setFormInvitacion({...formInvitacion, proyectoId: e.target.value})}
                     className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
                     required
                   >
                     <option value="">Selecciona un proyecto...</option>
-                    <option value="Hospital Regional Centro">Hospital Regional Centro</option>
-                    <option value="Torre Mackenna">Torre Mackenna</option>
-                    <option value="Ampliación Planta Solar">Ampliación Planta Solar</option>
+                    {misProyectos.map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Mensaje opcional</label>
                   <textarea 

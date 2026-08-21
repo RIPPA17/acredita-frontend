@@ -1,10 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
+import { getInvitaciones } from '../data/localStorageDb';
 
 export default function InvitacionPage() {
   const navigate = useNavigate();
   const [tieneCuenta, setTieneCuenta] = useState<boolean | null>(null);
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const invId = searchParams.get('id');
+  
+  const allInvs = getInvitaciones();
+  const activeInv = invId 
+    ? allInvs.find(i => i.id === invId && i.estado === 'pendiente') 
+    : allInvs.find(i => i.estado === 'pendiente');
+
+  const mandanteNombre = activeInv ? activeInv.mandanteNombre : 'Constructora Andina SA';
+  const proyectoNombre = activeInv ? activeInv.proyectoNombre : 'Proyecto Costanera Norte';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-cream2 p-4">
@@ -18,9 +30,9 @@ export default function InvitacionPage() {
         {/* Detalle del proyecto */}
         <div className="bg-cream2 rounded-xl p-4 mb-6">
           <p className="text-sm text-gray-500 mb-1">Te invita</p>
-          <p className="font-semibold text-navy">Constructora Andina SA</p>
+          <p className="font-semibold text-navy">{mandanteNombre}</p>
           <p className="text-sm text-gray-500 mt-3 mb-1">Proyecto</p>
-          <p className="font-medium">Proyecto Costanera Norte</p>
+          <p className="font-medium">{proyectoNombre}</p>
           <p className="text-sm text-gray-500 mt-3 mb-2">Documentos requeridos</p>
           <div className="flex flex-col gap-1.5">
             {['Contrato de trabajo', 'Seguro de accidentes', 'Certificado antecedentes'].map(doc => (

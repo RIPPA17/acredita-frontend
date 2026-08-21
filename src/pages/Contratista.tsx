@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones, esTrabajadorAsignado, getCurrentSession, logoutUser, aceptarInvitacion, rechazarInvitacion, registrarAuditoria } from '../data/localStorageDb';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 
 export default function ContratistaPortal() {
@@ -60,12 +60,19 @@ export default function ContratistaPortal() {
   const allProyectos = getProyectos();
   const allMandantes = getMandantes();
 
-  const contratistaLogueado = allContratistas.find(c => c.id === 'tecnicosur') || allContratistas[0];
+  const session = getCurrentSession();
+  const contratistaLogueado = allContratistas.find(c => c.id === session?.contratistaId) || allContratistas[0];
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
 
   const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
-    return misProyectos[0]?.id || 'costanera';
+    return misProyectos[0]?.id || '';
   });
+
+  React.useEffect(() => {
+    if (selectedProyectoId && !misProyectos.some(p => p.id === selectedProyectoId)) {
+      setSelectedProyectoId(misProyectos[0]?.id || '');
+    }
+  }, [selectedProyectoId, misProyectos]);
 
   const [documentosData, setDocumentosData] = useState<Documento[]>([]);
   const [trabajadoresData, setTrabajadoresData] = useState<any[]>([]);
@@ -78,7 +85,7 @@ export default function ContratistaPortal() {
       setDocumentosData(filteredDocs);
       
       const projectWorkers = cObj.trabajadores?.filter(w => 
-        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+        esTrabajadorAsignado(w, selectedProyectoId, allProyectos)
       ) || [];
       setTrabajadoresData(projectWorkers);
     }
@@ -118,6 +125,10 @@ export default function ContratistaPortal() {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const todayStr = `${day} ${months[today.getMonth()]} ${today.getFullYear()}`;
 
+    const session = getCurrentSession();
+    const actorEmail = session?.email || contratistaLogueado.id;
+    const actorRol = session?.role || 'contratista';
+
     if (currentIdx !== -1) {
       if (workerRut) {
         const workerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === workerRut);
@@ -125,6 +136,7 @@ export default function ContratistaPortal() {
           const docIdx = list[currentIdx].trabajadores![workerIdx].documentos?.findIndex(d => d.id === docId);
           if (docIdx !== undefined && docIdx !== -1) {
             const docObj = list[currentIdx].trabajadores![workerIdx].documentos![docIdx];
+            const prevEstado = docObj.estado;
             docObj.estado = 'revision';
             docObj.subido = todayStr;
             docObj.archivoReferencia = `mock_file_${docId}.pdf`;
@@ -139,8 +151,21 @@ export default function ContratistaPortal() {
             
             saveContratistas(list);
             
+            registrarAuditoria({
+              usuarioId: actorEmail,
+              rol: actorRol,
+              contratistaId: contratistaLogueado.id,
+              proyectoId: selectedProyectoId,
+              accion: prevEstado === 'pendiente' ? 'carga_documento' : 'reemplazo_documento',
+              entidad: 'documento_trabajador',
+              entidadId: docObj.id,
+              estadoAnterior: prevEstado,
+              estadoNuevo: 'revision',
+              detalle: `${prevEstado === 'pendiente' ? 'Cargado' : 'Reemplazado'} documento ${docObj.nombre} del trabajador ${workerObj.nombre}`
+            });
+
             const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
-              w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+              esTrabajadorAsignado(w, selectedProyectoId, allProyectos)
             ) || [];
             setTrabajadoresData(projectWorkers);
             showToast(actionMsg, 'success');
@@ -150,6 +175,7 @@ export default function ContratistaPortal() {
         const docIdx = list[currentIdx].documentos.findIndex(d => d.id === docId);
         if (docIdx !== -1) {
           const docObj = list[currentIdx].documentos[docIdx];
+          const prevEstado = docObj.estado;
           docObj.estado = 'revision';
           docObj.subido = todayStr;
           docObj.archivoReferencia = `mock_file_${docId}.pdf`;
@@ -160,6 +186,19 @@ export default function ContratistaPortal() {
           delete docObj.observacion;
           saveContratistas(list);
           
+          registrarAuditoria({
+            usuarioId: actorEmail,
+            rol: actorRol,
+            contratistaId: contratistaLogueado.id,
+            proyectoId: selectedProyectoId,
+            accion: prevEstado === 'pendiente' ? 'carga_documento' : 'reemplazo_documento',
+            entidad: 'documento_empresa',
+            entidadId: docObj.id,
+            estadoAnterior: prevEstado,
+            estadoNuevo: 'revision',
+            detalle: `${prevEstado === 'pendiente' ? 'Cargado' : 'Reemplazado'} documento ${docObj.nombre} de la empresa`
+          });
+
           setDocumentosData(list[currentIdx].documentos.filter(d => d.proyectoId === selectedProyectoId));
           showToast(actionMsg, 'success');
         }
@@ -217,6 +256,10 @@ export default function ContratistaPortal() {
 
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
+    const session = getCurrentSession();
+    const actorEmail = session?.email || contratistaLogueado.id;
+    const actorRol = session?.role || 'contratista';
+
     if (currentIdx !== -1) {
       const existingWorkerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === newWorkerForm.rut);
       if (existingWorkerIdx !== undefined && existingWorkerIdx !== -1) {
@@ -235,6 +278,17 @@ export default function ContratistaPortal() {
           existingWorker.documentos = [...existingWorker.documentos, ...workerDocs];
         }
         existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
+
+        registrarAuditoria({
+          usuarioId: actorEmail,
+          rol: actorRol,
+          contratistaId: contratistaLogueado.id,
+          proyectoId: selectedProyectoId,
+          accion: 'asignacion_trabajador',
+          entidad: 'trabajador',
+          entidadId: existingWorker.rut,
+          detalle: `Asignado trabajador existente ${existingWorker.nombre} (${existingWorker.rut}) al proyecto`
+        });
       } else {
         const newWorker = {
           nombre: newWorkerForm.nombre,
@@ -249,11 +303,22 @@ export default function ContratistaPortal() {
           list[currentIdx].trabajadores = [];
         }
         list[currentIdx].trabajadores!.push(newWorker);
+
+        registrarAuditoria({
+          usuarioId: actorEmail,
+          rol: actorRol,
+          contratistaId: contratistaLogueado.id,
+          proyectoId: selectedProyectoId,
+          accion: 'creacion_trabajador',
+          entidad: 'trabajador',
+          entidadId: newWorker.rut,
+          detalle: `Creado y asignado nuevo trabajador ${newWorker.nombre} (${newWorker.rut})`
+        });
       }
       saveContratistas(list);
 
       const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
-        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+        esTrabajadorAsignado(w, selectedProyectoId, allProyectos)
       ) || [];
       setTrabajadoresData(projectWorkers);
     }
@@ -305,40 +370,10 @@ export default function ContratistaPortal() {
                 const invs = getInvitaciones();
                 const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
                 if (pending) {
-                  pending.estado = 'aceptada';
-                  saveInvitaciones(invs);
-                  
-                  // Associate contractor to project
-                  const projsList = getProyectos();
-                  const pIdx = projsList.findIndex(p => p.id === pending.proyectoId);
-                  if (pIdx !== -1 && !projsList[pIdx].contratistas.includes(contratistaLogueado.id)) {
-                    projsList[pIdx].contratistas.push(contratistaLogueado.id);
-                    saveProyectos(projsList);
-                  }
-
-                  // Associate project to contractor
-                  const contrList = getContratistas();
-                  const cIdx = contrList.findIndex(c => c.id === contratistaLogueado.id);
-                  if (cIdx !== -1) {
-                    const cObj = contrList[cIdx];
-                    if (!cObj.proyectos.includes(pending.proyectoId)) {
-                      cObj.proyectos.push(pending.proyectoId);
-                    }
-                    
-                    // Create default documents for the contractor for this project
-                    const companyReqs = getRequisitos().filter(r => r.proyectoId === pending.proyectoId && r.destino === 'empresa' && r.activo !== false);
-                    const newCompanyDocs = companyReqs.map((r, idx) => ({
-                      id: `cdoc_${Date.now()}_${idx}`,
-                      nombre: r.nombre,
-                      categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
-                      estado: 'pendiente' as const,
-                      vencimiento: '—',
-                      proyectoId: pending.proyectoId
-                    }));
-                    if (!cObj.documentos) cObj.documentos = [];
-                    cObj.documentos = [...cObj.documentos, ...newCompanyDocs];
-                    
-                    saveContratistas(contrList);
+                  const res = aceptarInvitacion(pending.id, contratistaLogueado.id);
+                  if (!res.success) {
+                    showToast(res.error || 'Error al aceptar invitación', 'error');
+                    return;
                   }
                   
                   setInvitacionAceptada(true);
@@ -363,8 +398,11 @@ export default function ContratistaPortal() {
                 const invs = getInvitaciones();
                 const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
                 if (pending) {
-                  pending.estado = 'rechazada';
-                  saveInvitaciones(invs);
+                  const res = rechazarInvitacion(pending.id, contratistaLogueado.id);
+                  if (!res.success) {
+                    showToast(res.error || 'Error al rechazar invitación', 'error');
+                    return;
+                  }
                 }
                 setTieneProyecto(false);
                 showToast('Invitación rechazada', 'error');
@@ -532,7 +570,7 @@ export default function ContratistaPortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
@@ -572,7 +610,7 @@ export default function ContratistaPortal() {
               ))}
               
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -2028,7 +2066,7 @@ export default function ContratistaPortal() {
                                       saveContratistas(listData);
 
                                       const updatedWorkers = listData[currentIdx].trabajadores?.filter(tw => 
-                                        tw.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
+                                        esTrabajadorAsignado(tw, selectedProyectoId, allProyectos)
                                       ) || [];
                                       setTrabajadoresData(updatedWorkers);
                                       showToast(`Trabajador ${w.nombre} asignado con éxito`);
