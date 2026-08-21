@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   ClipboardList,
   AlertTriangle,
@@ -138,17 +138,16 @@ export default function ColaRevisionTab({
       return a.emp.localeCompare(b.emp);
     });
 
-  const current = filtered.find((d) => d.id === selectedId);
-
-  // Nothing is selected on first load (and after a filter change drops the
-  // current doc out of view), which left the review panel showing "Cola al
-  // día" even though the queue still had pending documents. Auto-select the
-  // first visible one so the panel always reflects what the list shows.
-  useEffect(() => {
-    if (!current && filtered.length > 0) {
-      setSelectedId(filtered[0].id);
-    }
-  }, [current, filtered]);
+  // Falls back to the first filtered document whenever selectedId is null
+  // (first load) or points at something no longer in view (a filter change
+  // dropped it), so the desktop panel is never left showing "Cola al día"
+  // while the list still has pending items. This is a pure fallback for
+  // *what to display* — it never writes back to selectedId, which is the
+  // real state driving list-vs-detail visibility on mobile ("Volver" clears
+  // it to null to show the list again). Reselecting it here previously
+  // fought "Volver": as soon as it was cleared, this recomputed and picked
+  // a document again, making the back button on mobile a no-op.
+  const current = filtered.find((d) => d.id === selectedId) ?? filtered[0];
 
   const selectDoc = (id: number) => {
     setSelectedId(id);
