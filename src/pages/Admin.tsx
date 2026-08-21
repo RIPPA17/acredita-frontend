@@ -41,7 +41,7 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
@@ -256,13 +256,57 @@ export default function AdminPortal() {
   };
   const [reglas, setReglas] = useState<Regla[]>(() => getReglas());
 
-  const [auditoriaLogs] = useState<LogEntry[]>([
-    { id: 1, accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" },
-    { id: 2, accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor", empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" },
-    { id: 3, accion: "subida", actor: "Jorge Morales", rol: "Contratista", empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo", ip: "190.16.22.4" },
-    { id: 4, accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido", empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" },
-    { id: 5, accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático", empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" }
-  ]);
+  const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>(() => {
+    const dbLogs = getAuditLogs().map(log => ({
+      ...log,
+      id: log.id,
+      accion: log.accion,
+      actor: log.actor || log.usuarioId,
+      rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
+      empresa: log.empresa || 'N/A',
+      proyecto: log.proyecto || '',
+      detalle: log.detalle || '',
+      fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
+      resultado: log.resultado || 'informativo'
+    }));
+
+    const mockLogs = [
+      { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
+      { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
+      { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
+      { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
+      { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
+    ];
+
+    return [...dbLogs, ...mockLogs];
+  });
+
+  React.useEffect(() => {
+    if (activeTab === "auditoria") {
+      const dbLogs = getAuditLogs().map(log => ({
+        ...log,
+        id: log.id,
+        accion: log.accion,
+        actor: log.actor || log.usuarioId,
+        rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
+        empresa: log.empresa || 'N/A',
+        proyecto: log.proyecto || '',
+        detalle: log.detalle || '',
+        fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
+        resultado: log.resultado || 'informativo'
+      }));
+
+      const mockLogs = [
+        { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
+        { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
+        { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
+        { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
+        { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
+      ];
+
+      setAuditoriaLogs([...dbLogs, ...mockLogs]);
+    }
+  }, [activeTab]);
   const [filtroAccionLog, setFiltroAccionLog] = useState("Todas las Acciones");
   const [filtroActorLog, setFiltroActorLog] = useState("Todos los Actores");
   const [filtroFechaLog, setFiltroFechaLog] = useState("");
@@ -670,7 +714,7 @@ export default function AdminPortal() {
             </React.Fragment>
           ))}
 <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
@@ -718,7 +762,7 @@ export default function AdminPortal() {
                 </React.Fragment>
               ))}
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>

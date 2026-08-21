@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import DocumentDetailPanel from './contratista/DocumentDetailPanel';
@@ -69,7 +69,8 @@ export default function ContratistaPortal() {
   const allProyectos = getProyectos();
   const allMandantes = getMandantes();
 
-  const contratistaLogueado = allContratistas.find(c => c.id === 'tecnicosur') || allContratistas[0];
+  const session = getCurrentSession();
+  const contratistaLogueado = allContratistas.find(c => c.id === session?.contratistaId) || allContratistas[0];
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
 
   const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
@@ -318,41 +319,7 @@ export default function ContratistaPortal() {
                 const invs = getInvitaciones();
                 const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
                 if (pending) {
-                  pending.estado = 'aceptada';
-                  saveInvitaciones(invs);
-                  
-                  // Associate contractor to project
-                  const projsList = getProyectos();
-                  const pIdx = projsList.findIndex(p => p.id === pending.proyectoId);
-                  if (pIdx !== -1 && !projsList[pIdx].contratistas.includes(contratistaLogueado.id)) {
-                    projsList[pIdx].contratistas.push(contratistaLogueado.id);
-                    saveProyectos(projsList);
-                  }
-
-                  // Associate project to contractor
-                  const contrList = getContratistas();
-                  const cIdx = contrList.findIndex(c => c.id === contratistaLogueado.id);
-                  if (cIdx !== -1) {
-                    const cObj = contrList[cIdx];
-                    if (!cObj.proyectos.includes(pending.proyectoId)) {
-                      cObj.proyectos.push(pending.proyectoId);
-                    }
-                    
-                    // Create default documents for the contractor for this project
-                    const companyReqs = getRequisitos().filter(r => r.proyectoId === pending.proyectoId && r.destino === 'empresa' && r.activo !== false);
-                    const newCompanyDocs = companyReqs.map((r, idx) => ({
-                      id: `cdoc_${Date.now()}_${idx}`,
-                      nombre: r.nombre,
-                      categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
-                      estado: 'pendiente' as const,
-                      vencimiento: '—',
-                      proyectoId: pending.proyectoId
-                    }));
-                    if (!cObj.documentos) cObj.documentos = [];
-                    cObj.documentos = [...cObj.documentos, ...newCompanyDocs];
-                    
-                    saveContratistas(contrList);
-                  }
+                  aceptarInvitacion(pending.id, contratistaLogueado.id);
                   
                   setInvitacionAceptada(true);
                   setTieneProyecto(true);
@@ -525,8 +492,8 @@ export default function ContratistaPortal() {
         {/* SIDEBAR */}
         <aside className="hidden md:flex sidebar flex-col">
           <div className="sb-org">
-            <div className="sb-org-name">Servicios Norte Ltda.</div>
-            <div className="sb-org-sub">RUT 78.112.445-9 · 3 proyectos activos</div>
+            <div className="sb-org-name">{contratistaLogueado.nombre}</div>
+            <div className="sb-org-sub">RUT {contratistaLogueado.rut} · {misProyectos.length} proyectos activos</div>
           </div>
           
           <div className="sb-label">Principal</div>
@@ -545,7 +512,7 @@ export default function ContratistaPortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
+            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
               <LogOut size={18} /> Cerrar sesión
             </button>
           </div>
@@ -561,8 +528,8 @@ export default function ContratistaPortal() {
             <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] md:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
               <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
                 <div>
-                  <div className="sb-org-name">Servicios Norte Ltda.</div>
-                  <div className="sb-org-sub">RUT 78.112.445-9 · 3 proyectos activos</div>
+                  <div className="sb-org-name">{contratistaLogueado.nombre}</div>
+                  <div className="sb-org-sub">RUT {contratistaLogueado.rut} · {misProyectos.length} proyectos activos</div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">
                   <X size={20} />
@@ -585,7 +552,7 @@ export default function ContratistaPortal() {
               ))}
               
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>

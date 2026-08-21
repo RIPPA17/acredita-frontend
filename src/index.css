@@ -18,6 +18,9 @@
      background/border at all. */
   --color-cream2: var(--cream2);
   --color-cream3: var(--cream3);
+  --color-gold: var(--gold);
+  --color-gold-hover: var(--gold-hover);
+  --color-gold-soft: var(--gold-soft);
   --color-alert-warn: #fdf5df;
   --color-alert-danger: #fde8e8;
   --color-alert-info: #dceef8;
@@ -37,6 +40,9 @@
     --cream: #EBEBDD;
     --cream2: #f5f4ec;
     --cream3: #d4d4c6;
+    --gold: #b3893f;
+    --gold-hover: #c9a45e;
+    --gold-soft: #f4ecdb;
     --r: 16px;
     --rl: 24px;
   }

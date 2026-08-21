@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Briefcase,
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, getMandantes, calcularEstadoTrabajador } from "../../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, getMandantes, calcularEstadoTrabajador, actualizarEstadoDocumento } from "../../data/localStorageDb";
 import { buildColaDocs } from "./colaUtils";
 
 export default function ColaRevisionTab({
@@ -159,66 +159,20 @@ export default function ColaRevisionTab({
     }
     setReviewed((r) => r + 1);
 
-    // Update localStorageDb
+    // Update localStorageDb using database functions
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
     if (cObj) {
-      if (current.origen === 'Trabajador') {
-        const worker = cObj.trabajadores?.find(w => w.nombre === current.trabajadorNombre || w.rut === current.trabajadorRut);
-        if (worker) {
-          const docObj = worker.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
-          if (docObj) {
-            if (action === "approve") {
-              docObj.estado = 'aprobado';
-              docObj.revisor = 'Verificador Acredita';
-              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-              docObj.motivo = undefined;
-              docObj.observacion = undefined;
-              docObj.motivoRechazo = undefined;
-              docObj.explicacionRechazo = undefined;
-              docObj.solucionRechazo = undefined;
-              setAprobadosHoy((a) => a + 1);
-            } else if (action === "reject") {
-              docObj.estado = 'rechazado';
-              docObj.motivoRechazo = motivoRechazo;
-              docObj.explicacionRechazo = explicacionRechazo;
-              docObj.solucionRechazo = solucionRechazo;
-              docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
-              docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
-              docObj.revisor = 'Verificador Acredita';
-              docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-              setRechazadosHoy((r) => r + 1);
-            }
-            worker.estado = calcularEstadoTrabajador(worker, current.proyectoId);
-            saveContratistas(list);
-          }
-        }
-      } else {
-        const docObj = cObj.documentos.find(d => d.id === current.docId || d.nombre === current.title);
-        if (docObj) {
-          if (action === "approve") {
-            docObj.estado = 'aprobado';
-            docObj.revisor = 'Verificador Acredita';
-            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-            docObj.motivo = undefined;
-            docObj.observacion = undefined;
-            docObj.motivoRechazo = undefined;
-            docObj.explicacionRechazo = undefined;
-            docObj.solucionRechazo = undefined;
-            setAprobadosHoy((a) => a + 1);
-          } else if (action === "reject") {
-            docObj.estado = 'rechazado';
-            docObj.motivoRechazo = motivoRechazo;
-            docObj.explicacionRechazo = explicacionRechazo;
-            docObj.solucionRechazo = solucionRechazo;
-            docObj.motivo = explicacionRechazo || 'Rechazado por auditoría';
-            docObj.observacion = explicacionRechazo || 'Rechazado por auditoría';
-            docObj.revisor = 'Verificador Acredita';
-            docObj.fechaRevisado = new Date().toLocaleDateString('es-CL');
-            setRechazadosHoy((r) => r + 1);
-          }
-          saveContratistas(list);
-        }
+      if (action === "approve") {
+        actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve");
+        setAprobadosHoy((a) => a + 1);
+      } else if (action === "reject") {
+        actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "reject", {
+          motivoRechazo,
+          explicacionRechazo,
+          solucionRechazo
+        });
+        setRechazadosHoy((r) => r + 1);
       }
     }
 
