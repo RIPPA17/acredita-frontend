@@ -39,7 +39,7 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight, Briefcase, Menu
+  ChevronRight, Briefcase, Menu, ChevronLeft
 } from "lucide-react";
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
@@ -164,6 +164,15 @@ const ALERTAS_DASHBOARD = [
 
 export default function AdminPortal() {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebar = () => {
+    const nextState = !sidebarCollapsed;
+    setSidebarCollapsed(nextState);
+    localStorage.setItem('sidebar_collapsed', String(nextState));
+  };
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
@@ -684,10 +693,26 @@ export default function AdminPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <div className="sidebar hidden md:flex">
-          <div className="sb-org">
-            <div className="sb-org-name">Panel Administración</div>
-            <div className="sb-org-sub">Acredita · Equipo revisor</div>
+        <div className={`sidebar hidden md:flex flex-col ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className={`sb-org flex ${sidebarCollapsed ? 'flex-col items-center gap-2' : 'justify-between items-center'} px-4 py-3 border-b border-white/5`}>
+            {!sidebarCollapsed && (
+              <div className="truncate flex-1">
+                <div className="sb-org-name truncate">Panel Administración</div>
+                <div className="sb-org-sub truncate">Acredita · Equipo revisor</div>
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <div className="w-8 h-8 rounded-lg bg-brown text-white flex items-center justify-center font-bold text-sm shrink-0">
+                A
+              </div>
+            )}
+            <button 
+              onClick={toggleSidebar} 
+              className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer transition-colors"
+              title={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
 
           <div className="sb-label">Principal</div>
@@ -699,6 +724,7 @@ export default function AdminPortal() {
               <button
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? "active" : ""}`}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 <item.icon size={18} className="shrink-0" />
                 <span className="flex-1">{item.label}</span>
@@ -707,15 +733,20 @@ export default function AdminPortal() {
                     {item.badge}
                   </span>
                 )}
-                {item.badgePunto && (
+                {item.badgePunto && !sidebarCollapsed && (
                   <span className="w-2 h-2 rounded-full bg-[#c03030] shrink-0" title="Requiere atención" />
                 )}
               </button>
             </React.Fragment>
           ))}
-<div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
-              <LogOut size={18} /> Cerrar sesión
+          <div className="sb-bottom">
+            <button 
+              className="sb-item w-full flex text-left mt-auto" 
+              onClick={() => { logoutUser(); navigate('/'); }}
+              title={sidebarCollapsed ? "Cerrar sesión" : undefined}
+            >
+              <LogOut size={18} className="shrink-0" /> 
+              <span className="flex-1">Cerrar sesión</span>
             </button>
           </div>
         </div>

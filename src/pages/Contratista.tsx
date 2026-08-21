@@ -5,7 +5,8 @@ import {
   Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight, ArrowLeft,
   FileCheck, Clock, X, XCircle, CloudUpload, Download, Eye,
   Building2, MapPin, Search, Info, FileText, Plus, Send, ShieldCheck, Banknote,
-  UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu
+  UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Documento } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion } from '../data/localStorageDb';
@@ -22,6 +23,15 @@ import ConfigTab from './contratista/ConfigTab';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebar = () => {
+    const nextState = !sidebarCollapsed;
+    setSidebarCollapsed(nextState);
+    localStorage.setItem('sidebar_collapsed', String(nextState));
+  };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedDocumentForPanel, setSelectedDocumentForPanel] = useState<Documento | null>(null);
@@ -490,10 +500,26 @@ export default function ContratistaPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <aside className="hidden md:flex sidebar flex-col">
-          <div className="sb-org">
-            <div className="sb-org-name">{contratistaLogueado.nombre}</div>
-            <div className="sb-org-sub">RUT {contratistaLogueado.rut} · {misProyectos.length} proyectos activos</div>
+        <aside className={`hidden md:flex sidebar flex-col ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className={`sb-org flex ${sidebarCollapsed ? 'flex-col items-center gap-2' : 'justify-between items-center'} px-4 py-3 border-b border-white/5`}>
+            {!sidebarCollapsed && (
+              <div className="truncate flex-1">
+                <div className="sb-org-name truncate">{contratistaLogueado.nombre}</div>
+                <div className="sb-org-sub truncate">RUT {contratistaLogueado.rut}</div>
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <div className="w-8 h-8 rounded-lg bg-brown text-white flex items-center justify-center font-bold text-sm shrink-0">
+                {contratistaLogueado.nombre[0]}
+              </div>
+            )}
+            <button 
+              onClick={toggleSidebar} 
+              className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer transition-colors"
+              title={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
           
           <div className="sb-label">Principal</div>
@@ -503,6 +529,7 @@ export default function ContratistaPortal() {
               <button 
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 <item.icon size={18} className="shrink-0" /> 
                 <span className="flex-1">{item.label}</span>
@@ -512,8 +539,13 @@ export default function ContratistaPortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); navigate('/'); }}>
-              <LogOut size={18} /> Cerrar sesión
+            <button 
+              className="sb-item w-full flex text-left mt-auto" 
+              onClick={() => { logoutUser(); navigate('/'); }}
+              title={sidebarCollapsed ? "Cerrar sesión" : undefined}
+            >
+              <LogOut size={18} className="shrink-0" /> 
+              <span className="flex-1">Cerrar sesión</span>
             </button>
           </div>
         </aside>
