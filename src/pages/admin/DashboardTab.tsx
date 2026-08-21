@@ -259,7 +259,7 @@ export default function DashboardTab({
           {colaVisible.length > 0 ? (
             colaVisible.map(item => (
               <div key={item.key} className="qrow">
-                <span className={`sev sev-${item.sev}`}>{SEV_LABEL[item.sev]}</span>
+                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13.5px] font-semibold text-navy truncate">
                     {item.empresa} — {item.documento}

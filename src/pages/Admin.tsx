@@ -308,6 +308,8 @@ export default function AdminPortal() {
       cumplimiento,
       iniciales: c.nombre.split(" ").map(n => n[0]).join("").substring(0, 2),
       proyectos: c.proyectos.map(pId => GLOBAL_PROYECTOS.find(p => p.id === pId)?.nombre || pId),
+      docsTotal: c.documentos.length,
+      docsAprobados: c.documentos.filter(d => d.estado === 'aprobado').length,
       estado: "Activo"
     };
   });
@@ -772,6 +774,7 @@ export default function AdminPortal() {
             <ContratistasTab
               EMPRESAS_CONTRATISTAS={EMPRESAS_CONTRATISTAS}
               setClienteSeleccionado={setClienteSeleccionado}
+              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
             />
           )}
           {activeTab === "plantillas" && (

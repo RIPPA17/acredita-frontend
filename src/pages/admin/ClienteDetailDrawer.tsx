@@ -2,6 +2,7 @@ import { XCircle, FileText, Edit, Trash2 } from 'lucide-react';
 import { Contratista, Proyecto } from '../../types';
 import { DocumentoRow, ProyectoRow } from './RowComponents';
 import { GLOBAL_CONTRATISTAS as MODULE_GLOBAL_CONTRATISTAS } from './globalData';
+import SeverityBadge from '../../components/SeverityBadge';
 
 const getDocumentosEmpresa = (cliente: any) => {
   const cObj = MODULE_GLOBAL_CONTRATISTAS.find(c =>
@@ -79,11 +80,7 @@ export default function ClienteDetailDrawer({
               <span className="badge border border-cream3 bg-white text-gray-700">
                 {clienteSeleccionado.rol}
               </span>
-              <span
-                className={`badge ${clienteSeleccionado.cumplimiento === "100% Aprobado" ? "b-green bg-green-100 text-green-800" : clienteSeleccionado.cumplimiento?.includes("Vencido") ? "b-red bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}`}
-              >
-                {clienteSeleccionado.cumplimiento}
-              </span>
+              <SeverityBadge cumplimiento={clienteSeleccionado.cumplimiento} />
             </div>
           </div>
           <button

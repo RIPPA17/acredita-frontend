@@ -232,10 +232,21 @@
 
   /* Single 3-level severity taxonomy, replacing the mix of "Alta prioridad",
      "Crítica", "Atención", "urgente" and "Bloquea faena" used before. */
-  .sev { font-size: 11.5px; font-weight: 600; padding: 3px 0; border-radius: 6px; width: 76px; text-align: center; flex-shrink: 0; border: 1px solid; }
+  .sev { font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 6px; text-align: center; flex-shrink: 0; border: 1px solid; display: inline-block; white-space: nowrap; }
   .sev-critico { background: var(--color-alert-danger); color: #8a2020; border-color: #efb4b4; }
   .sev-atencion { background: var(--color-alert-warn); color: #7a5500; border-color: #e6cd94; }
+  /* Pending-but-low-priority work (dashboard queue): neutral, not "done". */
   .sev-normal { background: var(--cream2); color: #63625c; border-color: var(--cream3); }
+  /* Compliant (contractor lists): green, because here the third level means done. */
+  .sev-ok { background: var(--color-alert-success); color: #1a5030; border-color: #a9d9bc; }
+
+  /* Clickable severity summary chips above a list. */
+  .schip { flex: 1; min-width: 150px; background: white; border: 1px solid var(--cream3); border-radius: var(--r); padding: 11px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: border-color 0.12s; font-family: inherit; text-align: left; }
+  .schip:hover { border-color: var(--brown); }
+  .schip.active { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+  .schip-l { font-size: 11.5px; font-weight: 600; color: #7a7a6a; }
+  .schip-n { font-size: 22px; font-weight: 600; line-height: 1.1; }
+  .schip-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
   .chip { border: 1px solid var(--cream3); background: var(--cream2); color: var(--navy); font-size: 13.5px; padding: 5px 12px; border-radius: 20px; cursor: pointer; font-weight: 500; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
   .chip:hover { border-color: var(--navy); }

@@ -1,4 +1,5 @@
 import { Plus, ChevronRight } from 'lucide-react';
+import SeverityBadge from '../../components/SeverityBadge';
 
 export default function MandantesTab({
   setShowInvitarModal,
@@ -113,9 +114,7 @@ export default function MandantesTab({
                   <p className="text-[12.3px] text-gray-500">{e.rut} · {e.rol}</p>
                 </div>
               </div>
-              <span className={`badge ${e.cumplimiento === "100% Aprobado" ? "b-green bg-green-100 text-green-800" : e.cumplimiento?.includes("Vencido") ? "b-red bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800 border-none"}`}>
-                {e.cumplimiento}
-              </span>
+              <SeverityBadge cumplimiento={e.cumplimiento} />
             </div>
           ))}
         </div>
