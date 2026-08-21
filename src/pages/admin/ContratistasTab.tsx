@@ -372,13 +372,12 @@ export default function ContratistasTab({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-cream3">
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Empresa</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Rol</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Proyectos</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Documentación</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Última actividad</th>
-                  <th className="px-3 py-3 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right"></th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Empresa</th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Proyectos</th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Documentación</th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Última actividad</th>
+                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -396,7 +395,7 @@ export default function ContratistasTab({
                       onClick={() => setClienteSeleccionado(c)}
                       className="hover:bg-[#fbfaf6] cursor-pointer transition-colors"
                     >
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-xl ${avatarBg} text-white flex items-center justify-center font-bold text-[13px] tracking-wide shrink-0 shadow-sm`}>
                             {c.iniciales}
@@ -408,14 +407,8 @@ export default function ContratistasTab({
                         </div>
                       </td>
                       
-                      <td className="px-3 py-2.5">
-                        <span className="inline-block text-[11px] font-semibold text-navy bg-cream2 px-2.5 py-1 rounded-lg border border-cream3">
-                          {c.rol}
-                        </span>
-                      </td>
-                      
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
                           {(c.proyectos || []).map((p: string, j: number) => (
                             <span
                               key={j}
@@ -427,7 +420,7 @@ export default function ContratistasTab({
                         </div>
                       </td>
                       
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-3 min-w-[140px]">
                           {renderProgressRing(pct, sev)}
                           <div>
@@ -437,15 +430,15 @@ export default function ContratistasTab({
                         </div>
                       </td>
                       
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3">
                         <SeverityBadge severidad={sev} formato="corto" />
                       </td>
                       
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3">
                         <span className="text-[12px] text-gray-500 font-medium">{ultimaActividad}</span>
                       </td>
                       
-                      <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button
                             title="Enviar mensaje"
@@ -482,7 +475,7 @@ export default function ContratistasTab({
             </div>
           )}
 
-          <div className="text-[12px] text-gray-400 px-3 py-3 border-t border-cream2 font-medium">
+          <div className="text-[12px] text-gray-400 px-4 py-3.5 border-t border-cream2 font-medium">
             Mostrando {visibles.length} de {EMPRESAS_CONTRATISTAS.length} contratistas
             {sevFiltro && ` · filtrando por ${SEVERIDAD_LABEL[sevFiltro]}`}
           </div>
