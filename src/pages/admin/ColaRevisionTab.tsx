@@ -219,7 +219,7 @@ export default function ColaRevisionTab({
         </button>
       </div>
       {vistaRevision === 'lista' && (
-      <div className="grid grid-cols-1 md:grid-cols-[290px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden h-auto md:h-[calc(100vh-215px)] flex-1 min-h-0 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-[290px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden h-auto md:h-[calc(100vh-215px)] md:min-h-[680px] flex-1 min-h-0 shadow-sm">
         {/* LEFT PANEL */}
         <div className={`bg-[#faf9f8] border-r md:border-r-2 border-[var(--navy)] flex flex-col ${selectedId ? "hidden md:flex" : "flex"} h-full min-h-0`}>
           <div className="p-3 border-b border-cream3 shrink-0">
