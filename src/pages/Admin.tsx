@@ -222,8 +222,6 @@ export default function AdminPortal() {
   const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
-  const [mandanteActivo, setMandanteActivo] = useState<any>(null);
-  const [proyectoActivo, setProyectoActivo] = useState<any>(null);
   const [tabCliente, setTabCliente] = useState("documentos");
   const [busquedaDoc, setBusquedaDoc] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -327,15 +325,19 @@ export default function AdminPortal() {
         }
         
         return {
+          id: c.id,
           empresa: c.nombre,
           rut: c.rut,
           rol: "Contratista",
           cumplimiento,
           iniciales: c.nombre.split(" ").map(n => n[0]).join("").substring(0, 2),
+          docsTotal: c.documentos.length,
+          docsAprobados: c.documentos.filter(d => d.estado === 'aprobado').length,
         };
       });
 
       return {
+        id: p.id,
         nombre: p.nombre,
         pendientes: p.id === 'costanera' ? 3 : p.id === 'solar' ? 1 : 0,
         urgentes: p.id === 'costanera' ? 3 : p.id === 'solar' ? 1 : 0,
@@ -346,8 +348,10 @@ export default function AdminPortal() {
     });
 
     return {
+      id: m.id,
       empresa: m.nombre,
       rut: m.rut,
+      iniciales: m.nombre.split(" ").map((n: string) => n[0]).join("").substring(0, 2),
       proyectos
     };
   });
@@ -761,10 +765,6 @@ export default function AdminPortal() {
           {activeTab === "mandantes" && (
             <MandantesTab
               setShowInvitarModal={setShowInvitarModal}
-              mandanteActivo={mandanteActivo}
-              setMandanteActivo={setMandanteActivo}
-              proyectoActivo={proyectoActivo}
-              setProyectoActivo={setProyectoActivo}
               ARBOL_MANDANTES={ARBOL_MANDANTES}
               setClienteSeleccionado={setClienteSeleccionado}
             />
