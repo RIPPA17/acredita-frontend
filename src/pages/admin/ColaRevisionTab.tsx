@@ -176,7 +176,16 @@ export default function ColaRevisionTab({
       if (current.origen === 'Trabajador') {
         const worker = cObj.trabajadores?.find(w => w.nombre === current.trabajadorNombre || w.rut === current.trabajadorRut);
         if (worker) {
-          const docObj = worker.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+          // A contractor assigned to several projects gets one expanded document
+          // per project, so the same nombre ("Liquidación Mayo 2026") can appear
+          // more than once. .find() with an OR returns the first element that
+          // satisfies EITHER clause, so a nombre match earlier in the array won
+          // over the correct docId every time — always editing the first
+          // duplicate instead of the one actually being reviewed. Matching by
+          // docId first (falling back to nombre only when no id matches at all)
+          // fixes that.
+          const docObj = worker.documentos?.find(d => d.id === current.docId)
+            ?? worker.documentos?.find(d => d.nombre === current.title);
           if (docObj) {
             if (action === "approve") {
               docObj.estado = 'aprobado';
@@ -204,7 +213,9 @@ export default function ColaRevisionTab({
           }
         }
       } else {
-        const docObj = cObj.documentos.find(d => d.id === current.docId || d.nombre === current.title);
+        // Same duplicate-nombre issue as above, for company-level documents.
+        const docObj = cObj.documentos.find(d => d.id === current.docId)
+          ?? cObj.documentos.find(d => d.nombre === current.title);
         if (docObj) {
           if (action === "approve") {
             docObj.estado = 'aprobado';
@@ -530,9 +541,13 @@ export default function ColaRevisionTab({
                     let docObj = null;
                     if (current.origen === 'Trabajador') {
                       const worker = contractorObj?.trabajadores?.find(w => w.rut === current.trabajadorRut);
-                      docObj = worker?.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+                      // Match by docId first — see the note in decide() on why the
+                      // nombre fallback alone picks the wrong duplicate.
+                      docObj = worker?.documentos?.find(d => d.id === current.docId)
+                        ?? worker?.documentos?.find(d => d.nombre === current.title);
                     } else {
-                      docObj = contractorObj?.documentos?.find(d => d.id === current.docId || d.nombre === current.title);
+                      docObj = contractorObj?.documentos?.find(d => d.id === current.docId)
+                        ?? contractorObj?.documentos?.find(d => d.nombre === current.title);
                     }
                     const fechaCarga = docObj?.subido || current.time || 'No disponible';
                     const fechaVencimiento = docObj?.vencimiento || 'Indefinido';
