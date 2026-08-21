@@ -217,10 +217,11 @@ export default function ColaRevisionTab({
         >
           <FolderOpen size={16} /> Por mandante
         </button>
-      </div>      {vistaRevision === 'lista' && (
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden flex-1 min-h-0 shadow-sm">
+      </div>
+      {vistaRevision === 'lista' && (
+      <div className="grid grid-cols-1 md:grid-cols-[290px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden h-auto md:h-[calc(100vh-215px)] flex-1 min-h-0 shadow-sm">
         {/* LEFT PANEL */}
-        <div className={`bg-[#faf9f8] border-r-2 border-[var(--navy)] flex flex-col ${selectedId ? "hidden lg:flex" : "flex"} h-full min-h-0`}>
+        <div className={`bg-[#faf9f8] border-r md:border-r-2 border-[var(--navy)] flex flex-col ${selectedId ? "hidden md:flex" : "flex"} h-full min-h-0`}>
           <div className="p-3 border-b border-cream3 shrink-0">
             <div className="text-[13px] font-bold text-navy flex items-center gap-1.5 justify-between">
               <span className="flex items-center gap-1.5">
@@ -347,7 +348,7 @@ export default function ColaRevisionTab({
         </div>
 
         {/* RIGHT PANEL */}
-        <div className={`flex flex-col bg-white overflow-hidden relative ${selectedId ? "flex" : "hidden lg:flex"} h-full min-h-0`}>
+        <div className={`flex flex-col bg-white overflow-hidden relative ${selectedId ? "flex" : "hidden md:flex"} h-full min-h-0`}>
           {!current ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 px-8">
               <CheckCircle size={44} className="text-[#639922] opacity-80" />
@@ -374,7 +375,7 @@ export default function ColaRevisionTab({
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => { setLocalSelectedId(null); setSelectedDocId(null); }}
-                    className="lg:hidden btn btn-ghost btn-sm text-gray-500 hover:text-navy px-2 py-1 font-bold flex items-center gap-1 border border-cream3 rounded bg-white"
+                    className="md:hidden btn btn-ghost btn-sm text-gray-500 hover:text-navy px-2 py-1 font-bold flex items-center gap-1 border border-cream3 rounded bg-white"
                   >
                     <ArrowLeft size={14} /> Volver
                   </button>
@@ -391,10 +392,10 @@ export default function ColaRevisionTab({
               </div>
 
               {/* Two-Column split layout */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[340px_1fr] overflow-hidden min-h-0">
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-[300px_1fr] overflow-hidden min-h-0">
                 
                 {/* COLUMN 1: METADATA (Izquierda en el split, Centro en la pantalla) */}
-                <div className="border-r-2 border-[var(--navy)] flex flex-col h-full min-h-0 bg-white">
+                <div className="border-r md:border-r-2 border-[var(--navy)] flex flex-col h-full min-h-0 bg-white">
                   
                   {/* Metadata Blocks Container (Scrollable) */}
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 bg-[#fcfbfa]">
