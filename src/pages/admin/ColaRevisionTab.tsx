@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ClipboardList,
   AlertTriangle,
@@ -139,6 +139,16 @@ export default function ColaRevisionTab({
     });
 
   const current = filtered.find((d) => d.id === selectedId);
+
+  // Nothing is selected on first load (and after a filter change drops the
+  // current doc out of view), which left the review panel showing "Cola al
+  // día" even though the queue still had pending documents. Auto-select the
+  // first visible one so the panel always reflects what the list shows.
+  useEffect(() => {
+    if (!current && filtered.length > 0) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [current, filtered]);
 
   const selectDoc = (id: number) => {
     setSelectedId(id);
@@ -392,11 +402,28 @@ export default function ColaRevisionTab({
         <div className={`flex flex-col bg-white overflow-hidden relative ${selectedId ? "flex" : "hidden lg:flex"}`}>
           {!current ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 px-8">
-              <CheckCircle size={44} className="text-[#639922] opacity-80" />
-              <p className="text-[14px] text-navy font-medium text-center">
-                Cola al día — no hay documentos pendientes
-              </p>
-              {reviewed > 0 && (
+              {docs.length === 0 ? (
+                <>
+                  <CheckCircle size={44} className="text-[#639922] opacity-80" />
+                  <p className="text-[14px] text-navy font-medium text-center">
+                    Cola al día — no hay documentos pendientes
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Search size={40} className="opacity-30" />
+                  <p className="text-[14px] text-navy font-medium text-center">
+                    Ningún documento coincide con este filtro
+                  </p>
+                  <button
+                    onClick={() => { setFilter("all"); setFiltroProyecto("todos"); }}
+                    className="text-brown text-[12.5px] hover:underline"
+                  >
+                    Limpiar filtros
+                  </button>
+                </>
+              )}
+              {docs.length === 0 && reviewed > 0 && (
                 <div className="bg-[#faf9f8] border border-cream3 rounded-xl px-5 py-4 mt-2 text-center">
                   <p className="text-[13px] text-gray-600">
                     Revisaste <strong className="text-navy">{reviewed}</strong> documento{reviewed !== 1 ? 's' : ''} hoy
