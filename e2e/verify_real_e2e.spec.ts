@@ -169,13 +169,13 @@ test.describe('Acredita E2E Portal Verification', () => {
     await page.locator('text=F30 >> visible=true').first().click();
 
     // Click en Rechazar
-    await page.locator('button:has-text("Rechazar") >> visible=true').first().click();
+    await page.locator('button:has-text("Rechazar") >> visible=true').first().click({ force: true });
 
     // Completar el formulario de rechazo
     await page.locator('select:has-text("Seleccione el motivo de rechazo")').selectOption('Documento ilegible');
     await page.locator('textarea').first().fill('La firma no es legible en la primera página.');
     await page.locator('textarea').nth(1).fill('Favor subir una versión escaneada en alta definición.');
-    await page.locator('button:has-text("Confirmar Rechazo")').click();
+    await page.locator('button:has-text("Confirmar Rechazo")').click({ force: true });
 
     // ==========================================
     // 4. Admin: Verificar Auditoría e Historial

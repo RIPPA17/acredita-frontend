@@ -192,7 +192,7 @@ export default function ColaRevisionTab({
   };
 
   return (
-    <div className="fade-in">
+    <div className="fade-in flex flex-col flex-1 min-h-0">
       <div className="page-header mb-4">
         <div>
           <h2 className="page-title">Revisión</h2>
@@ -220,7 +220,7 @@ export default function ColaRevisionTab({
       </div>
 
       {vistaRevision === 'lista' && (
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden min-h-[640px] shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] bg-white border border-cream3 rounded-xl overflow-hidden flex-1 min-h-0 shadow-sm">
         {/* LEFT PANEL */}
         <div className={`bg-[#faf9f8] border-r border-cream3 flex flex-col ${selectedId ? "hidden lg:flex" : "flex"}`}>
           <div className="p-4 border-b border-cream3">
@@ -488,7 +488,7 @@ export default function ColaRevisionTab({
                 </div>
 
                 {/* COLUMN 2: DERECHA (Visor, zoom controls, structured form / review buttons) */}
-                <div className="flex flex-col lg:overflow-hidden bg-white min-h-[500px]">
+                <div className="flex flex-col lg:overflow-hidden bg-white flex-1 min-h-0">
                   
                   {/* Visor Area */}
                   <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-center items-center bg-gray-50/50 relative">
@@ -517,9 +517,9 @@ export default function ColaRevisionTab({
                         Reset
                       </button>
                     </div>
-
+ 
                     <div 
-                      className="bg-[#eeeade] border border-dashed border-[#dedad1] rounded-xl flex flex-col items-center justify-center min-h-[300px] w-full max-w-[480px] p-6 gap-3 transition-transform shadow-sm"
+                      className="bg-[#eeeade] border border-dashed border-[#dedad1] rounded-xl flex flex-col items-center justify-center h-[240px] w-full max-w-[480px] p-6 gap-3 transition-transform shadow-sm"
                       style={{ transform: `scale(${zoom / 100})` }}
                     >
                       <FileText size={48} className="text-brown opacity-85" />
