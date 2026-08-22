@@ -388,7 +388,7 @@ export default function DashboardTab({
       {/* Unified priority queue + quick access, side by side like the prototype's
           "Revisión documental" / "Accesos rápidos" pair */}
       <div className="grid grid-cols-1 md:grid-cols-[1.3fr_0.9fr] gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
             <div>
               <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
@@ -443,7 +443,7 @@ export default function DashboardTab({
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <div className="mb-3">
             <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Accesos rápidos</h3>
             <p className="text-[11.5px] text-gray-500 mt-0.5">Tareas frecuentes del administrador.</p>
@@ -451,28 +451,28 @@ export default function DashboardTab({
           <div className="card grid grid-cols-2 gap-2.5 shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
             <button
               onClick={() => { if (primerPendiente) setSelectedDocId(primerPendiente.id); setActiveTab('cola'); }}
-              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
             >
               <b className="block text-[12px] font-semibold text-navy">Revisar documentos</b>
               <span className="block text-[11px] text-gray-500 mt-1">{revisionPendiente} pendientes</span>
             </button>
             <button
               onClick={() => setActiveTab('contratistas')}
-              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
             >
               <b className="block text-[12px] font-semibold text-navy">Ver contratistas</b>
               <span className="block text-[11px] text-gray-500 mt-1">{contratistasConIncumplimiento} con incidencias</span>
             </button>
             <button
               onClick={() => setActiveTab('acreditaciones')}
-              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
             >
               <b className="block text-[12px] font-semibold text-navy">Ver acreditaciones</b>
               <span className="block text-[11px] text-gray-500 mt-1">{totalContratistas} activos</span>
             </button>
             <button
               onClick={() => setActiveTab('auditoria')}
-              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
             >
               <b className="block text-[12px] font-semibold text-navy">Consultar auditoría</b>
               <span className="block text-[11px] text-gray-500 mt-1">Actividad reciente</span>
