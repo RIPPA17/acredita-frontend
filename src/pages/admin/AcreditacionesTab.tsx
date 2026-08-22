@@ -9,7 +9,10 @@ import {
   ArrowRight,
   User,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  Clock,
+  Briefcase
 } from 'lucide-react';
 import {
   calcularEstadoAcreditacion,
@@ -38,7 +41,6 @@ export default function AcreditacionesTab({
   // 1. States matching the mockup flow
   const [filtroProyecto, setFiltroProyecto] = useState<string>(GLOBAL_PROYECTOS[0]?.id || 'costanera');
   const [compuertaFiltro, setCompuertaFiltro] = useState<'ambas' | 'acceso' | 'pago'>('ambas');
-  const [searchTerm, setSearchTerm] = useState<string>('');
   
   // Single compuerta status filters (Todas / Bloqueadas / Habilitadas)
   const [filt, setFilt] = useState<{ acceso: string; pago: string }>({ acceso: 'todos', pago: 'todos' });
@@ -64,7 +66,6 @@ export default function AcreditacionesTab({
   useEffect(() => {
     setOpen({ acceso: null, pago: null });
     setRespFilter(null);
-    setSearchTerm('');
     setQ({ acceso: '', pago: '' });
     setFilt({ acceso: 'todos', pago: 'todos' });
   }, [filtroProyecto]);
@@ -73,7 +74,6 @@ export default function AcreditacionesTab({
     setToast(msg);
   };
 
-  // Helper variables for mockup values
   const GATEMETA = {
     acceso: {
       title: 'Acceso a faena',
@@ -102,11 +102,6 @@ export default function AcreditacionesTab({
     }
   };
 
-  const RESP = {
-    nos: { l: 'REVISIÓN INTERNA', cls: 'nos' },
-    ellos: { l: 'ESPERA CONTRATISTA', cls: 'ellos' }
-  };
-
   const getInitials = (nombre: string) => {
     return nombre
       .split(' ')
@@ -120,13 +115,6 @@ export default function AcreditacionesTab({
 
   const getWorkerInitials = (nombre: string) => {
     return nombre.replace('.', '').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  };
-
-  const getVencCls = (dias: number | null) => {
-    if (dias === null) return 'far';
-    if (dias <= 7) return 'soon';
-    if (dias <= 30) return 'mid';
-    return 'far';
   };
 
   const getVencTxt = (dias: number | null, fecha: string | null) => {
@@ -147,7 +135,7 @@ export default function AcreditacionesTab({
 
   // Generate color palette index from contractor name to preserve avatar style
   const getAvatarColor = (name: string) => {
-    const colors = ['#6b4f9e', '#2f6b7a', '#2f6b32', '#7a5a3a', '#245a8a', '#8a4a5a'];
+    const colors = ['bg-[#6b4f9e]', 'bg-[#2f6b7a]', 'bg-[#2f6b32]', 'bg-[#7a5a3a]', 'bg-[#245a8a]', 'bg-[#8a4a5a]'];
     let sum = 0;
     for (let i = 0; i < name.length; i++) sum += name.charCodeAt(i);
     return colors[sum % colors.length];
@@ -173,7 +161,7 @@ export default function AcreditacionesTab({
     const accesoReqs = accesoReqsList.map(req => {
       const doc = req.destino === 'empresa' 
         ? c.documentos?.find(d => d.proyectoId === filtroProyecto && (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || req.nombre.toLowerCase().includes(d.nombre.toLowerCase())))
-        : null; // worker docs checked in workers list
+        : null;
 
       const cumplido = doc ? esDocumentoCumplido(doc, req) : false;
       const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
@@ -312,7 +300,7 @@ export default function AcreditacionesTab({
     return {
       emp: c.nombre,
       rut: c.rut,
-      color: getAvatarColor(c.nombre),
+      colorClass: getAvatarColor(c.nombre),
       original: c,
       acceso: {
         estado: accesoEval.estado === 'bloqueado' ? 'block' : 'pass',
@@ -422,7 +410,7 @@ export default function AcreditacionesTab({
     }));
   };
 
-  // Render list items according to mockup design
+  // Render list items according to mockup design using dashboard colors
   const renderRow = (e: any, index: number, gate: 'acceso' | 'pago', isSoloMode: boolean) => {
     const g = (e as any)[gate];
     const m = GATEMETA[gate];
@@ -431,80 +419,111 @@ export default function AcreditacionesTab({
     const isOtherBlocked = e[otherGate].estado === 'block';
 
     const pct = g.reqTot > 0 ? Math.round((g.reqOk / g.reqTot) * 100) : 100;
-    const barCls = g.estado === 'block' ? (pct < 60 ? 'crit' : 'warn') : 'ok';
-    const r = g.resp ? (g.resp === 'interno' ? RESP.nos : RESP.ellos) : null;
+    const isRed = g.estado === 'block';
+    
+    // Status text details
+    const daysRestantes = g.vencDias;
+    let vencColorClass = 'text-gray-500 font-semibold';
+    if (daysRestantes !== null) {
+      if (daysRestantes <= 7) {
+        vencColorClass = 'text-[#a3312f] font-bold';
+      } else if (daysRestantes <= 30) {
+        vencColorClass = 'text-[#8a5a10] font-semibold';
+      }
+    }
 
     return (
       <React.Fragment key={`${index}_${gate}`}>
         <div 
           onClick={() => toggleRow(gate, `${index}`)}
-          className={`grow ${isOpen ? 'open' : ''} font-sans`}
+          className={`flex items-center gap-4.5 p-4.5 border-b border-cream3 cursor-pointer hover:bg-[#FAF9F5] transition-colors font-sans bg-white ${isOpen ? 'bg-[#FAF9F5]' : ''}`}
         >
-          <div className="av font-sans" style={{ backgroundColor: e.color }}>
+          <div className={`w-[34px] h-[34px] rounded-xl text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-inner ${e.colorClass}`}>
             {getInitials(e.emp)}
           </div>
-          <div className="gi min-w-0">
-            <div className="gnrow font-sans">
-              <span className="gn font-sans">{e.emp}</span>
-              {r && <span className={`rtag font-sans ${r.cls}`}>{r.l}</span>}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-[13.5px] text-navy">{e.emp}</span>
+              {g.estado === 'block' && g.resp && (
+                <span className={`text-[8.5px] font-extrabold uppercase tracking-widest rounded px-2 py-0.5 border ${
+                  g.resp === 'interno' 
+                    ? 'bg-[#eeebf7] text-[#5a4a8a] border-[#c3b9e0]' 
+                    : 'bg-[#faf0dc] text-[#8a5a10] border-[#eecd94]'
+                }`}>
+                  {g.resp === 'interno' ? 'REVISIÓN INTERNA' : 'ESPERA CONTRATISTA'}
+                </span>
+              )}
             </div>
-            <div className={`gm font-sans ${g.estado === 'block' ? 'crit' : 'ok'}`}>
+            <div className={`text-[11.5px] mt-1 font-medium ${isRed ? 'text-[#a3312f]' : 'text-gray-500'}`}>
               {g.motivo}
             </div>
           </div>
 
           {/* Progress Columns (Visible in single compuerta mode) */}
-          <div className="xcol font-sans">
-            <div className="xv font-sans">{g.reqOk}/{g.reqTot}</div>
-            <div className="xl font-sans">Requisitos</div>
-            <div className="xbar">
-              <i className={barCls} style={{ width: `${pct}%` }}></i>
+          {isSoloMode && (
+            <div className="hidden md:block shrink-0 text-center min-w-[75px] font-sans">
+              <div className="font-bold text-[12.5px] text-navy">{g.reqOk}/{g.reqTot}</div>
+              <div className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Requisitos</div>
+              <div className="w-16 h-1 bg-cream2 rounded-full overflow-hidden mx-auto mt-1">
+                <div className={`h-full ${isRed ? 'bg-[#a3312f]' : 'bg-[#2f6b32]'}`} style={{ width: `${pct}%` }}></div>
+              </div>
             </div>
-          </div>
+          )}
 
-          {gate === 'acceso' && (
-            <div className="xcol font-sans">
-              <div className="xv font-sans">{g.wOk}/{g.wTot}</div>
-              <div className="xl font-sans">Trabajadores</div>
+          {isSoloMode && gate === 'acceso' && (
+            <div className="hidden md:block shrink-0 text-center min-w-[85px] font-sans">
+              <div className="font-bold text-[12.5px] text-navy">{g.wOk}/{g.wTot}</div>
+              <div className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Trabajadores</div>
             </div>
           )}
 
           {/* Expiration Column */}
-          <div className="venc font-sans">
-            <div className={`vencd font-sans ${getVencCls(g.vencDias)}`}>
+          <div className="hidden md:block shrink-0 text-right min-w-[100px] font-sans">
+            <div className={`text-[11.5px] ${vencColorClass}`}>
               {getVencTxt(g.vencDias, g.vencFecha)}
             </div>
-            <div className="vencl font-sans">
-              {g.vencDoc ? 'Próx: ' + g.vencDoc : 'Sin vencimientos'}
+            <div className="text-[9.5px] text-gray-400 mt-0.5">
+              {g.vencDoc ? 'Próx: ' + g.vencDoc : 'Sin vencimiento'}
             </div>
           </div>
 
           {/* Overall Gate Status Label */}
-          <span className={`st font-sans ${g.estado === 'block' ? 'block' : 'pass'}`}>
+          <span className={`text-[10px] font-bold rounded-lg px-2.5 py-1 border uppercase tracking-wider text-center shrink-0 ${
+            isRed
+              ? 'bg-[#fbe8e8] text-[#932d2d] border-[#f7cfcf]'
+              : 'bg-[#e2f5e9] text-[#1c6b30] border-[#bee7ce]'
+          }`}>
             {g.estado === 'block' ? m.blockTxt : m.passTxt}
           </span>
           
-          <span className="chev font-mono">▾</span>
+          <ChevronDown 
+            size={14} 
+            className={`text-gray-400 transition-transform shrink-0 ${isOpen ? 'rotate-180 text-navy' : ''}`} 
+          />
         </div>
 
         {/* Detailed Accordion Row */}
         {isOpen && (
-          <div className="gdetail fade-in">
-            <div className="ddual">
+          <div className="bg-[#FAF9F5] border-t border-cream3 p-5 px-6 font-sans">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               {/* Requirements List */}
-              <div className="dsec font-sans">
-                <h4 className="font-sans">Requisitos de {gate === 'acceso' ? 'acceso' : 'pago'}</h4>
+              <div className="space-y-2">
+                <h4 className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-1">Requisitos de {gate === 'acceso' ? 'acceso' : 'pago'}</h4>
                 {g.reqs.length === 0 ? (
-                  <p className="text-[12px] text-gray-400 italic">No hay requisitos obligatorios.</p>
+                  <p className="text-[12px] text-gray-400 italic">No hay requisitos configurados.</p>
                 ) : (
                   g.reqs.map((x: any, idx: number) => (
-                    <div key={idx} className="req font-sans">
-                      <span className={`rd ${x.st}`}></span>
-                      <span className="rn font-sans">{x.n}</span>
-                      {x.ob === 1 && <span className="oblig font-sans">OBLIGATORIO</span>}
-                      <span className={`rs font-sans ${x.st}`}>{x.s}</span>
-                      <span className={`rvenc font-sans ${x.soon ? 'soon' : ''}`}>{x.v}</span>
+                    <div key={idx} className="flex items-center gap-3 p-2.5 px-3 rounded-lg bg-white border border-cream3 text-[12.5px] font-sans">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        x.st === 'ok' ? 'bg-[#2f6b32]' : x.st === 'crit' ? 'bg-[#a3312f]' : x.st === 'warn' ? 'bg-[#8a5a10]' : 'bg-[#245a8a]'
+                      }`}></span>
+                      <span className="flex-1 font-semibold text-navy truncate" title={x.n}>{x.n}</span>
+                      {x.ob === 1 && <span className="text-[9px] font-extrabold bg-cream text-gray-500 rounded px-1.5 py-0.5">OBLIGATORIO</span>}
+                      <span className={`text-[11px] font-bold ${
+                        x.st === 'ok' ? 'text-[#2f6b32]' : x.st === 'crit' ? 'text-[#a3312f]' : x.st === 'warn' ? 'text-[#8a5a10]' : 'text-[#245a8a]'
+                      }`}>{x.s}</span>
+                      <span className={`text-[10px] text-gray-500 font-mono w-16 text-right shrink-0 ${x.soon ? 'text-[#a3312f] font-bold' : ''}`}>{x.v}</span>
                     </div>
                   ))
                 )}
@@ -512,16 +531,20 @@ export default function AcreditacionesTab({
 
               {/* Workers List (Access Only) */}
               {gate === 'acceso' && (
-                <div className="dsec font-sans">
-                  <h4 className="font-sans">Trabajadores en este proyecto</h4>
+                <div className="space-y-2">
+                  <h4 className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-1">Trabajadores en este proyecto</h4>
                   {g.pers.length === 0 ? (
                     <p className="text-[12px] text-gray-400 italic">No hay trabajadores asignados.</p>
                   ) : (
                     g.pers.map((w: any, idx: number) => (
-                      <div key={idx} className="wrow font-sans">
-                        <span className="wav font-sans">{getWorkerInitials(w.n)}</span>
-                        <span className="rn font-sans">{w.n}</span>
-                        <span className={`rs font-sans ${w.st}`}>{w.s}</span>
+                      <div key={idx} className="flex items-center gap-2.5 p-2 px-3 rounded-lg bg-white border border-cream3 text-[12.5px] font-sans">
+                        <span className="w-6 h-6 rounded-full bg-[#2c3a49] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                          {getWorkerInitials(w.n)}
+                        </span>
+                        <span className="flex-1 font-semibold text-navy truncate" title={w.n}>{w.n}</span>
+                        <span className={`text-[11px] font-bold ${
+                          w.st === 'ok' ? 'text-[#2f6b32]' : w.st === 'crit' ? 'text-[#a3312f]' : 'text-[#8a5a10]'
+                        }`}>{w.s}</span>
                       </div>
                     ))
                   )}
@@ -531,15 +554,15 @@ export default function AcreditacionesTab({
             </div>
 
             {/* Other Gate Status Box */}
-            <div className="xhint font-sans">
+            <div className="text-[11.5px] text-gray-600 bg-cream p-2.5 rounded-lg mt-4 font-sans border border-cream3/60">
               En <b>{GATEMETA[otherGate].title}</b> esta empresa está <b>{isOtherBlocked ? GATEMETA[otherGate].blockTxt.toLowerCase() : GATEMETA[otherGate].passTxt.toLowerCase()}</b>.
             </div>
 
             {/* Action Buttons Row */}
-            <div className="dact font-sans">
+            <div className="flex gap-2 flex-wrap justify-end mt-4 border-t border-cream3/50 pt-3 bg-cream/15 -mx-6 -mb-5 p-3 px-6 rounded-b-2xl">
               <button 
                 onClick={() => setSelectedAcreditacionContratista(e.original)}
-                className="btn-sm font-sans primary shadow-sm"
+                className="px-3.5 py-1.5 border border-[#ecdcb8] bg-[#f4ecdb] hover:bg-[#b3893f] hover:text-white rounded-lg text-[12px] font-bold text-[#b3893f] cursor-pointer transition-all shadow-sm"
               >
                 Ver ficha completa
               </button>
@@ -556,14 +579,14 @@ export default function AcreditacionesTab({
                     triggerToast(`Notificación enviada a ${e.emp} para corregir requisitos`);
                   }
                 }}
-                className="btn-sm font-sans shadow-sm"
+                className="px-3.5 py-1.5 border border-cream3 bg-white hover:bg-navy hover:text-white rounded-lg text-[12px] font-bold text-navy cursor-pointer transition-all shadow-sm"
               >
                 {g.resp === 'interno' ? 'Ir a cola de revisión' : 'Notificar al contratista'}
               </button>
 
               <button 
                 onClick={() => triggerToast(`Historial de cambios consultado para ${e.emp}`)}
-                className="btn-sm font-sans shadow-sm"
+                className="px-3.5 py-1.5 border border-cream3 bg-white hover:bg-navy hover:text-white rounded-lg text-[12px] font-bold text-navy cursor-pointer transition-all shadow-sm"
               >
                 Ver historial
               </button>
@@ -591,18 +614,22 @@ export default function AcreditacionesTab({
         <>
           {blocked.length > 0 && (
             <>
-              <div className="groupbar font-sans">Bloqueadas · {blocked.length}</div>
+              <div className="padding-y-[9px] px-[18px] bg-cream2 font-sans font-bold text-[10px] uppercase tracking-wider text-gray-500 border-b border-cream3 py-2 border-t border-t-cream3">
+                Bloqueadas · {blocked.length}
+              </div>
               {blocked.map((r, i) => renderRow(r, i, gate, true))}
             </>
           )}
           {passed.length > 0 && (
             <>
-              <div className="groupbar font-sans">Habilitadas · {passed.length}</div>
+              <div className="padding-y-[9px] px-[18px] bg-cream2 font-sans font-bold text-[10px] uppercase tracking-wider text-gray-500 border-b border-cream3 py-2 border-t border-t-cream3">
+                Habilitadas · {passed.length}
+              </div>
               {passed.map((r, i) => renderRow(r, i + blocked.length, gate, true))}
             </>
           )}
           {filteredRows.length === 0 && (
-            <div className="p-10 text-center text-gray-400 font-sans text-[13px]">
+            <div className="p-10 text-center text-gray-400 font-sans text-[13px] bg-white rounded-2xl">
               Sin resultados para este filtro.
             </div>
           )}
@@ -612,38 +639,40 @@ export default function AcreditacionesTab({
       body = filteredRows.length > 0 ? (
         filteredRows.map((r, i) => renderRow(r, i, gate, false))
       ) : (
-        <div className="p-8 text-center text-gray-400 font-sans text-[12.5px]">
+        <div className="p-8 text-center text-gray-400 font-sans text-[12.5px] bg-white rounded-2xl">
           Nada pendiente con este filtro.
         </div>
       );
     }
 
     return (
-      <div className={`gate ${isSoloMode ? 'solo' : ''} font-sans`}>
+      <div className="bg-white border border-cream3 rounded-2xl overflow-hidden shadow-sm flex flex-col font-sans">
         {/* Gate Header */}
-        <div className="gate-head font-sans">
-          <div className={`gate-icon ${gate} shrink-0`}>{m.icon}</div>
-          <div className="gt min-w-0">
-            <h2 className="font-sans text-[15px] font-bold text-navy">{m.title}</h2>
-            <div className="gs font-sans text-[11.5px] text-gray-500 mt-0.5">{m.sub}</div>
+        <div className="p-[15px] px-[18px] border-b-2 border-navy flex items-center gap-3 flex-wrap bg-white">
+          <div className={`w-[38px] h-[38px] rounded-xl flex items-center justify-center shrink-0 ${
+            gate === 'acceso' ? 'bg-[#e6eff7] text-[#245a8a]' : 'bg-[#f4ecdb] text-[#b3893f]'
+          }`}>{m.icon}</div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-sans text-[15px] font-bold text-navy m-0">{m.title}</h2>
+            <div className="text-[11.5px] text-gray-500 mt-0.5 font-sans leading-none">{m.sub}</div>
           </div>
-          <div className="tally shrink-0">
-            <div className="tal block font-sans">
-              <div className="n font-mono">{nb}</div>
-              <div className="l font-sans">Bloq.</div>
+          <div className="flex gap-2 shrink-0 font-sans">
+            <div className="bg-[#fbe8e8] border border-[#eeb5b2] text-center p-1.5 px-3.5 rounded-xl min-w-[56px] font-sans">
+              <div className="text-[18px] font-bold text-[#a3312f] font-mono leading-none">{nb}</div>
+              <div className="text-[9.5px] font-bold text-[#a3312f] uppercase tracking-wider mt-1 leading-none">Bloq.</div>
             </div>
-            <div className="tal pass font-sans">
-              <div className="n font-mono">{np}</div>
-              <div className="l font-sans">Ok</div>
+            <div className="bg-[#e9f3e8] border border-[#bfdcc0] text-center p-1.5 px-3.5 rounded-xl min-w-[56px] font-sans">
+              <div className="text-[18px] font-bold text-[#2f6b32] font-mono leading-none">{np}</div>
+              <div className="text-[9.5px] font-bold text-[#2f6b32] uppercase tracking-wider mt-1 leading-none">Ok</div>
             </div>
           </div>
         </div>
 
         {/* Tools (Only in Single gate mode) */}
-        {isSoloMode && (
-          <div className="ftools font-sans">
-            <div className="search">
-              <Search size={14} className="text-navy opacity-45" />
+        {isSolo && (
+          <div className="flex flex-wrap items-center gap-3 p-3.5 px-4.5 border-b border-cream3 bg-cream2/30 font-sans">
+            <div className="relative flex-1 min-w-[190px] font-sans">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-navy opacity-45 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar empresa o RUT..."
@@ -652,25 +681,31 @@ export default function AcreditacionesTab({
                   const val = e.target.value;
                   setQ(prev => ({ ...prev, [gate]: val }));
                 }}
-                className="font-sans"
+                className="w-full pl-9 pr-3.5 py-2 border border-[#c7c3b5] rounded-xl text-[12.5px] bg-[#f1efe6] text-navy focus:outline-none focus:border-brown focus:bg-white transition-colors"
               />
             </div>
-            <div className="fchips font-sans">
+            <div className="flex gap-1.5 flex-wrap font-sans">
               <button
                 onClick={() => setFilt(prev => ({ ...prev, [gate]: 'todos' }))}
-                className={`fchip font-sans ${filt[gate] === 'todos' ? 'active' : ''}`}
+                className={`border border-[#c7c3b5] text-[11.5px] font-bold px-3 py-1.5 rounded-full cursor-pointer transition-all ${
+                  filt[gate] === 'todos' ? 'bg-navy text-white border-navy' : 'bg-[#f1efe6] text-navy hover:border-navy'
+                }`}
               >
                 Todas
               </button>
               <button
                 onClick={() => setFilt(prev => ({ ...prev, [gate]: 'block' }))}
-                className={`fchip font-sans ${filt[gate] === 'block' ? 'active' : ''}`}
+                className={`border border-[#c7c3b5] text-[11.5px] font-bold px-3 py-1.5 rounded-full cursor-pointer transition-all ${
+                  filt[gate] === 'block' ? 'bg-[#a3312f] text-white border-[#a3312f]' : 'bg-[#f1efe6] text-navy hover:border-[#a3312f]'
+                }`}
               >
                 Bloqueadas
               </button>
               <button
                 onClick={() => setFilt(prev => ({ ...prev, [gate]: 'pass' }))}
-                className={`fchip font-sans ${filt[gate] === 'pass' ? 'active' : ''}`}
+                className={`border border-[#c7c3b5] text-[11.5px] font-bold px-3 py-1.5 rounded-full cursor-pointer transition-all ${
+                  filt[gate] === 'pass' ? 'bg-[#2f6b32] text-white border-[#2f6b32]' : 'bg-[#f1efe6] text-navy hover:border-[#2f6b32]'
+                }`}
               >
                 Habilitadas
               </button>
@@ -679,7 +714,7 @@ export default function AcreditacionesTab({
         )}
 
         {/* List Body */}
-        <div className="glist">{body}</div>
+        <div className="divide-y divide-cream3 max-h-[600px] overflow-y-auto">{body}</div>
       </div>
     );
   };
@@ -687,227 +722,116 @@ export default function AcreditacionesTab({
   const isSolo = compuertaFiltro !== 'ambas';
 
   return (
-    <div className="fade-in font-sans pb-10">
+    <div className="fade-in font-sans pb-10 space-y-4">
       
-      {/* Mockup Embedded CSS overrides for pixel-perfect presentation */}
-      <style>{`
-        .topband{background:linear-gradient(135deg,#20262c 0%,#2c3a49 60%,#33424f 100%); padding:1.5rem 2rem 1.4rem; position:relative; overflow:hidden; border-radius: 16px;}
-        .topband::after{content:''; position:absolute; top:-50%; right:-4%; width:380px; height:380px; border-radius:50%; background:radial-gradient(circle,rgba(201,164,94,0.14),transparent 70%);}
-        .wrap{max-width:1320px; margin:0 auto; position:relative; z-index:1;}
-        .eyebrow{font-size:10.5px; letter-spacing:2px; text-transform:uppercase; color:#b5815f; font-weight:600; margin-bottom:5px;}
-        .ph{display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap;}
-        .ph h1{font-size:24px; font-weight:700; margin:0; color:#fff; font-family: inherit;}
-        .ph p{font-size:13px; color:#a3aeb8; margin:5px 0 0; max-width:520px; font-family: inherit; line-height: 1.4;}
-        .projsel{background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.22); color:#fff; padding:8px 12px; border-radius:10px; font-size:13.5px; font-weight:600; font-family:inherit; cursor:pointer;}
-        .projsel option{color:#20262c;}
+      {/* TOAST ALERT */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-navy text-cream border border-cream3 rounded-xl p-4 shadow-xl flex items-center gap-2.5 font-sans text-[13px] font-medium animate-slide-in">
+          <CheckCircle size={18} className="text-green-500 shrink-0" />
+          <span>{toast}</span>
+        </div>
+      )}
 
-        .persp{display:flex; background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.18); border-radius:11px; padding:3px; gap:2px; margin-top:1.1rem; width:fit-content;}
-        .persp button{border:none; background:transparent; padding:8px 16px; border-radius:8px; font-size:12.5px; font-weight:600; color:#a3aeb8; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:7px; transition: all 0.1s;}
-        .persp button:hover{color:#fff;}
-        .persp button.active{background:#fff; color:#20262c;}
-        .persp .cnt{font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:9px; background:#fbebea; color:#a3312f;}
-
-        /* responsibility split summary */
-        .respbar{display:flex; gap:12px; margin-bottom:1.1rem; margin-top:1.3rem; flex-wrap:wrap;}
-        .respcard{
-          flex:1; min-width:230px; background:#fff; border:1px solid #e2e0d3; border-radius:13px; padding:13px 16px;
-          display:flex; align-items:center; gap:12px; cursor:pointer; transition:all .12s;
-        }
-        .respcard:hover{border-color:#9A694E;}
-        .respcard.active{border-color:#20262c; box-shadow:inset 0 0 0 1.5px #20262c; background-color: #faf9f6;}
-        .respicon{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px;}
-        .respicon.nos{background:#eeebf7; color:#5a4a8a;}
-        .respicon.ellos{background:#faf0dc; color:#8a5a10;}
-        .respicon.venc{background:#e6eff7; color:#245a8a;}
-        .respt{flex:1;}
-        .respn{font-size:20px; font-weight:700; line-height:1;}
-        .respn.nos{color:#5a4a8a;} .respn.ellos{color:#8a5a10;} .respn.venc{color:#245a8a;}
-        .respl{font-size:11.5px; color:#8a8778; font-weight:600; margin-top:3px;}
-        .resps{font-size:10.5px; color:#8a8778; margin-top:1px;}
-
-        .gates{display:grid; gap:16px;}
-        .gates.both{grid-template-columns:1fr 1fr;}
-        .gates.solo{grid-template-columns:1fr;}
-
-        .gate{background:#fff; border:1px solid #e2e0d3; border-radius:16px; overflow:hidden; box-shadow:0 10px 26px rgba(20,25,30,0.06);}
-        .gate-head{padding:15px 18px; border-bottom:2px solid #20262c; display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
-        .gate-icon{width:38px; height:38px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-        .gate-icon.acceso{background:#e6eff7; color:#245a8a;}
-        .gate-icon.pago{background:#f4ecdb; color:#b3893f;}
-        .gt{flex:1; min-width:150px;}
-        .gate-head h2{font-size:15px; font-weight:600; margin:0;}
-        .gate-head .gs{font-size:11.5px; color:#8a8778; margin-top:2px;}
-        .tally{display:flex; gap:7px; flex-shrink:0;}
-        .tal{text-align:center; padding:5px 11px; border-radius:9px; min-width:52px;}
-        .tal .n{font-size:18px; font-weight:700; line-height:1;}
-        .tal .l{font-size:9.5px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; margin-top:3px;}
-        .tal.block{background:#fbebea; border:1px solid #eeb5b2;} .tal.block .n,.tal.block .l{color:#a3312f;}
-        .tal.pass{background:#e9f3e8; border:1px solid #bfdcc0;} .tal.pass .n,.tal.pass .l{color:#2f6b32;}
-
-        .ftools{display:flex; gap:10px; padding:12px 18px; border-bottom:1px solid #e2e0d3; flex-wrap:wrap; align-items:center;}
-        .search{position:relative; flex:1; min-width:190px;}
-        .search input{width:100%; padding:8px 12px 8px 32px; border:1px solid #c7c3b5; border-radius:9px; font-size:12.5px; font-family:inherit; background:#f1efe6; color:#20262c; transition: all 0.12s;}
-        .search input:focus{outline:none; border-color:#9A694E; background:#fff;}
-        .search svg{position:absolute; left:10px; top:50%; transform:translateY(-50%); opacity:.45;}
-        .fchips{display:flex; gap:5px; flex-wrap:wrap;}
-        .fchip{border:1px solid #c7c3b5; background:#f1efe6; color:#20262c; font-size:11.5px; font-weight:600; padding:6px 12px; border-radius:18px; cursor:pointer; font-family:inherit;}
-        .fchip.active{background:#20262c; color:#fff; border-color:#20262c;}
-
-        .groupbar{padding:9px 18px; background:#f7f6f0; font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#8a8778; border-bottom:1px solid #e2e0d3;}
-
-        .glist{max-height:600px; overflow-y:auto;}
-        .grow{display:flex; align-items:center; gap:11px; padding:12px 18px; border-bottom:1px solid #f7f6f0; cursor:pointer; font-family: inherit;}
-        .grow:hover,.grow.open{background:#fbfaf6;}
-        .av{width:34px; height:34px; border-radius:10px; color:#fff; font-weight:700; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-        .gi{flex:1; min-width:0;}
-        .gnrow{display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
-        .gn{font-size:13.2px; font-weight:600; color:#20262c;}
-        
-        .rtag{font-size:9px; font-weight:700; padding:2px 7px; border-radius:5px; letter-spacing:.3px; white-space:nowrap;}
-        .rtag.nos{background:#eeebf7; color:#5a4a8a; border:1px solid #c3b9e0;}
-        .rtag.ellos{background:#faf0dc; color:#8a5a10; border:1px solid #eecd94;}
-        .gm{font-size:11.5px; margin-top:3px;}
-        .gm.crit{color:#a3312f; font-weight:500;} .gm.ok{color:#8a8778;}
-
-        .xcol{display:none; flex-shrink:0; text-align:center;}
-        .solo .xcol{display:block;}
-        .xcol .xv{font-size:12.5px; font-weight:700; color:#20262c;}
-        .xcol .xl{font-size:9.5px; color:#8a8778; font-weight:600; text-transform:uppercase; letter-spacing:.3px; margin-top:2px;}
-        .xbar{width:64px; height:4px; background:#f7f6f0; border-radius:3px; overflow:hidden; margin:4px auto 0;}
-        .xbar i{display:block; height:100%; border-radius:3px;}
-        .xbar i.ok{background:#2f6b32;} .xbar i.crit{background:#a3312f;} .xbar i.warn{background:#8a5a10;}
-
-        /* next expiry column */
-        .venc{flex-shrink:0; text-align:right; min-width:96px;}
-        .vencd{font-size:11.5px; font-weight:700;}
-        .vencd.soon{color:#a3312f;} .vencd.mid{color:#8a5a10;} .vencd.far{color:#8a8778; font-weight:600;}
-        .vencl{font-size:9.5px; color:#8a8778; margin-top:1px;}
-
-        .st{font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:7px; white-space:nowrap; flex-shrink:0;}
-        .st.block{background:#fbebea; color:#a3312f; border:1px solid #eeb5b2;}
-        .st.pass{background:#e9f3e8; color:#2f6b32; border:1px solid #bfdcc0;}
-        .chev{color:#b8b4a4; font-size:10px; flex-shrink:0; transition:transform .15s;}
-        .grow.open .chev{transform:rotate(180deg);}
-
-        .gdetail{padding:2px 18px 16px; background:#fbfaf6; border-bottom:1px solid #f7f6f0;}
-        .ddual{display:grid; gap:14px;}
-        .solo .ddual{grid-template-columns:1fr 1fr;}
-        .dsec{margin-top:11px;}
-        .dsec h4{font-size:9.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#8a8778; margin:0 0 7px;}
-        
-        .req,.wrow{display:flex; align-items:center; gap:9px; padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #e2e0d3; margin-bottom:5px; font-size:12.3px;}
-        .rd{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
-        .rd.ok{background:#2f6b32;} .rd.crit{background:#a3312f;} .rd.warn{background:#8a5a10;} .rd.info{background:#245a8a;}
-        .rn{flex:1; color:#20262c;}
-        .oblig{font-size:9px; font-weight:700; background:#f1efe6; color:#767467; padding:2px 6px; border-radius:4px;}
-        .rs{font-size:11px; font-weight:600; color:#8a8778; white-space:nowrap;}
-        .rs.crit{color:#a3312f;} .rs.warn{color:#8a5a10;} .rs.ok{color:#2f6b32;} .rs.info{color:#245a8a;}
-        .rvenc{font-size:10px; color:#8a8778; white-space:nowrap; min-width:74px; text-align:right;}
-        .rvenc.soon{color:#a3312f; font-weight:600;}
-        
-        .wav{width:24px; height:24px; border-radius:50%; background:#2c3a49; color:#fff; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-        
-        .dact{display:flex; gap:7px; margin-top:11px; flex-wrap:wrap;}
-        .btn-sm{padding:7px 13px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid #c7c3b5; background:#fff; color:#20262c; transition: all 0.1s;}
-        .btn-sm:hover{background:#20262c; color:#fff; border-color:#20262c;}
-        .btn-sm.primary{background:#f4ecdb; color:#b3893f; border-color:#ecdcb8;}
-        .btn-sm.primary:hover{background:#b3893f; color:#fff;}
-        
-        .xhint{font-size:11px; color:#8a8778; padding:7px 10px; background:#f1efe6; border-radius:7px; margin-top:9px; display:none;}
-        .solo .xhint{display:block;}
-        .xhint b{color:#20262c;}
-
-        .note{max-width:1320px; margin:1.2rem auto 0; font-size:12px; color:#8a8778;}
-        
-        @media (max-width:1000px){
-          .gates.both{grid-template-columns:1fr;}
-          .solo .ddual{grid-template-columns:1fr;}
-          .venc{display:none;}
-        }
-      `}</style>
-
-      {/* TOP BAND HEADER */}
-      <div className="topband font-sans">
-        <div className="wrap">
-          <div className="ph">
-            <div>
-              <div className="eyebrow font-sans">Panel de administración</div>
-              <h1 className="font-sans font-bold">Habilitación de contratistas</h1>
-              <p className="font-sans">Quién está habilitado para entrar a faena y para cursar estado de pago, y qué falta para desbloquear a cada uno.</p>
-            </div>
-            <select 
+      {/* HEADER SECTION - Styled to match global portal header styling */}
+      <div className="relative overflow-hidden rounded-2xl p-6 px-7 text-white shadow-md bg-gradient-to-r from-navy to-[#2c3a49] border-2 border-cream3">
+        <div className="absolute top-[-50%] right-[-5%] w-[380px] h-[380px] rounded-full bg-gradient-to-tr from-brown/10 to-transparent pointer-events-none"></div>
+        <div className="relative z-10 flex flex-wrap justify-between items-start gap-4">
+          <div>
+            <div className="text-[10px] uppercase font-extrabold tracking-widest text-brown mb-1.5">Panel de administración</div>
+            <h1 className="text-[23px] font-extrabold tracking-tight text-white m-0 font-sans">Habilitación de contratistas</h1>
+            <p className="text-[12.5px] text-[#a3aeb8] m-0 mt-1.5 max-w-xl leading-relaxed font-sans">
+              Quién está habilitado para entrar a faena y para cursar estado de pago, y qué falta para desbloquear a cada uno.
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white/5 border border-white/10 p-2.5 px-4 rounded-xl font-sans shrink-0">
+            <span className="text-[11.5px] font-bold text-cream/80">Proyecto:</span>
+            <select
               value={filtroProyecto}
               onChange={(e) => setFiltroProyecto(e.target.value)}
-              className="projsel font-sans"
+              className="bg-[#2c3a49] border border-white/20 text-white font-semibold rounded-lg px-2.5 py-1 text-[13px] cursor-pointer focus:outline-none focus:border-brown hover:bg-white/10"
             >
               {GLOBAL_PROYECTOS.map(p => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
+                <option key={p.id} value={p.id} className="text-navy">{p.nombre}</option>
               ))}
             </select>
           </div>
-          <div className="persp" id="persp">
-            <button 
-              onClick={() => { setCompuertaFiltro('ambas'); setRespFilter(null); }}
-              className={compuertaFiltro === 'ambas' ? 'active' : ''}
-            >
-              Ambas compuertas
-            </button>
-            <button 
-              onClick={() => { setCompuertaFiltro('acceso'); setRespFilter(null); }}
-              className={compuertaFiltro === 'acceso' ? 'active' : ''}
-            >
-              Acceso a faena <span className="cnt font-mono">{processedCompanies.filter(pc => pc.acceso.estado === 'block').length}</span>
-            </button>
-            <button 
-              onClick={() => { setCompuertaFiltro('pago'); setRespFilter(null); }}
-              className={compuertaFiltro === 'pago' ? 'active' : ''}
-            >
-              Estado de pago <span className="cnt font-mono">{processedCompanies.filter(pc => pc.pago.estado === 'block').length}</span>
-            </button>
-          </div>
+        </div>
+
+        {/* Perspective Select Segmented Controls */}
+        <div className="relative z-10 flex bg-white/10 border border-white/15 p-0.5 rounded-xl gap-0.5 mt-5 w-fit font-sans overflow-hidden">
+          <button
+            onClick={() => { setCompuertaFiltro('ambas'); setRespFilter(null); }}
+            className={`px-4.5 py-1.5 rounded-lg text-[12.5px] font-bold border-none transition-all cursor-pointer ${
+              compuertaFiltro === 'ambas' ? 'bg-white text-navy shadow-sm' : 'text-[#a3aeb8] bg-transparent hover:text-white'
+            }`}
+          >
+            Ambas compuertas
+          </button>
+          <button
+            onClick={() => { setCompuertaFiltro('acceso'); setRespFilter(null); }}
+            className={`px-4.5 py-1.5 rounded-lg text-[12.5px] font-bold border-none transition-all cursor-pointer flex items-center gap-2 ${
+              compuertaFiltro === 'acceso' ? 'bg-white text-navy shadow-sm' : 'text-[#a3aeb8] bg-transparent hover:text-white'
+            }`}
+          >
+            Acceso a faena <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#fbe8e8] text-[#932d2d]">{processedCompanies.filter(pc => pc.acceso.estado === 'block').length}</span>
+          </button>
+          <button
+            onClick={() => { setCompuertaFiltro('pago'); setRespFilter(null); }}
+            className={`px-4.5 py-1.5 rounded-lg text-[12.5px] font-bold border-none transition-all cursor-pointer flex items-center gap-2 ${
+              compuertaFiltro === 'pago' ? 'bg-white text-navy shadow-sm' : 'text-[#a3aeb8] bg-transparent hover:text-white'
+            }`}
+          >
+            Estado de pago <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#fbe8e8] text-[#932d2d]">{processedCompanies.filter(pc => pc.pago.estado === 'block').length}</span>
+          </button>
         </div>
       </div>
 
       {/* RESPOND BAR / KPI SUMMARY CARDS */}
-      <div className="respbar" id="respbar">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4.5 mb-5 mt-5">
         <div 
           onClick={() => handleKpiClick('nos')}
-          className={`respcard ${respFilter === 'nos' ? 'active' : ''}`}
+          className={`bg-white border border-cream3 rounded-2xl p-4.5 flex items-center gap-4 cursor-pointer shadow-sm hover:border-brown transition-all relative overflow-hidden select-none ${
+            respFilter === 'nos' ? 'border-purple ring-2 ring-purple/10 bg-purple-50/5' : ''
+          }`}
         >
-          <div className="respicon nos">⏳</div>
-          <div className="respt">
-            <div className="respn nos font-mono font-bold">{countNos}</div>
-            <div className="respl font-sans font-bold">Esperando revisión interna</div>
-            <div className="resps font-sans">La acción es nuestra</div>
+          <div className="w-[36px] h-[36px] rounded-xl flex items-center justify-center shrink-0 font-sans bg-[#eeebf7] text-[#5a4a8a]">⏳</div>
+          <div className="flex-1">
+            <div className="text-[20px] font-black font-sans leading-none text-[#5a4a8a]">{countNos}</div>
+            <div className="text-[11.5px] font-bold text-gray-500 mt-1">Esperando revisión interna</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">La acción es nuestra</div>
           </div>
         </div>
 
         <div 
           onClick={() => handleKpiClick('ellos')}
-          className={`respcard ${respFilter === 'ellos' ? 'active' : ''}`}
+          className={`bg-white border border-cream3 rounded-2xl p-4.5 flex items-center gap-4 cursor-pointer shadow-sm hover:border-brown transition-all relative overflow-hidden select-none ${
+            respFilter === 'ellos' ? 'border-brown ring-2 ring-brown/10 bg-cream/10' : ''
+          }`}
         >
-          <div className="respicon ellos">↗</div>
-          <div className="respt">
-            <div className="respn ellos font-mono font-bold">{countEllos}</div>
-            <div className="respl font-sans font-bold">Esperando al contratista</div>
-            <div className="resps font-sans">Falta que carguen o corrijan</div>
+          <div className="w-[36px] h-[36px] rounded-xl flex items-center justify-center shrink-0 font-sans bg-[#faf0dc] text-[#8a5a10]">↗</div>
+          <div className="flex-1">
+            <div className="text-[20px] font-black font-sans leading-none text-[#8a5a10]">{countEllos}</div>
+            <div className="text-[11.5px] font-bold text-gray-500 mt-1">Esperando al contratista</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">Falta que carguen o corrijan</div>
           </div>
         </div>
 
         <div 
           onClick={() => handleKpiClick('venc')}
-          className={`respcard ${respFilter === 'venc' ? 'active' : ''}`}
+          className={`bg-white border border-cream3 rounded-2xl p-4.5 flex items-center gap-4 cursor-pointer shadow-sm hover:border-brown transition-all relative overflow-hidden select-none ${
+            respFilter === 'venc' ? 'border-[#245a8a] ring-2 ring-[#245a8a]/10 bg-blue-50/5' : ''
+          }`}
         >
-          <div className="respicon venc">⏱</div>
-          <div className="respt">
-            <div className="respn venc font-mono font-bold">{countVenc}</div>
-            <div className="respl font-sans font-bold">Vencen en 30 días</div>
-            <div className="resps font-sans">Bloquearán si no se renuevan</div>
+          <div className="w-[36px] h-[36px] rounded-xl flex items-center justify-center shrink-0 font-sans bg-[#e6eff7] text-[#245a8a]">⏱</div>
+          <div className="flex-1">
+            <div className="text-[20px] font-black font-sans leading-none text-[#245a8a]">{countVenc}</div>
+            <div className="text-[11.5px] font-bold text-gray-500 mt-1">Vencen en 30 días</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">Bloquearán si no se renuevan</div>
           </div>
         </div>
       </div>
 
-      {/* GATES GRID */}
+      {/* GATES LIST CONTAINER */}
       <div className={`gates ${isSolo ? 'solo' : 'both'}`}>
         {!isSolo ? (
           <>
@@ -920,7 +844,7 @@ export default function AcreditacionesTab({
       </div>
 
       {/* EXPLANATORY FOOTNOTE */}
-      <p className="note font-sans text-gray-400 text-xs mt-4">
+      <p className="text-[12px] text-gray-500 font-sans mt-4">
         {respFilter === 'nos' 
           ? 'Mostrando solo bloqueos que dependen de una revisión nuestra.' 
           : respFilter === 'ellos'
