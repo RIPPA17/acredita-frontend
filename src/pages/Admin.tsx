@@ -39,9 +39,9 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight, Briefcase, Menu
+  ChevronRight, Briefcase, Menu, ChevronLeft
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
 import { Contratista, Proyecto } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
@@ -164,6 +164,15 @@ const ALERTAS_DASHBOARD = [
 
 export default function AdminPortal() {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebar = () => {
+    const nextState = !sidebarCollapsed;
+    setSidebarCollapsed(nextState);
+    localStorage.setItem('sidebar_collapsed', String(nextState));
+  };
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
@@ -254,13 +263,57 @@ export default function AdminPortal() {
   };
   const [reglas, setReglas] = useState<Regla[]>(() => getReglas());
 
-  const [auditoriaLogs] = useState<LogEntry[]>([
-    { id: 1, accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" },
-    { id: 2, accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor", empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" },
-    { id: 3, accion: "subida", actor: "Jorge Morales", rol: "Contratista", empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo", ip: "190.16.22.4" },
-    { id: 4, accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido", empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" },
-    { id: 5, accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático", empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" }
-  ]);
+  const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>(() => {
+    const dbLogs = getAuditLogs().map(log => ({
+      ...log,
+      id: log.id,
+      accion: log.accion,
+      actor: log.actor || log.usuarioId,
+      rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
+      empresa: log.empresa || 'N/A',
+      proyecto: log.proyecto || '',
+      detalle: log.detalle || '',
+      fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
+      resultado: log.resultado || 'informativo'
+    }));
+
+    const mockLogs = [
+      { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
+      { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
+      { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
+      { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
+      { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
+    ];
+
+    return [...dbLogs, ...mockLogs];
+  });
+
+  React.useEffect(() => {
+    if (activeTab === "auditoria") {
+      const dbLogs = getAuditLogs().map(log => ({
+        ...log,
+        id: log.id,
+        accion: log.accion,
+        actor: log.actor || log.usuarioId,
+        rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
+        empresa: log.empresa || 'N/A',
+        proyecto: log.proyecto || '',
+        detalle: log.detalle || '',
+        fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
+        resultado: log.resultado || 'informativo'
+      }));
+
+      const mockLogs = [
+        { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
+        { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
+        { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
+        { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
+        { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
+      ];
+
+      setAuditoriaLogs([...dbLogs, ...mockLogs]);
+    }
+  }, [activeTab]);
   const [filtroAccionLog, setFiltroAccionLog] = useState("Todas las Acciones");
   const [filtroActorLog, setFiltroActorLog] = useState("Todos los Actores");
   const [filtroFechaLog, setFiltroFechaLog] = useState("");
@@ -644,10 +697,26 @@ export default function AdminPortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <div className="sidebar hidden md:flex">
-          <div className="sb-org">
-            <div className="sb-org-name">Panel Administración</div>
-            <div className="sb-org-sub">Acredita · Equipo revisor</div>
+        <div className={`sidebar hidden md:flex flex-col ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className={`sb-org flex ${sidebarCollapsed ? 'flex-col items-center gap-2' : 'justify-between items-center'} px-4 py-3 border-b border-white/5`}>
+            {!sidebarCollapsed && (
+              <div className="truncate flex-1">
+                <div className="sb-org-name truncate">Panel Administración</div>
+                <div className="sb-org-sub truncate">Acredita · Equipo revisor</div>
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <div className="w-8 h-8 rounded-lg bg-brown text-white flex items-center justify-center font-bold text-sm shrink-0">
+                A
+              </div>
+            )}
+            <button 
+              onClick={toggleSidebar} 
+              className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer transition-colors"
+              title={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
 
           <div className="sb-label">Principal</div>
@@ -659,6 +728,7 @@ export default function AdminPortal() {
               <button
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? "active" : ""}`}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 <item.icon size={18} className="shrink-0" />
                 <span className="flex-1">{item.label}</span>
@@ -667,15 +737,20 @@ export default function AdminPortal() {
                     {item.badge}
                   </span>
                 )}
-                {item.badgePunto && (
+                {item.badgePunto && !sidebarCollapsed && (
                   <span className="w-2 h-2 rounded-full bg-[#c03030] shrink-0" title="Requiere atención" />
                 )}
               </button>
             </React.Fragment>
           ))}
-<div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
-              <LogOut size={18} /> Cerrar sesión
+          <div className="sb-bottom">
+            <button 
+              className="sb-item w-full flex text-left mt-auto" 
+              onClick={() => { logoutUser(); navigate('/'); }}
+              title={sidebarCollapsed ? "Cerrar sesión" : undefined}
+            >
+              <LogOut size={18} className="shrink-0" /> 
+              <span className="flex-1">Cerrar sesión</span>
             </button>
           </div>
         </div>
@@ -722,7 +797,7 @@ export default function AdminPortal() {
                 </React.Fragment>
               ))}
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -820,6 +895,7 @@ export default function AdminPortal() {
               GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
+              setActiveTab={setActiveTab}
             />
           )}
 

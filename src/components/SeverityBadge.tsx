@@ -51,5 +51,10 @@ export default function SeverityBadge({
   // grey the dashboard queue uses for low-priority pending work.
   const clase = sev === 'normal' ? 'sev-ok' : `sev-${sev}`;
 
-  return <span className={`sev ${clase} ${className}`}>{texto}</span>;
+  return (
+    <span className={`sev ${clase} inline-flex items-center gap-1.5 ${className}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+      {texto}
+    </span>
+  );
 }

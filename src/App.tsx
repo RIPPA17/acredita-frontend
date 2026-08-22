@@ -14,13 +14,14 @@ import ActivacionPage from './pages/Activacion';
 import InvitacionPage from './pages/Invitacion';
 import NotFoundPage from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
 
   return (
     <BrowserRouter>
-      {(import.meta as any).env.DEV && (
+      {(import.meta as any).env.DEV && typeof navigator !== 'undefined' && !navigator.webdriver && (
         <div className="fixed bottom-4 right-4 z-[999] flex flex-col gap-2 p-3 bg-white/90 backdrop-blur-sm border border-cream3 rounded-xl shadow-xl shadow-navy/10 text-[15.4px] max-w-[220px]">
           <div className="text-[13.2px] font-semibold text-gray-500 mb-1 tracking-wider uppercase">Vistas del Sistema</div>
           <Link to="/" className="text-navy hover:text-brown transition-colors">1. Landing Page</Link>
@@ -37,9 +38,22 @@ export default function App() {
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/activacion" element={<ActivacionPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
-          <Route path="/admin/*" element={<AdminPortal />} />
-          <Route path="/mandante/*" element={<MandantePortal />} />
-          <Route path="/contratista/*" element={<ContratistaPortal />} />
+          
+          <Route path="/admin/*" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminPortal />
+            </ProtectedRoute>
+          } />
+          <Route path="/mandante/*" element={
+            <ProtectedRoute allowedRoles={['mandante']}>
+              <MandantePortal />
+            </ProtectedRoute>
+          } />
+          <Route path="/contratista/*" element={
+            <ProtectedRoute allowedRoles={['contratista']}>
+              <ContratistaPortal />
+            </ProtectedRoute>
+          } />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </ErrorBoundary>

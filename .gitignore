@@ -58,3 +58,5 @@ consolidar.cjs
 fix_brown_text.cjs
 fix_rounded.cjs
 upscale.cjs
+
+.vercel

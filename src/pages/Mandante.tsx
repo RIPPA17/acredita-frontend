@@ -6,9 +6,9 @@ import {
   Eye, Download, FileText, CheckCircle, Calendar, ArrowLeft, UserPlus, XCircle, FileCheck, Send,
   Check, X, SlidersHorizontal, Table, Clock, ShieldCheck, Zap, Sparkles, TrendingUp,
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
-  Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu
+  Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu, ChevronLeft
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion } from '../data/localStorageDb';
 import { Contratista } from '../types';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ReportesTab from './mandante/ReportesTab';
@@ -18,6 +18,15 @@ import ProyectosTab from './mandante/ProyectosTab';
 
 export default function MandantePortal() {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebar = () => {
+    const nextState = !sidebarCollapsed;
+    setSidebarCollapsed(nextState);
+    localStorage.setItem('sidebar_collapsed', String(nextState));
+  };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<'perfil' | 'equipo' | 'alertas' | 'api'>('perfil');
@@ -70,7 +79,9 @@ export default function MandantePortal() {
     setActiveTab('proyectos');
     setActiveProjectTab('contratistas');
   };
-  const [onboardingStep, setOnboardingStep] = useState<number | null>(1);
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(() => {
+    return misProyectos.length === 0 ? 1 : null;
+  });
 
   const [projectsData, setProjectsData] = useState([1, 2]);
 
@@ -87,7 +98,7 @@ export default function MandantePortal() {
   const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
-  const [formInvitacion, setFormInvitacion] = useState({correo: '', proyecto: '', mensaje: ''});
+  const [formInvitacion, setFormInvitacion] = useState({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
   const [documentRequirements, setDocumentRequirements] = useState<any[]>([]);
 
   const activeProjectId = selectedProjectId || misProyectos[0]?.id || 'costanera';
@@ -434,10 +445,26 @@ export default function MandantePortal() {
 
       <div className="layout">
         {/* SIDEBAR */}
-        <aside className="hidden md:flex sidebar flex-col">
-          <div className="sb-org">
-            <div className="sb-org-name">Constructora Andina SA</div>
-            <div className="sb-org-sub">Plan Pro · 3 proyectos activos</div>
+        <aside className={`hidden md:flex sidebar flex-col ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className={`sb-org flex ${sidebarCollapsed ? 'flex-col items-center gap-2' : 'justify-between items-center'} px-4 py-3 border-b border-white/5`}>
+            {!sidebarCollapsed && (
+              <div className="truncate flex-1">
+                <div className="sb-org-name truncate">Constructora Andina SA</div>
+                <div className="sb-org-sub truncate">Plan Pro · 3 proyectos</div>
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <div className="w-8 h-8 rounded-lg bg-brown text-white flex items-center justify-center font-bold text-sm shrink-0">
+                C
+              </div>
+            )}
+            <button 
+              onClick={toggleSidebar} 
+              className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer transition-colors animate-fade-in"
+              title={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
           
           <div className="sb-label">Principal</div>
@@ -447,6 +474,7 @@ export default function MandantePortal() {
               <button 
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 <item.icon size={18} className="shrink-0" /> 
                 <span className="flex-1">{item.label}</span>
@@ -455,8 +483,13 @@ export default function MandantePortal() {
           ))}
           
           <div className="sb-bottom">
-            <button className="sb-item w-full flex text-left mt-auto" onClick={() => navigate('/')}>
-              <LogOut size={18} /> Cerrar sesión
+            <button 
+              className="sb-item w-full flex text-left mt-auto" 
+              onClick={() => { logoutUser(); navigate('/'); }}
+              title={sidebarCollapsed ? "Cerrar sesión" : undefined}
+            >
+              <LogOut size={18} className="shrink-0" /> 
+              <span className="flex-1">Cerrar sesión</span>
             </button>
           </div>
         </aside>
@@ -494,7 +527,7 @@ export default function MandantePortal() {
               ))}
               
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -608,36 +641,28 @@ export default function MandantePortal() {
             <div className="p-6">
               <form onSubmit={(e) => {
                 e.preventDefault();
-                setShowInvitarModal(false);
-                const matchedProject = allProyectos.find(p => p.nombre === formInvitacion.proyecto) || allProyectos[0];
                 
-                const targetCId = 'tecnicosur';
-                const targetCName = 'Técnico Sur SpA';
-                const targetCRut = '76.452.193-4';
-                
-                const newInv = {
-                  id: 'inv_' + Date.now(),
-                  contratistaId: targetCId,
-                  contratistaNombre: targetCName,
-                  contratistaRut: targetCRut,
-                  proyectoId: matchedProject.id,
-                  proyectoNombre: matchedProject.nombre,
-                  mandanteId: 'andina',
-                  mandanteNombre: 'Constructora Andina SA',
-                  estado: 'pendiente' as const,
-                  mensaje: formInvitacion.mensaje,
-                  fecha: new Date().toLocaleDateString('es-CL')
-                };
+                const res = crearInvitacion(
+                  mandanteLogueado.id,
+                  formInvitacion.proyectoId,
+                  formInvitacion.contratistaId,
+                  formInvitacion.correo,
+                  formInvitacion.mensaje
+                );
 
-                const invs = getInvitaciones();
-                invs.push(newInv);
-                saveInvitaciones(invs);
+                if (!res.success) {
+                  showToast(res.error || 'Error al enviar invitación', 'error');
+                  return;
+                }
+
+                setShowInvitarModal(false);
+                const newInv = res.invitacion!;
 
                 // Add placeholder/pending row to the local state list for display
                 setContractorsData(prev => [...prev, {
                   id: newInv.id,
-                  name: targetCName,
-                  rut: targetCRut,
+                  name: newInv.contratistaNombre,
+                  rut: newInv.contratistaRut,
                   reqs: { contrato: true, odi: true, mutual: true } as any,
                   status: { contrato: 'pending', odi: 'pending', mutual: 'pending' } as any,
                   isPending: true,
@@ -645,8 +670,30 @@ export default function MandantePortal() {
                 } as any]);
 
                 showToast(`Invitación enviada a ${formInvitacion.correo}`);
-                setFormInvitacion({correo: '', proyecto: '', mensaje: ''});
+                setFormInvitacion({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
               }} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contratista a invitar</label>
+                  <select 
+                    value={formInvitacion.contratistaId}
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      setFormInvitacion({
+                        ...formInvitacion,
+                        contratistaId: cid,
+                        correo: cid === 'tecnicosur' ? 'tecnico@tecnicosur.cl' : cid === 'servicios-norte' ? 'norte@serviciosnorte.cl' : ''
+                      });
+                    }}
+                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                    required
+                  >
+                    <option value="">Selecciona un contratista...</option>
+                    {allContratistas.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Correo del contratista</label>
                   <input 
@@ -658,20 +705,22 @@ export default function MandantePortal() {
                     required 
                   />
                 </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Proyecto al que se invita</label>
                   <select 
-                    value={formInvitacion.proyecto}
-                    onChange={(e) => setFormInvitacion({...formInvitacion, proyecto: e.target.value})}
+                    value={formInvitacion.proyectoId}
+                    onChange={(e) => setFormInvitacion({...formInvitacion, proyectoId: e.target.value})}
                     className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
                     required
                   >
                     <option value="">Selecciona un proyecto...</option>
-                    <option value="Hospital Regional Centro">Hospital Regional Centro</option>
-                    <option value="Torre Mackenna">Torre Mackenna</option>
-                    <option value="Ampliación Planta Solar">Ampliación Planta Solar</option>
+                    {misProyectos.map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Mensaje opcional</label>
                   <textarea 

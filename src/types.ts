@@ -66,7 +66,7 @@ export interface Requisito {
   obligatorio: boolean;
   frecuencia: string;
   alertaDias: number;
-  criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia';
+  criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' | 'bloquea_ambas';
   proyectoId: string;
   activo?: boolean;
 }
@@ -92,5 +92,7 @@ export interface Invitacion {
   mandanteNombre: string;
   estado: 'pendiente' | 'aceptada' | 'rechazada';
   mensaje?: string;
+  email?: string;
   fecha: string;
+  fechaCreacion?: string;
 }
