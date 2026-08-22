@@ -894,6 +894,7 @@ export default function AdminPortal() {
               GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
+              setActiveTab={setActiveTab}
             />
           )}
 

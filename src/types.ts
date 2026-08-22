@@ -66,7 +66,7 @@ export interface Requisito {
   obligatorio: boolean;
   frecuencia: string;
   alertaDias: number;
-  criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia';
+  criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' | 'bloquea_ambas';
   proyectoId: string;
   activo?: boolean;
 }

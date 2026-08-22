@@ -222,19 +222,26 @@ export default function FichaAcreditacion({
     });
   }
 
-  // Habilitaciones se derivan exclusivamente del estado definitivo de acreditación
-  const isAprobado = statusText === 'Acreditado';
-  accesoBloqueado = !isAprobado;
-  pagoBloqueado = !isAprobado;
-
+  // Habilitaciones se derivan de forma independiente para la empresa, y del estado del trabajador para este
   const motivoTexto = statusText === 'Vencido/Bloqueado'
     ? (motivosBloqueo[0] || 'Documento vencido o rechazado')
     : statusText === 'En proceso'
       ? (pendientes[0] || 'Acreditación en proceso')
       : '';
 
-  motivoAccesoStr = !isAprobado ? motivoTexto : '';
-  motivoPagoStr = !isAprobado ? motivoTexto : '';
+  if (currentTipo === 'trabajador') {
+    const isAprobado = statusText === 'Acreditado';
+    accesoBloqueado = !isAprobado;
+    pagoBloqueado = false;
+    motivoAccesoStr = !isAprobado ? motivoTexto : '';
+    motivoPagoStr = '';
+  } else {
+    const accPago = calcularAccesoPago(contratista, proyectoId);
+    accesoBloqueado = accPago.accesoBloqueado;
+    pagoBloqueado = accPago.pagoBloqueado;
+    motivoAccesoStr = accPago.accesoBloqueado ? (accPago.motivoAcceso || motivoTexto) : '';
+    motivoPagoStr = accPago.pagoBloqueado ? (accPago.motivoPago || motivoTexto) : '';
+  }
 
   // Filtrar trabajadores asignados al proyecto para mostrarlos si es Empresa
   const projectWorkersList = (contratista.trabajadores || []).filter(w => 
@@ -424,21 +431,21 @@ export default function FichaAcreditacion({
           <div className="flex flex-col gap-3">
             <h4 className="text-[12px] font-bold uppercase tracking-wider text-gray-400">Estado operativo</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px] font-medium">
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${isAprobado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                 <span>Asignación</span>
-                <span className="font-bold text-[14px]">{isAprobado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${isAprobado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
                 <span>Ingreso</span>
-                <span className="font-bold text-[14px]">{isAprobado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${isAprobado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
                 <span>Trabajo</span>
-                <span className="font-bold text-[14px]">{isAprobado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${isAprobado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!pagoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
                 <span>Pago</span>
-                <span className="font-bold text-[14px]">{isAprobado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{!pagoBloqueado ? '✓' : '✕'}</span>
               </div>
             </div>
           </div>

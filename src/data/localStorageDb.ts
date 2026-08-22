@@ -22,7 +22,7 @@ export function initDb() {
           criticidad = 'bloquea_acceso';
         } else if (plantilla.id === 'mutual') {
           alertaDias = 7;
-          criticidad = 'bloquea_pago';
+          criticidad = 'bloquea_acceso';
         } else if (plantilla.id === 'antecedentes') {
           alertaDias = 15;
           criticidad = 'advertencia';
@@ -366,7 +366,7 @@ export function esReglaBloqueante(docNombre: string, proyectoId?: string): boole
      r.nombre.toLowerCase().includes(docNombre.toLowerCase()))
   );
   if (!rule) return false;
-  return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago';
+  return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago' || rule.criticidad === 'bloquea_ambas';
 }
 
 export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito): boolean {
@@ -618,53 +618,209 @@ export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
       const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
       const subMotivo = !doc ? 'No cargado' : isVencido ? 'Vencido' : doc.estado === 'rechazado' ? 'Rechazado' : 'Pendiente';
       
-      if (req.criticidad === 'bloquea_acceso') {
+      if (req.criticidad === 'bloquea_acceso' || req.criticidad === 'bloquea_ambas') {
         accesoBloqueado = true;
         motivosAcceso.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
       }
-      if (req.criticidad === 'bloquea_pago') {
+      if (req.criticidad === 'bloquea_pago' || req.criticidad === 'bloquea_ambas') {
         pagoBloqueado = true;
         motivosPago.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
       }
     }
   });
 
-  // 2. Evaluar requisitos de trabajadores
+  // 2. Evaluar requisitos de trabajadores (solo para reporte de motivos del acceso, sin bloquear a la empresa)
   const projectWorkers = trabajadores.filter(w => 
     esTrabajadorAsignado(w, proyectoId, proyectos)
   );
 
   projectWorkers.forEach(w => {
-    reqs.filter(r => r.destino === 'trabajador').forEach(req => {
-      const doc = (w.documentos || []).find(d => 
-        d.proyectoId === proyectoId &&
-        (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-         req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-      );
-
-      const cumplido = esDocumentoCumplido(doc, req);
-
-      if (req.obligatorio && !cumplido) {
-        const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
-        const subMotivo = !doc ? 'No cargado' : isVencido ? 'Vencido' : doc.estado === 'rechazado' ? 'Rechazado' : 'Pendiente';
-
-        if (req.criticidad === 'bloquea_acceso') {
-          accesoBloqueado = true;
-          motivosAcceso.push(`Trabajador "${w.nombre}" - Requisito "${req.nombre}" ${subMotivo}`);
+    const wState = calcularEstadoTrabajador(w, proyectoId);
+    if (wState === 'rechazado') {
+      const wkReqs = reqs.filter(r => r.destino === 'trabajador');
+      wkReqs.forEach(req => {
+        const doc = (w.documentos || []).find(d => 
+          d.proyectoId === proyectoId &&
+          (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+           req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+        );
+        const cumplido = esDocumentoCumplido(doc, req);
+        if (req.obligatorio && !cumplido) {
+          const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
+          const subMotivo = !doc ? 'No cargado' : isVencido ? 'Vencido' : doc.estado === 'rechazado' ? 'Rechazado' : 'Pendiente';
+          motivosAcceso.push(`Trabajador "${w.nombre}" inhabilitado: Requisito "${req.nombre}" ${subMotivo}`);
         }
-        if (req.criticidad === 'bloquea_pago') {
-          pagoBloqueado = true;
-          motivosPago.push(`Trabajador "${w.nombre}" - Requisito "${req.nombre}" ${subMotivo}`);
-        }
-      }
-    });
+      });
+    }
   });
 
   return {
     accesoBloqueado,
-    motivoAcceso: accesoBloqueado ? motivosAcceso.join('; ') : undefined,
+    motivoAcceso: motivosAcceso.length > 0 ? motivosAcceso.join('; ') : undefined,
     pagoBloqueado,
-    motivoPago: pagoBloqueado ? motivosPago.join('; ') : undefined
+    motivoPago: motivosPago.length > 0 ? motivosPago.join('; ') : undefined
+  };
+}
+
+export interface HabilitacionResultado {
+  estado: 'bloqueado' | 'habilitado';
+  motivo?: string;
+  responsable?: 'interno' | 'contratista';
+  proximoVencimiento?: {
+    documentoNombre: string;
+    diasRestantes: number;
+    fechaVencimiento: string;
+  };
+}
+
+export function evaluarHabilitacionCompuerta(
+  c: Contratista,
+  proyectoId: string,
+  compuerta: 'acceso' | 'pago'
+): HabilitacionResultado {
+  const reqs = getRequisitos().filter(
+    r => r.proyectoId === proyectoId && r.activo !== false
+  );
+  const documentos = c.documentos || [];
+  const trabajadores = c.trabajadores || [];
+  const proyectos = getProyectos();
+
+  let estado: 'bloqueado' | 'habilitado' = 'habilitado';
+  const motivos: string[] = [];
+  let responsable: 'interno' | 'contratista' | undefined = undefined;
+
+  // Filter requirements matching the gate
+  const gateReqs = reqs.filter(r => {
+    if (compuerta === 'acceso') {
+      return r.criticidad === 'bloquea_acceso' || r.criticidad === 'bloquea_ambas';
+    } else {
+      return r.criticidad === 'bloquea_pago' || r.criticidad === 'bloquea_ambas';
+    }
+  });
+
+  // Evaluate company requirements
+  gateReqs.filter(r => r.destino === 'empresa').forEach(req => {
+    const doc = documentos.find(d => 
+      d.proyectoId === proyectoId &&
+      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+    );
+
+    const cumplido = esDocumentoCumplido(doc, req);
+
+    if (req.obligatorio && !cumplido) {
+      estado = 'bloqueado';
+      const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
+      const subMotivo = !doc ? 'no cargado' : isVencido ? 'vencido' : doc.estado === 'rechazado' ? 'rechazado' : 'pendiente de revisión';
+      motivos.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
+
+      // Set responsibility
+      if (doc && doc.estado === 'revision') {
+        if (responsable !== 'contratista') {
+          responsable = 'interno';
+        }
+      } else {
+        responsable = 'contratista';
+      }
+    }
+  });
+
+  // For access, if there are workers, evaluate them for the motivo/responsibility, but DO NOT block the company!
+  if (compuerta === 'acceso') {
+    const projectWorkers = trabajadores.filter(w => 
+      esTrabajadorAsignado(w, proyectoId, proyectos)
+    );
+
+    projectWorkers.forEach(w => {
+      const wState = calcularEstadoTrabajador(w, proyectoId);
+      if (wState === 'rechazado') {
+        const wkReqs = reqs.filter(r => r.destino === 'trabajador');
+        wkReqs.forEach(req => {
+          const doc = (w.documentos || []).find(d => 
+            d.proyectoId === proyectoId &&
+            (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
+             req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+          );
+          const cumplido = esDocumentoCumplido(doc, req);
+          if (req.obligatorio && !cumplido) {
+            const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
+            const subMotivo = !doc ? 'no cargado' : isVencido ? 'vencido' : doc.estado === 'rechazado' ? 'rechazado' : 'pendiente de revisión';
+            motivos.push(`Trabajador "${w.nombre}" inhabilitado: "${req.nombre}" ${subMotivo}`);
+            
+            // Set responsibility
+            if (doc && doc.estado === 'revision') {
+              if (responsable !== 'contratista') {
+                responsable = 'interno';
+              }
+            } else {
+              responsable = 'contratista';
+            }
+          }
+        });
+      }
+    });
+  }
+
+  // Find next expiration among APPROVED documents matching the gate's requirements
+  let proximoVencimiento: HabilitacionResultado['proximoVencimiento'] = undefined;
+  let minDias = Infinity;
+
+  // Company docs
+  documentos
+    .filter(d => d.proyectoId === proyectoId && d.estado === 'aprobado')
+    .forEach(d => {
+      const req = gateReqs.find(r => 
+        r.destino === 'empresa' &&
+        (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
+         r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      );
+      if (req) {
+        const dias = obtenerDiasRestantes(d.vencimiento);
+        if (dias < minDias) {
+          minDias = dias;
+          proximoVencimiento = {
+            documentoNombre: d.nombre,
+            diasRestantes: dias,
+            fechaVencimiento: d.vencimiento
+          };
+        }
+      }
+    });
+
+  // Workers docs (only for access gate)
+  if (compuerta === 'acceso') {
+    const projectWorkers = trabajadores.filter(w => 
+      esTrabajadorAsignado(w, proyectoId, proyectos)
+    );
+    projectWorkers.forEach(w => {
+      (w.documentos || [])
+        .filter(d => d.proyectoId === proyectoId && d.estado === 'aprobado')
+        .forEach(d => {
+          const req = gateReqs.find(r => 
+            r.destino === 'trabajador' &&
+            (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
+             r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+          );
+          if (req) {
+            const dias = obtenerDiasRestantes(d.vencimiento);
+            if (dias < minDias) {
+              minDias = dias;
+              proximoVencimiento = {
+                documentoNombre: `${w.nombre}: ${d.nombre}`,
+                diasRestantes: dias,
+                fechaVencimiento: d.vencimiento
+              };
+            }
+          }
+        });
+    });
+  }
+
+  return {
+    estado,
+    motivo: motivos.length > 0 ? motivos.join('; ') : undefined,
+    responsable,
+    proximoVencimiento
   };
 }
 
