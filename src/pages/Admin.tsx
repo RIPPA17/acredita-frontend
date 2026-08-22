@@ -820,6 +820,7 @@ export default function AdminPortal() {
               setFiltroActividad={setFiltroActividad}
               ACTIVIDAD_RECIENTE={ACTIVIDAD_RECIENTE}
               setActividadSeleccionada={setActividadSeleccionada}
+              setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
             />
           )}
 
