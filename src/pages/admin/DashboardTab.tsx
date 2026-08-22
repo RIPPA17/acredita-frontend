@@ -298,7 +298,7 @@ export default function DashboardTab({
       </section>
 
       {/* Hero: what needs attention, and overall accreditation health */}
-      <section className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
+      <section className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-4">
         <div className="card p-0 overflow-hidden flex flex-col shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="flex justify-between items-start px-5 py-4 border-b border-cream3">
             <div>
@@ -387,7 +387,7 @@ export default function DashboardTab({
 
       {/* Unified priority queue + quick access, side by side like the prototype's
           "Revisión documental" / "Accesos rápidos" pair */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.9fr] gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-[1.3fr_0.9fr] gap-4">
         <div>
           <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
             <div>
