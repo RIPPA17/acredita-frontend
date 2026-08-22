@@ -274,5 +274,24 @@
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
-}
 
+  /* ---- Expandable list (admin > Mandantes) ----
+     Replaces the 3-level drill-down: everything stays on one page and each
+     row opens in place, so nothing is lost from view when drilling in. */
+  .acc-card { background: white; border: 1px solid var(--cream3); border-radius: var(--rl); overflow: hidden; }
+  .acc-head { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; background: transparent; border: none; font-family: inherit; text-align: left; cursor: pointer; }
+  .acc-head:hover { background: #faf9f2; }
+  .acc-chev { color: #9a9484; flex-shrink: 0; transition: transform 0.15s; }
+  .acc-chev.open { transform: rotate(90deg); }
+  .acc-avatar { width: 38px; height: 38px; border-radius: 10px; background: var(--navy); color: var(--cream); display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; flex-shrink: 0; }
+  .acc-name { font-size: 14.5px; font-weight: 600; color: var(--navy); }
+  .acc-rut { font-size: 11.5px; color: #9a9484; margin-top: 1px; }
+  .acc-meta { font-size: 12px; color: #7a7a6a; }
+  .acc-meta b { color: var(--navy); font-weight: 600; }
+  .acc-body { border-top: 1px solid var(--cream2); padding: 2px 16px 14px; }
+  .acc-pname { font-size: 12.5px; font-weight: 600; color: var(--navy2); text-transform: uppercase; letter-spacing: 0.3px; }
+  .acc-pcount { font-size: 11px; color: #9a9484; }
+  .acc-erow { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r); background: var(--cream2); cursor: pointer; border: 1px solid transparent; transition: border-color 0.12s; }
+  .acc-erow:hover { border-color: var(--cream3); }
+  .acc-eavatar { width: 30px; height: 30px; border-radius: 50%; background: var(--navy2); color: var(--cream); display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; flex-shrink: 0; }
+}

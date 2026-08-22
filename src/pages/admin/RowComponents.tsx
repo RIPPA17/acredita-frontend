@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FileText, Eye, ChevronDown, Download } from "lucide-react";
+import { FileText, Eye, ChevronDown } from "lucide-react";
 import { GLOBAL_CONTRATISTAS } from "./globalData";
 
 export const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void; showToast?: (msg: string) => void }> = ({ doc, onRevisar, showToast }) => {
@@ -17,38 +17,34 @@ export const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void; 
     pendiente: "Pendiente",
   };
   return (
-    <div className="border border-cream3 rounded-xl overflow-hidden">
+    <div className="border-b border-cream2 last:border-0">
       <div
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-cream2 transition-colors"
+        className="flex items-center gap-2.5 py-2.5 cursor-pointer hover:bg-cream2 transition-colors -mx-1 px-1 rounded"
       >
-        <div className="flex items-center gap-2.5">
-          <FileText size={16} className="text-gray-400 shrink-0" />
-          <span className="text-[13.5px] font-medium text-navy">
-            {doc.nombre}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`badge text-[11px] ${badgeMap[doc.estado]}`}>
-            {labelMap[doc.estado]}
-          </span>
-          <button
-            onClick={(ev) => {
-              ev.stopPropagation();
-              onRevisar?.(doc);
-            }}
-            className="btn btn-ghost btn-sm shrink-0"
-          >
-            <Eye size={13} className="mr-1" /> Revisar
-          </button>
-          <ChevronDown
-            size={14}
-            className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </div>
+        <FileText size={15} className="text-gray-400 shrink-0" />
+        <span className="text-[13.5px] font-medium text-navy flex-1 min-w-0 truncate">
+          {doc.nombre}
+        </span>
+        <span className={`badge text-[11px] shrink-0 ${badgeMap[doc.estado]}`}>
+          {labelMap[doc.estado]}
+        </span>
+        <button
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onRevisar?.(doc);
+          }}
+          className="text-brown text-[12.5px] font-semibold hover:underline shrink-0"
+        >
+          Revisar
+        </button>
+        <ChevronDown
+          size={14}
+          className={`text-gray-400 transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+        />
       </div>
       {open && (
-        <div className="px-4 pb-3 pt-1 bg-cream2 border-t border-cream3 text-[12.5px] text-gray-500 flex flex-col gap-1.5">
+        <div className="pb-3 pl-[26px] pr-1 text-[12.5px] text-gray-500 flex flex-col gap-1">
           <p>
             <span className="font-medium text-navy">Subido:</span> {doc.subido}
           </p>
@@ -60,12 +56,12 @@ export const DocumentoRow: React.FC<{ doc: any; onRevisar?: (doc: any) => void; 
               <span className="font-medium">Observación:</span> {doc.obs}
             </p>
           )}
-          <div className="flex gap-2 mt-2">
-            <button className="btn btn-ghost btn-sm text-[12px]" onClick={() => showToast?.('Abriendo visor de documento...')}>
-              <Eye size={12} /> Ver documento
+          <div className="flex gap-3.5 mt-1.5">
+            <button className="text-brown font-semibold text-[12px] hover:underline" onClick={() => showToast?.('Abriendo visor de documento...')}>
+              Ver documento
             </button>
-            <button className="btn btn-ghost btn-sm text-[12px]" onClick={() => showToast?.('Iniciando descarga del documento...')}>
-              <Download size={12} /> Descargar
+            <button className="text-brown font-semibold text-[12px] hover:underline" onClick={() => showToast?.('Iniciando descarga del documento...')}>
+              Descargar
             </button>
           </div>
         </div>

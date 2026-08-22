@@ -138,7 +138,16 @@ export default function ColaRevisionTab({
       return a.emp.localeCompare(b.emp);
     });
 
-  const current = filtered.find((d) => d.id === selectedId);
+  // Falls back to the first filtered document whenever selectedId is null
+  // (first load) or points at something no longer in view (a filter change
+  // dropped it), so the desktop panel is never left showing "Cola al día"
+  // while the list still has pending items. This is a pure fallback for
+  // *what to display* — it never writes back to selectedId, which is the
+  // real state driving list-vs-detail visibility on mobile ("Volver" clears
+  // it to null to show the list again). Reselecting it here previously
+  // fought "Volver": as soon as it was cleared, this recomputed and picked
+  // a document again, making the back button on mobile a no-op.
+  const current = filtered.find((d) => d.id === selectedId) ?? filtered[0];
 
   const selectDoc = (id: number) => {
     setSelectedId(id);
@@ -351,11 +360,28 @@ export default function ColaRevisionTab({
         <div className={`flex flex-col bg-white overflow-hidden relative ${selectedId ? "flex" : "hidden md:flex"} h-full min-h-0`}>
           {!current ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 px-8">
-              <CheckCircle size={44} className="text-[#639922] opacity-80" />
-              <p className="text-[13.5px] text-navy font-bold text-center">
-                Cola al día — no hay documentos pendientes
-              </p>
-              {reviewed > 0 && (
+              {docs.length === 0 ? (
+                <>
+                  <CheckCircle size={44} className="text-[#639922] opacity-80" />
+                  <p className="text-[13.5px] text-navy font-bold text-center">
+                    Cola al día — no hay documentos pendientes
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Search size={40} className="opacity-30 shrink-0" />
+                  <p className="text-[13.5px] text-navy font-bold text-center">
+                    Ningún documento coincide con este filtro
+                  </p>
+                  <button
+                    onClick={() => { setFilter("all"); setFiltroProyecto("todos"); }}
+                    className="text-brown text-[12.5px] hover:underline font-semibold cursor-pointer border-none bg-transparent"
+                  >
+                    Limpiar filtros
+                  </button>
+                </>
+              )}
+              {docs.length === 0 && reviewed > 0 && (
                 <div className="bg-[#faf9f8] border border-cream3 rounded-xl px-5 py-4 mt-2 text-center shadow-sm">
                   <p className="text-[12.5px] text-gray-600">
                     Revisaste <strong className="text-navy">{reviewed}</strong> documento{reviewed !== 1 ? 's' : ''} hoy
