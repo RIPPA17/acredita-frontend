@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowRight, ShieldAlert, Clock } from 'lucide-react';
-import { getAlertasVigencia } from '../../data/localStorageDb';
+import { ArrowRight, ShieldAlert, Clock, Building2, Users, HardHat, ClipboardList } from 'lucide-react';
+import { getAlertasVigencia, getInvitaciones, calcularEstadoAcreditacion } from '../../data/localStorageDb';
 import { Contratista, Proyecto } from '../../types';
 import { buildColaDocs } from './colaUtils';
+import { GLOBAL_MANDANTES } from './globalData';
 
 /**
  * One severity taxonomy for the whole dashboard. Everything that used to be
@@ -39,6 +40,7 @@ export default function DashboardTab({
   setFiltroActividad,
   ACTIVIDAD_RECIENTE,
   setActividadSeleccionada,
+  showToast,
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
@@ -50,6 +52,7 @@ export default function DashboardTab({
   setFiltroActividad: (v: string) => void;
   ACTIVIDAD_RECIENTE: any[];
   setActividadSeleccionada: (v: any) => void;
+  showToast?: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [filtroCola, setFiltroCola] = useState<'todos' | Severidad>('todos');
 
@@ -146,6 +149,64 @@ export default function DashboardTab({
 
   const primerPendiente = dynamicCola[0];
 
+  /* --- Top-of-page KPIs and "Atención requerida" / "Salud de acreditación",
+     adapted from the uploaded prototype but wired to real data instead of the
+     mock counts it shipped with. --- */
+  const totalMandantes = GLOBAL_MANDANTES.length;
+  const totalProyectos = GLOBAL_PROYECTOS.length;
+  const totalContratistas = GLOBAL_CONTRATISTAS.length;
+  const contratistasConIncumplimiento = GLOBAL_CONTRATISTAS.filter(c =>
+    c.documentos.some(d => d.estado === 'rechazado' || d.estado === 'por_vencer')
+  ).length;
+  const totalTrabajadores = GLOBAL_CONTRATISTAS.reduce((sum, c) => sum + (c.trabajadores?.length || 0), 0);
+  const trabajadoresVigentes = GLOBAL_CONTRATISTAS.reduce(
+    (sum, c) => sum + (c.trabajadores?.filter(t => t.estado === 'aprobado').length || 0), 0
+  );
+  const pctVigente = totalTrabajadores > 0 ? Math.round((trabajadoresVigentes / totalTrabajadores) * 100) : 0;
+  const revisionPendiente = dynamicCola.length;
+  const prioridadAlta = dynamicCola.filter(d => d.prio === 'Alta').length;
+
+  const contratistasBloqueados = GLOBAL_CONTRATISTAS.filter(
+    c => calcularEstadoAcreditacion(c) === 'Vencido/Bloqueado'
+  ).length;
+  const contratistasAprobados = GLOBAL_CONTRATISTAS.filter(
+    c => calcularEstadoAcreditacion(c) === 'Aprobado'
+  ).length;
+  const contratistasEnProceso = totalContratistas - contratistasAprobados - contratistasBloqueados;
+  const pctAcreditados = totalContratistas > 0 ? Math.round((contratistasAprobados / totalContratistas) * 100) : 0;
+
+  const documentosRechazados = GLOBAL_CONTRATISTAS.reduce(
+    (sum, c) => sum + c.documentos.filter(d => d.estado === 'rechazado').length, 0
+  );
+  const invitacionesPendientes = getInvitaciones().filter(i => i.estado === 'pendiente').length;
+
+  const issuesAtencion = [
+    contratistasBloqueados > 0 && {
+      key: 'bloq', color: '#a32d2d',
+      titulo: `${contratistasBloqueados} contratistas bloqueados`,
+      detalle: 'Podrían afectar acceso o continuidad operacional.',
+      accion: 'Gestionar', onClick: () => setActiveTab('contratistas'),
+    },
+    documentosRechazados > 0 && {
+      key: 'rech', color: '#a32d2d',
+      titulo: `${documentosRechazados} documentos rechazados`,
+      detalle: 'Esperan una nueva carga o corrección.',
+      accion: 'Revisar', onClick: () => setActiveTab('acreditaciones'),
+    },
+    alertas.length > 0 && {
+      key: 'venc', color: '#b58600',
+      titulo: `${alertas.length} documentos por vencer o vencidos`,
+      detalle: 'Requieren seguimiento de vigencia en los próximos 30 días.',
+      accion: 'Ver', onClick: () => setActiveTab('acreditaciones'),
+    },
+    invitacionesPendientes > 0 && {
+      key: 'inv', color: 'var(--brown)',
+      titulo: `${invitacionesPendientes} invitaciones pendientes`,
+      detalle: 'Contratistas todavía no han aceptado la invitación.',
+      accion: 'Gestionar', onClick: () => setActiveTab('mandantes'),
+    },
+  ].filter(Boolean) as Array<{ key: string; color: string; titulo: string; detalle: string; accion: string; onClick: () => void }>;
+
   /* Admin.tsx passes activity items shaped { empresa, documento, fecha, estado,
      detalle } with estado capitalised, so compare case-insensitively — the old
      lowercase comparison silently matched nothing. */
@@ -165,46 +226,138 @@ export default function DashboardTab({
 
   return (
     <div className="fade-in space-y-6">
-      <div className="page-header">
+      <div className="page-header items-start flex-wrap gap-3">
         <div>
-          <h2 className="page-title text-navy font-bold text-[22px]">Centro de operaciones</h2>
-          <p className="page-sub text-gray-500 text-[13.5px]">
-            Monitoreo y control de acreditaciones
+          <div className="text-[11.5px] text-gray-500 mb-1 uppercase tracking-wide">Inicio · Administración</div>
+          <h2 className="page-title text-navy font-bold text-[26px]">Resumen de Acredita</h2>
+          <p className="page-sub text-gray-500 text-[13.5px] mt-1">
+            Estado general de mandantes, contratistas, acreditaciones y documentación.
           </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => showToast?.('Generando reporte de cumplimiento...', 'success')}
+            className="btn btn-ghost"
+          >
+            Exportar reporte
+          </button>
+          <button
+            onClick={() => {
+              if (primerPendiente) setSelectedDocId(primerPendiente.id);
+              setActiveTab('cola');
+            }}
+            className="btn btn-primary"
+          >
+            Comenzar revisión <ArrowRight size={16} />
+          </button>
         </div>
       </div>
 
-      {/* Banner: the single thing to look at first */}
-      <div className="ops-banner">
-        <div className="flex items-center gap-6">
-          <div className="ops-banner-n">
-            {conteo.todos}
-            <small>total</small>
+      {/* Top-level KPIs */}
+      <section className="stats">
+        <div className="stat s-brown">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Mandantes activos</span>
+            <Building2 size={16} className="text-brown shrink-0" />
           </div>
-          <div>
-            <div className="ops-banner-t">Hoy requieren tu atención</div>
-            <div className="ops-banner-s">
-              {conteo.critico > 0 && (
-                <span className="text-[#f0a5a5] font-semibold">{conteo.critico} críticos</span>
-              )}
-              {conteo.critico > 0 && ' · '}
-              {conteo.atencion} en atención · {conteo.normal} normales
-              {conteo.todos > 0 && ' — empieza por lo más urgente'}
+          <div className="stat-n">{totalMandantes}</div>
+          <div className="stat-l">{totalProyectos} proyectos asociados</div>
+        </div>
+        <div className="stat s-blue">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Contratistas</span>
+            <Users size={16} className="text-[#2f6fb0] shrink-0" />
+          </div>
+          <div className="stat-n">{totalContratistas}</div>
+          <div className="stat-l">{contratistasConIncumplimiento} con incumplimientos</div>
+        </div>
+        <div className="stat s-green">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Trabajadores</span>
+            <HardHat size={16} className="text-[#2a8040] shrink-0" />
+          </div>
+          <div className="stat-n">{totalTrabajadores}</div>
+          <div className="stat-l">{pctVigente}% con documentación vigente</div>
+        </div>
+        <div className="stat s-orange">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Revisión pendiente</span>
+            <ClipboardList size={16} className="text-[#d47a1a] shrink-0" />
+          </div>
+          <div className="stat-n">{revisionPendiente}</div>
+          <div className="stat-l">{prioridadAlta} son prioridad alta</div>
+        </div>
+      </section>
+
+      {/* Hero: what needs attention, and overall accreditation health */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
+        <div className="card p-0 overflow-hidden flex flex-col">
+          <div className="flex justify-between items-start px-5 py-4 border-b border-cream3">
+            <div>
+              <div className="text-[15px] font-semibold text-navy">Atención requerida</div>
+              <div className="text-[11.5px] text-gray-500 mt-0.5">Lo más importante para resolver ahora.</div>
+            </div>
+            <span className="badge b-brown shrink-0">
+              {issuesAtencion.length} incidencia{issuesAtencion.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="p-3 flex flex-col gap-1.5">
+            {issuesAtencion.length > 0 ? (
+              issuesAtencion.map(issue => (
+                <div key={issue.key} className="flex items-center gap-3 p-3 rounded-[11px] bg-cream2">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: issue.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-navy">{issue.titulo}</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{issue.detalle}</div>
+                  </div>
+                  <button onClick={issue.onClick} className="text-[11px] font-bold text-brown shrink-0 hover:underline">
+                    {issue.accion} →
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-center py-8 text-gray-400 text-[13.5px]">Sin incidencias. Todo al día.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="text-[15px] font-semibold text-navy">Salud de acreditación</div>
+          <div className="text-[11.5px] text-gray-500 mt-0.5 mb-4">Contratistas activos</div>
+          <div className="flex items-end justify-between">
+            <span className="text-[34px] font-bold text-navy leading-none">{pctAcreditados}%</span>
+            <span className="text-[11.5px] text-gray-500 mb-1">acreditados</span>
+          </div>
+          <div className="prog-wrap my-4">
+            <div className="prog-fill" style={{ width: `${pctAcreditados}%` }} />
+          </div>
+          <div className="flex flex-col gap-2.5 text-[12.5px]">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-500">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#2a8040' }} />
+                Acreditados
+              </span>
+              <strong className="text-navy">{contratistasAprobados}</strong>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-500">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#b58600' }} />
+                En proceso
+              </span>
+              <strong className="text-navy">{contratistasEnProceso}</strong>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-500">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#a32d2d' }} />
+                Bloqueados
+              </span>
+              <strong className="text-navy">{contratistasBloqueados}</strong>
             </div>
           </div>
         </div>
-        <button
-          onClick={() => {
-            if (primerPendiente) setSelectedDocId(primerPendiente.id);
-            setActiveTab('cola');
-          }}
-          className="btn btn-primary btn-lg shrink-0"
-        >
-          Comenzar revisión <ArrowRight size={16} />
-        </button>
-      </div>
+      </section>
 
-      {/* Secondary metrics, subordinate to the banner */}
+      {/* Same-day activity, subordinate to the KPIs above */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="stat-mini">
           <div className="stat-mini-n">{waitingCorrectionList.length}</div>
@@ -224,59 +377,99 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* Unified priority queue */}
-      <div>
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
-            </p>
+      {/* Unified priority queue + quick access, side by side like the prototype's
+          "Revisión documental" / "Accesos rápidos" pair */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.9fr] gap-4">
+        <div>
+          <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
+            <div>
+              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
+              <p className="text-[11.5px] text-gray-500 mt-0.5">
+                Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
+              </p>
+            </div>
+            <div className="flex gap-3.5 text-[11.5px] text-gray-500">
+              {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
+                <span key={s} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
+                  {SEV_LABEL[s]}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-3.5 text-[11.5px] text-gray-500">
-            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-              <span key={s} className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
-                {SEV_LABEL[s]}
-              </span>
-            ))}
+
+          <div className="card p-0 overflow-hidden">
+            <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
+              {filtros.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setFiltroCola(f.id)}
+                  className={`chip ${filtroCola === f.id ? 'active' : ''}`}
+                >
+                  {f.label} <span className="chip-count">{conteo[f.id]}</span>
+                </button>
+              ))}
+            </div>
+
+            {colaVisible.length > 0 ? (
+              colaVisible.map(item => (
+                <div key={item.key} className="qrow">
+                  <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13.5px] font-semibold text-navy truncate">
+                      {item.empresa} — {item.documento}
+                    </div>
+                    <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
+                  </div>
+                  <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
+                  <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
+                    {item.accion}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-center py-8 text-gray-400 text-[13.5px]">
+                {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="card p-0 overflow-hidden">
-          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
-            {filtros.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFiltroCola(f.id)}
-                className={`chip ${filtroCola === f.id ? 'active' : ''}`}
-              >
-                {f.label} <span className="chip-count">{conteo[f.id]}</span>
-              </button>
-            ))}
+        <div>
+          <div className="mb-3">
+            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Accesos rápidos</h3>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">Tareas frecuentes del administrador.</p>
           </div>
-
-          {colaVisible.length > 0 ? (
-            colaVisible.map(item => (
-              <div key={item.key} className="qrow">
-                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13.5px] font-semibold text-navy truncate">
-                    {item.empresa} — {item.documento}
-                  </div>
-                  <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
-                </div>
-                <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
-                <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
-                  {item.accion}
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="text-center py-8 text-gray-400 text-[13.5px]">
-              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
-            </p>
-          )}
+          <div className="card grid grid-cols-2 gap-2.5">
+            <button
+              onClick={() => { if (primerPendiente) setSelectedDocId(primerPendiente.id); setActiveTab('cola'); }}
+              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+            >
+              <b className="block text-[12px] font-semibold text-navy">Revisar documentos</b>
+              <span className="block text-[11px] text-gray-500 mt-1">{revisionPendiente} pendientes</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('contratistas')}
+              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+            >
+              <b className="block text-[12px] font-semibold text-navy">Ver contratistas</b>
+              <span className="block text-[11px] text-gray-500 mt-1">{contratistasConIncumplimiento} con incidencias</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('acreditaciones')}
+              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+            >
+              <b className="block text-[12px] font-semibold text-navy">Ver acreditaciones</b>
+              <span className="block text-[11px] text-gray-500 mt-1">{totalContratistas} activos</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('auditoria')}
+              className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
+            >
+              <b className="block text-[12px] font-semibold text-navy">Consultar auditoría</b>
+              <span className="block text-[11px] text-gray-500 mt-1">Actividad reciente</span>
+            </button>
+          </div>
         </div>
       </div>
 
