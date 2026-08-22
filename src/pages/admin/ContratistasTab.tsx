@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
 import {
   Search,
-  Building2,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
   Download,
   UserPlus,
   MessageSquare,
   Eye,
-  TrendingUp,
-  TrendingDown,
 } from 'lucide-react';
 import { Proyecto } from '../../types';
 import SeverityBadge, {
@@ -127,14 +121,6 @@ export default function ContratistasTab({
     setSevFiltro(null);
   };
 
-  // KPI Calculations
-  const totalActivos = EMPRESAS_CONTRATISTAS.length;
-  const totalAprobadosDocs = EMPRESAS_CONTRATISTAS.reduce((acc, c) => acc + c.docsAprobados, 0);
-  const totalDocs = EMPRESAS_CONTRATISTAS.reduce((acc, c) => acc + c.docsTotal, 0);
-  const pctCumplimientoPromedio = totalDocs > 0 ? Math.round((totalAprobadosDocs / totalDocs) * 100) : 0;
-  const documentosPendientes = totalDocs - totalAprobadosDocs;
-  const countCriticos = conSeveridad.filter(c => c.sev === 'critico').length;
-
   const renderProgressRing = (pct: number, sev: Severidad) => {
     const size = 32;
     const stroke = 3;
@@ -207,83 +193,6 @@ export default function ContratistasTab({
       {/* Main Content Area (floated up) */}
       <div className="relative z-20 -mt-8 max-w-[1200px] mx-auto px-1 flex flex-col gap-5">
         
-        {/* KPI Cards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* Card 1: Activos */}
-          <div className="bg-white rounded-2xl p-4.5 shadow-[0_14px_30px_rgba(20,25,30,0.08)] border border-cream3 flex flex-col gap-2.5">
-            <div className="flex justify-between items-center">
-              <div className="w-9 h-9 rounded-xl bg-gray-100 text-navy flex items-center justify-center shrink-0">
-                <Building2 size={16} />
-              </div>
-              {/* TODO: Implement real trend calculation when historical data is added to DB */}
-              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-0.5">
-                <TrendingUp size={12} />
-                +2 este mes
-              </span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-navy tracking-tight">{totalActivos}</div>
-              <div className="text-[12px] text-gray-500 font-medium mt-0.5">Contratistas activos</div>
-            </div>
-          </div>
-          
-          {/* Card 2: % Cumplimiento */}
-          <div className="bg-white rounded-2xl p-4.5 shadow-[0_14px_30px_rgba(20,25,30,0.08)] border border-cream3 flex flex-col gap-2.5">
-            <div className="flex justify-between items-center">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 size={16} />
-              </div>
-              {/* TODO: Implement real trend calculation when historical data is added to DB */}
-              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-0.5">
-                <TrendingUp size={12} />
-                +3% vs mes ant.
-              </span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-navy tracking-tight">{pctCumplimientoPromedio}%</div>
-              <div className="text-[12px] text-gray-500 font-medium mt-0.5">Cumplimiento promedio</div>
-            </div>
-          </div>
-          
-          {/* Card 3: Pendientes */}
-          <div className="bg-white rounded-2xl p-4.5 shadow-[0_14px_30px_rgba(20,25,30,0.08)] border border-cream3 flex flex-col gap-2.5">
-            <div className="flex justify-between items-center">
-              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-                <Clock size={16} />
-              </div>
-              {/* TODO: Implement real trend calculation when historical data is added to DB */}
-              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-0.5">
-                <TrendingUp size={12} />
-                -5 esta semana
-              </span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-navy tracking-tight">{documentosPendientes}</div>
-              <div className="text-[12px] text-gray-500 font-medium mt-0.5">Documentos pendientes</div>
-            </div>
-          </div>
-          
-          {/* Card 4: Críticos */}
-          <div className="bg-white rounded-2xl p-4.5 shadow-[0_14px_30px_rgba(20,25,30,0.08)] border border-cream3 flex flex-col gap-2.5">
-            <div className="flex justify-between items-center">
-              <div className="w-9 h-9 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
-                <AlertTriangle size={16} />
-              </div>
-              {/* TODO: Implement real trend calculation when historical data is added to DB */}
-              <span className="text-[11px] text-red-600 font-bold flex items-center gap-0.5">
-                <TrendingDown size={12} />
-                +1 hoy
-              </span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-navy tracking-tight">{countCriticos}</div>
-              <div className="text-[12px] text-gray-500 font-medium mt-0.5">Requieren atención urgente</div>
-            </div>
-          </div>
-          
-        </div>
-
         {/* Toolbar & Table Panel */}
         <div className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden flex flex-col">
           
