@@ -309,52 +309,30 @@ export default function AdminPortal() {
       empresa: log.empresa || 'N/A',
       proyecto: log.proyecto || '',
       detalle: log.detalle || '',
-      fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
+      fecha: log.fecha || '',
       resultado: log.resultado || 'informativo'
     }));
 
+    // Historial ilustrativo del equipo interno (no hay múltiples cuentas de
+    // revisor en el demo), usando el vocabulario real de acciones y
+    // contratistas/proyectos reales de la plataforma.
+    const haceMin = (n: number) => new Date(Date.now() - n * 60000).toISOString();
     const mockLogs = [
-      { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
-      { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
-      { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
-      { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
-      { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
+      { id: 'AUD-00018452', accion: 'aprobacion_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Servicios Norte', proyecto: 'Costanera Norte', detalle: 'Certificado de Antecedentes', fecha: haceMin(8), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
+      { id: 'AUD-00018451', accion: 'desbloqueo_pago', actor: 'Felipe Muñoz', rol: 'Revisor' as const, empresa: 'Servicios Norte', proyecto: 'Costanera Norte', detalle: 'Liberación de pago autorizada', fecha: haceMin(14), resultado: 'exitoso' as const, estadoAnterior: 'Listo', estadoNuevo: 'Liberado' },
+      { id: 'AUD-00018450', accion: 'rechazo_documento', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Eléctrica Sur', proyecto: 'Torre Mackenna', detalle: 'Registro Mutual ACHS', fecha: haceMin(26), resultado: 'bloqueado' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Rechazado' },
+      { id: 'AUD-00018449', accion: 'rechazo_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Constructora Vélez', proyecto: 'Costanera Norte', detalle: 'F30 SII (mes vigente)', fecha: haceMin(42), resultado: 'bloqueado' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Rechazado' },
+      { id: 'AUD-00018448', accion: 'cambios_relevantes_acreditacion', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'TécnicoSur SpA', proyecto: 'Bodega Logística Sur', detalle: 'Falta firma en Contrato de Trabajo', fecha: haceMin(58), resultado: 'informativo' as const, estadoAnterior: 'Rechazado', estadoNuevo: 'Corrección solicitada' },
+      { id: 'AUD-00018447', accion: 'aceptacion_invitacion', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Lagos y Cía', proyecto: '', detalle: 'Se actualizó correo de contacto del responsable documental', fecha: haceMin(75), resultado: 'exitoso' as const, estadoAnterior: 'contacto@lagoscia.cl', estadoNuevo: 'documentos@lagoscia.cl' },
+      { id: 'AUD-00018446', accion: 'desbloqueo_acceso', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'TécnicoSur SpA', proyecto: 'Ampliación Planta Solar', detalle: 'Proyecto habilitado para revisión de contratistas', fecha: haceMin(96), resultado: 'exitoso' as const, estadoAnterior: 'En preparación', estadoNuevo: 'Activo' },
+      { id: 'AUD-00018445', accion: 'creacion_invitacion', actor: 'Felipe Muñoz', rol: 'Revisor' as const, empresa: 'Constructora Vélez', proyecto: 'Costanera Norte', detalle: 'Contratista incorporado y enviado al flujo de acreditación', fecha: haceMin(130), resultado: 'exitoso' as const, estadoAnterior: 'No existe', estadoNuevo: 'Activo' },
+      { id: 'AUD-00018444', accion: 'aprobacion_documento', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Lagos y Cía', proyecto: 'Costanera Norte', detalle: 'ODI 2026', fecha: haceMin(150), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
+      { id: 'AUD-00018443', accion: 'aprobacion_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Eléctrica Sur', proyecto: 'Torre Mackenna', detalle: 'Contrato de Trabajo', fecha: haceMin(175), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
+      { id: 'AUD-00018442', accion: 'login_exitoso', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'N/A', proyecto: '', detalle: 'Inicio de sesión en el panel de administración', fecha: haceMin(200), resultado: 'exitoso' as const, ip: '190.16.22.4' },
     ];
 
     return [...dbLogs, ...mockLogs];
   });
-
-  React.useEffect(() => {
-    if (activeTab === "auditoria") {
-      const dbLogs = getAuditLogs().map(log => ({
-        ...log,
-        id: log.id,
-        accion: log.accion,
-        actor: log.actor || log.usuarioId,
-        rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
-        empresa: log.empresa || 'N/A',
-        proyecto: log.proyecto || '',
-        detalle: log.detalle || '',
-        fecha: log.fecha ? new Date(log.fecha).toLocaleString() : '',
-        resultado: log.resultado || 'informativo'
-      }));
-
-      const mockLogs = [
-        { id: 'mock_1', accion: "aprobacion", actor: "Ana Díaz", rol: "Revisor" as const, empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 SII Abril 2026", fecha: "18 May · 09:35", resultado: "exitoso" as const },
-        { id: 'mock_2', accion: "rechazo", actor: "Carlos Martínez", rol: "Revisor" as const, empresa: "Constructora Vélez", proyecto: "Minera Los Andes", detalle: "Registro mutual ACHS (Ilegible)", fecha: "18 May · 09:12", resultado: "exitoso" as const },
-        { id: 'mock_3', accion: "subida", actor: "Jorge Morales", rol: "Contratista" as const, empresa: "Servicios Norte Ltda.", proyecto: "", detalle: "Liquidación Mayo 2026", fecha: "18 May · 08:45", resultado: "informativo" as const, ip: "190.16.22.4" },
-        { id: 'mock_4', accion: "acceso_fallido", actor: "Desconocido", rol: "Desconocido" as const, empresa: "N/A", proyecto: "", detalle: "Login fallido (Credenciales inválidas)", fecha: "18 May · 03:22", resultado: "bloqueado" as const },
-        { id: 'mock_5', accion: "alerta", actor: "Sistema Automático", rol: "Sistema Automático" as const, empresa: "Constructora Vélez", proyecto: "", detalle: "3 Documentos Vencidos - Bloqueo de Acceso", fecha: "17 May · 23:59", resultado: "informativo" as const }
-      ];
-
-      setAuditoriaLogs([...dbLogs, ...mockLogs]);
-    }
-  }, [activeTab]);
-  const [filtroAccionLog, setFiltroAccionLog] = useState("Todas las Acciones");
-  const [filtroActorLog, setFiltroActorLog] = useState("Todos los Actores");
-  const [filtroFechaLog, setFiltroFechaLog] = useState("");
-  const [busquedaLog, setBusquedaLog] = useState("");
-  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
   const [invitacionEnviada, setInvitacionEnviada] = useState(false);
@@ -918,16 +896,8 @@ export default function AdminPortal() {
           {activeTab === "auditoria" && (
             <AuditoriaTab
               auditoriaLogs={auditoriaLogs}
-              filtroAccionLog={filtroAccionLog}
-              setFiltroAccionLog={setFiltroAccionLog}
-              filtroActorLog={filtroActorLog}
-              setFiltroActorLog={setFiltroActorLog}
-              filtroFechaLog={filtroFechaLog}
-              setFiltroFechaLog={setFiltroFechaLog}
-              busquedaLog={busquedaLog}
-              setBusquedaLog={setBusquedaLog}
-              expandedLogId={expandedLogId}
-              setExpandedLogId={setExpandedLogId}
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              showToast={showToast}
             />
           )}
 
