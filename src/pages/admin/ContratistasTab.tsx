@@ -177,7 +177,7 @@ export default function ContratistasTab({
   return (
     <div className="fade-in">
       {/* Premium Dark Brand Band Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-navy to-navy-2 px-8 py-8 pb-20 -mx-8 -mt-6">
+      <div className="relative overflow-hidden bg-gradient-to-br from-navy to-navy-2 px-8 py-4 pb-12 -mx-8 -mt-6">
         <div className="absolute top-[-30%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[radial-gradient(circle,rgba(154,105,78,0.15),transparent_70%)] pointer-events-none" />
         
         <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
@@ -205,7 +205,7 @@ export default function ContratistasTab({
       </div>
 
       {/* Main Content Area (floated up) */}
-      <div className="relative z-20 -mt-12 max-w-[1200px] mx-auto px-1 flex flex-col gap-6">
+      <div className="relative z-20 -mt-8 max-w-[1200px] mx-auto px-1 flex flex-col gap-5">
         
         {/* KPI Cards Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

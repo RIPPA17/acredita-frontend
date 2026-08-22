@@ -205,6 +205,8 @@ export default function DashboardTab({
   };
 
   const colaVisible = filtroCola === 'todos' ? itemsCola : itemsCola.filter(i => i.sev === filtroCola);
+  const MAX_COLA = 5;
+  const colaPaginada = colaVisible.slice(0, MAX_COLA);
 
   // 5. Gather real actionable issues for the "Atención requerida" panel
   const incidencias: Array<{
@@ -270,7 +272,7 @@ export default function DashboardTab({
   const actividadFiltrada = ACTIVIDAD_RECIENTE.filter(
     a => filtroActividad === 'todos' || normalizarEstado(a.estado) === filtroActividad
   );
-  const MAX_ACTIVIDAD = 6;
+  const MAX_ACTIVIDAD = 4;
   const actividadVisible = actividadFiltrada.slice(0, MAX_ACTIVIDAD);
 
   const getInitials = (nombre: string) => {
@@ -292,7 +294,7 @@ export default function DashboardTab({
   ];
 
   return (
-    <div className="fade-in space-y-6 pb-10">
+    <div className="fade-in space-y-5 pb-6">
       
       {/* TOAST ALERT */}
       {toast && (
@@ -303,216 +305,247 @@ export default function DashboardTab({
       )}
 
       {/* HEADER */}
-      <div className="page-header">
+      <div className="page-header mb-3">
         <div>
-          <h2 className="page-title text-navy font-bold text-[22px] font-sans">Centro de operaciones</h2>
-          <p className="page-sub text-gray-500 text-[13.5px] font-sans">
+          <h2 className="page-title text-navy font-bold text-[20px] font-sans">Centro de operaciones</h2>
+          <p className="page-sub text-gray-500 text-[13px] font-sans mt-0.5">
             Monitoreo en tiempo real y resolución de incidencias operacionales.
           </p>
         </div>
       </div>
 
-      {/* RESUMEN - 4 METRICS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="stat-mini">
-          <div className="stat-mini-n">{mandantesCount}</div>
-          <div className="stat-mini-l">Mandantes activos</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-n">{GLOBAL_CONTRATISTAS.length}</div>
-          <div className="stat-mini-l">Contratistas registrados</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-n">{totalWorkers}</div>
-          <div className="stat-mini-l">Trabajadores activos</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-n" style={{ color: '#5a4a8a' }}>{pendingDocsCount}</div>
-          <div className="stat-mini-l">Revisión pendiente</div>
-        </div>
-      </div>
-
-      {/* ATENCIÓN REQUERIDA */}
-      <div>
-        <div className="flex justify-between items-end mb-3">
+      {/* TWO-COLUMN LAYOUT */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1.8fr_1fr] gap-4 items-start">
+        
+        {/* COLUMN LEFT: MAIN ACTION ITEMS */}
+        <div className="space-y-5">
+          
+          {/* ATENCIÓN REQUERIDA */}
           <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Atención requerida</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">Problemas detectados que requieren tu intervención.</p>
-          </div>
-        </div>
-
-        <div className="card p-4.5 bg-white border border-cream3 rounded-2xl shadow-sm">
-          {incidencias.length > 0 ? (
-            <div className="space-y-2">
-              {incidencias.map((inc, i) => (
-                <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-cream2/30 border border-cream3/60 hover:bg-[#FAF9F5] transition-all">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                      inc.dotClass === 'red' ? 'bg-[#a3312f]' : inc.dotClass === 'orange' ? 'bg-[#8a5a10]' : 'bg-[#245a8a]'
-                    }`}></span>
-                    <div>
-                      <div className="text-[13px] font-bold text-navy font-sans">{inc.title}</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5 font-sans">{inc.desc}</div>
+            <h3 className="section-title text-[14.5px] font-semibold text-navy mb-2">Atención requerida</h3>
+            <div className="card p-3 bg-white border border-cream3 rounded-2xl shadow-sm">
+              {incidencias.length > 0 ? (
+                <div className="space-y-2">
+                  {incidencias.map((inc, i) => (
+                    <div key={i} className="flex items-center justify-between gap-4 p-2.5 rounded-xl bg-cream2/30 border border-cream3/60 hover:bg-[#FAF9F5] transition-all">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          inc.dotClass === 'red' ? 'bg-[#a3312f]' : inc.dotClass === 'orange' ? 'bg-[#8a5a10]' : 'bg-[#245a8a]'
+                        }`}></span>
+                        <div>
+                          <div className="text-[12.5px] font-bold text-navy font-sans">{inc.title}</div>
+                          <div className="text-[10.5px] text-gray-400 font-sans mt-0.5">{inc.desc}</div>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={inc.onClick}
+                        className="text-[10.5px] font-extrabold text-brown hover:underline bg-transparent border-none cursor-pointer flex items-center gap-0.5 font-sans whitespace-nowrap"
+                      >
+                        {inc.actionLabel} →
+                      </button>
                     </div>
-                  </div>
-                  <button 
-                    onClick={inc.onClick}
-                    className="text-[11px] font-extrabold text-brown hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1 font-sans"
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-400 text-[12.5px] italic font-sans">
+                  No hay incidencias que requieran atención actualmente. Todo al día.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* COLA PRIORITARIA */}
+          <div>
+            <div className="flex flex-wrap justify-between items-end gap-3 mb-2">
+              <div>
+                <h3 className="section-title text-[14.5px] font-semibold text-navy mb-0">Cola prioritaria</h3>
+              </div>
+              <div className="flex gap-2 text-[10.5px] text-gray-400 font-sans font-medium">
+                {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
+                  <span key={s} className="flex items-center gap-1">
+                    <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a3312f]' : s === 'atencion' ? 'bg-[#8a5a10]' : 'bg-[#767467]'}`} />
+                    {SEV_LABEL[s]}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="card p-0 overflow-hidden bg-white border border-cream3 rounded-2xl shadow-sm">
+              <div className="flex flex-wrap gap-2 px-3 py-2 border-b border-cream3 bg-gray-50/20">
+                {filtros.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFiltroCola(f.id)}
+                    className={`chip font-sans font-bold text-[11px] px-3 py-1 rounded-full border transition-all ${
+                      filtroCola === f.id ? 'active' : ''
+                    }`}
                   >
-                    {inc.actionLabel} →
+                    {f.label} <span className="chip-count font-mono ml-1">{conteo[f.id]}</span>
+                  </button>
+                ))}
+              </div>
+
+              {colaPaginada.length > 0 ? (
+                <div className="divide-y divide-cream">
+                  {colaPaginada.map(item => (
+                    <div key={item.key} className="qrow flex items-center justify-between gap-3 p-3 hover:bg-[#FAF9F5] transition-colors">
+                      <span className={`sev sev-${item.sev} text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border tracking-wider shrink-0 w-14 text-center ${
+                        item.sev === 'critico' ? 'bg-[#fbe8e8] text-[#932d2d] border-[#f7cfcf]' :
+                        item.sev === 'atencion' ? 'bg-[#faf0dc] text-[#8a5a10] border-[#eecd94]' :
+                        'bg-[#f1efe6] text-[#767467] border-gray-300'
+                      }`}>
+                        {SEV_LABEL[item.sev]}
+                      </span>
+                      
+                      <div className="flex-1 min-w-0 font-sans">
+                        <div className="text-[12.5px] font-bold text-navy truncate font-sans">
+                          {item.empresa} — {item.documento}
+                        </div>
+                        <div className="text-[11px] text-gray-500 truncate font-sans" title={item.meta}>
+                          {item.meta}
+                        </div>
+                      </div>
+
+                      <span className={`text-[10.5px] font-mono shrink-0 hidden sm:block w-16 text-right ${
+                        item.tiempo === 'Vencido' || item.tiempo === 'Corrección' ? 'text-[#a3312f] font-bold' : 'text-gray-400'
+                      }`}>
+                        {item.tiempo}
+                      </span>
+
+                      <button 
+                        onClick={item.onAccion} 
+                        className="px-2.5 py-1 border border-cream3 bg-white hover:bg-navy hover:text-cream rounded-md text-[11px] font-bold text-navy cursor-pointer transition-all shrink-0 font-sans shadow-sm"
+                      >
+                        {item.accion}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-400 text-[12.5px] italic font-sans">
+                  {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay registros en la categoría "${SEV_LABEL[filtroCola as Severidad]}".`}
+                </div>
+              )}
+
+              {colaVisible.length > MAX_COLA && (
+                <div className="px-3.5 py-2.5 border-t border-cream bg-gray-50/10 flex justify-between items-center text-[11px] text-gray-500 font-sans">
+                  <span>Mostrando {MAX_COLA} de {colaVisible.length} registros pendientes</span>
+                  <button 
+                    onClick={() => setActiveTab('cola')}
+                    className="text-brown font-extrabold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-0.5"
+                  >
+                    Ver bandeja completa ({colaVisible.length}) →
                   </button>
                 </div>
-              ))}
+              )}
             </div>
-          ) : (
-            <div className="p-8 text-center text-gray-400 text-[13.5px] italic font-sans">
-              No hay incidencias que requieran atención actualmente. Todo al día.
-            </div>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* COLA PRIORITARIA */}
-      <div>
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
+        {/* COLUMN RIGHT: STATS & ACTIVITY */}
+        <div className="space-y-5">
+          
+          {/* STATS - 4 COMPACT HORIZONTAL CARDS */}
           <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Validaciones documentales, alertas y correcciones unificadas y ordenadas por nivel de urgencia.
-            </p>
-          </div>
-          <div className="flex gap-3.5 text-[11.5px] text-gray-500 font-sans font-medium">
-            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-              <span key={s} className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${s === 'critico' ? 'bg-[#a3312f]' : s === 'atencion' ? 'bg-[#8a5a10]' : 'bg-[#767467]'}`} />
-                {SEV_LABEL[s]}
-              </span>
-            ))}
-          </div>
-        </div>
+            <h3 className="section-title text-[14.5px] font-semibold text-navy mb-2">Indicadores</h3>
+            <div className="grid grid-cols-1 gap-2.5">
+              
+              {/* Card 1: Mandantes */}
+              <div className="flex items-center justify-between p-3 bg-white border border-cream3 rounded-2xl shadow-sm">
+                <span className="text-[12px] font-bold text-gray-500 font-sans">Mandantes activos</span>
+                <span className="text-[16px] font-extrabold text-navy font-mono bg-blue-50 text-blue-700 w-8 h-6 flex items-center justify-center rounded-lg">{mandantesCount}</span>
+              </div>
 
-        <div className="card p-0 overflow-hidden bg-white border border-cream3 rounded-2xl shadow-sm">
-          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3 bg-gray-50/20">
-            {filtros.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFiltroCola(f.id)}
-                className={`chip font-sans font-bold text-[11.5px] px-3.5 py-1.5 rounded-full border transition-all ${
-                  filtroCola === f.id ? 'active' : ''
-                }`}
+              {/* Card 2: Contratistas */}
+              <div className="flex items-center justify-between p-3 bg-white border border-cream3 rounded-2xl shadow-sm">
+                <span className="text-[12px] font-bold text-gray-500 font-sans">Contratistas registrados</span>
+                <span className="text-[16px] font-extrabold text-navy font-mono bg-orange-50 text-orange-700 w-8 h-6 flex items-center justify-center rounded-lg">{GLOBAL_CONTRATISTAS.length}</span>
+              </div>
+
+              {/* Card 3: Trabajadores */}
+              <div className="flex items-center justify-between p-3 bg-white border border-cream3 rounded-2xl shadow-sm">
+                <span className="text-[12px] font-bold text-gray-500 font-sans">Trabajadores activos</span>
+                <span className="text-[16px] font-extrabold text-navy font-mono bg-green-50 text-green-700 w-12 h-6 flex items-center justify-center rounded-lg">{totalWorkers}</span>
+              </div>
+
+              {/* Card 4: Revision pendiente */}
+              <div className="flex items-center justify-between p-3 bg-white border border-cream3 rounded-2xl shadow-sm">
+                <span className="text-[12px] font-bold text-gray-500 font-sans">Revisión pendiente</span>
+                <span className="text-[16px] font-extrabold text-navy font-mono bg-purple-50 text-purple-700 w-8 h-6 flex items-center justify-center rounded-lg">{pendingDocsCount}</span>
+              </div>
+
+            </div>
+          </div>
+
+          {/* ACTIVIDAD RECIENTE */}
+          <div>
+            <div className="flex justify-between items-end mb-2">
+              <h3 className="section-title text-[14.5px] font-semibold text-navy mb-0">Actividad reciente</h3>
+              <select
+                value={filtroActividad}
+                onChange={(e) => setFiltroActividad(e.target.value)}
+                className="form-input text-[10.5px] py-0.5 px-2 w-auto bg-white border border-cream3 rounded-lg focus:outline-none focus:border-brown font-sans font-bold text-navy"
               >
-                {f.label} <span className="chip-count font-mono ml-1">{conteo[f.id]}</span>
-              </button>
-            ))}
-          </div>
+                <option value="todos">Todos</option>
+                <option value="revision">Revisión</option>
+                <option value="aprobado">Aprobado</option>
+                <option value="rechazado">Rechazado</option>
+                <option value="registrado">Registrado</option>
+              </select>
+            </div>
 
-          {colaVisible.length > 0 ? (
-            <div className="divide-y divide-cream">
-              {colaVisible.map(item => (
-                <div key={item.key} className="qrow flex items-center justify-between gap-4 p-4 hover:bg-[#FAF9F5] transition-colors">
-                  <span className={`sev sev-${item.sev} text-[9.5px] font-extrabold uppercase px-2 py-0.5 rounded border tracking-wider shrink-0 w-16 text-center ${
-                    item.sev === 'critico' ? 'bg-[#fbe8e8] text-[#932d2d] border-[#f7cfcf]' :
-                    item.sev === 'atencion' ? 'bg-[#faf0dc] text-[#8a5a10] border-[#eecd94]' :
-                    'bg-[#f1efe6] text-[#767467] border-gray-300'
-                  }`}>
-                    {SEV_LABEL[item.sev]}
-                  </span>
-                  
-                  <div className="flex-1 min-w-0 font-sans">
-                    <div className="text-[13px] font-bold text-navy truncate font-sans">
-                      {item.empresa} — {item.documento}
-                    </div>
-                    <div className="text-[11.5px] text-gray-500 truncate font-sans" title={item.meta}>
-                      {item.meta}
-                    </div>
-                  </div>
-
-                  <span className={`text-[11px] font-mono shrink-0 hidden sm:block w-20 text-right ${
-                    item.tiempo === 'Vencido' || item.tiempo === 'Corrección' ? 'text-[#a3312f] font-bold' : 'text-gray-400'
-                  }`}>
-                    {item.tiempo}
-                  </span>
-
+            <div className="card p-0 overflow-hidden bg-white border border-cream3 rounded-2xl shadow-sm">
+              {actividadVisible.length > 0 ? (
+                <div className="divide-y divide-cream font-sans">
+                  {actividadVisible.map(a => {
+                    const estado = normalizarEstado(a.estado);
+                    const initials = getInitials(a.empresa);
+                    return (
+                      <div
+                        key={a.id}
+                        className="arow cursor-pointer flex items-center gap-2.5 p-2.5 hover:bg-[#FAF9F5] transition-colors"
+                        onClick={() => setActividadSeleccionada(a)}
+                      >
+                        <span className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center font-extrabold text-[9px] shrink-0 border border-blue-100">
+                          {initials}
+                        </span>
+                        <div className="flex-1 min-w-0 font-sans">
+                          <div className="font-bold text-navy text-[12px] truncate">{a.empresa}</div>
+                          <div className="text-gray-500 text-[10.5px] truncate font-sans">{a.documento}</div>
+                        </div>
+                        <span className={`text-[8.5px] font-extrabold rounded-md px-1.5 py-0.5 border uppercase tracking-wider shrink-0 ${
+                          estado === 'aprobado' ? 'bg-[#e2f5e9] text-[#1c6b30] border-[#bee7ce]' :
+                          estado === 'rechazado' ? 'bg-[#fbe8e8] text-[#932d2d] border-[#f7cfcf]' :
+                          'bg-[#faf0dc] text-[#8a5a10] border-[#eecd94]'
+                        }`}>
+                          {estado}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-400 text-[12.5px] italic font-sans">No hay actividad.</div>
+              )}
+              {actividadFiltrada.length > MAX_ACTIVIDAD && (
+                <div className="px-3.5 py-2.5 border-t border-cream bg-gray-50/10 flex justify-between items-center text-[10.5px] text-gray-400 font-sans">
+                  <span>Mostrando {MAX_ACTIVIDAD} de {actividadFiltrada.length} eventos</span>
                   <button 
-                    onClick={item.onAccion} 
-                    className="px-3.5 py-1.5 border border-cream3 bg-white hover:bg-navy hover:text-cream rounded-lg text-[12px] font-bold text-navy cursor-pointer transition-all shrink-0 font-sans shadow-sm"
+                    onClick={() => setActiveTab('auditoria')}
+                    className="text-brown font-extrabold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-0.5 text-[10.5px]"
                   >
-                    {item.accion}
+                    Ver auditoría ({actividadFiltrada.length}) →
                   </button>
                 </div>
-              ))}
+              )}
             </div>
-          ) : (
-            <div className="p-8 text-center text-gray-400 text-[13.5px] italic font-sans">
-              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay registros en la categoría "${SEV_LABEL[filtroCola as Severidad]}".`}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ACTIVIDAD RECIENTE */}
-      <div>
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Actividad reciente</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">Últimos eventos registrados en la operación.</p>
           </div>
-          <select
-            value={filtroActividad}
-            onChange={(e) => setFiltroActividad(e.target.value)}
-            className="form-input text-[11.5px] py-1 px-2.5 w-auto bg-white border border-cream3 rounded-lg focus:outline-none focus:border-brown font-sans font-bold text-navy"
-          >
-            <option value="todos">Todos los estados</option>
-            <option value="revision">En revisión</option>
-            <option value="aprobado">Aprobado</option>
-            <option value="rechazado">Rechazado</option>
-            <option value="registrado">Registrado</option>
-          </select>
+
         </div>
 
-        <div className="card p-0 overflow-hidden bg-white border border-cream3 rounded-2xl shadow-sm">
-          {actividadVisible.length > 0 ? (
-            <div className="divide-y divide-cream font-sans">
-              {actividadVisible.map(a => {
-                const estado = normalizarEstado(a.estado);
-                const initials = getInitials(a.empresa);
-                return (
-                  <div
-                    key={a.id}
-                    className="arow cursor-pointer flex items-center justify-between gap-4 p-3.5 hover:bg-[#FAF9F5] transition-colors"
-                    onClick={() => setActividadSeleccionada(a)}
-                  >
-                    <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-extrabold text-[10px] shrink-0 border border-blue-100">
-                      {initials}
-                    </span>
-                    <span className="font-bold text-navy text-[13px] w-[170px] shrink-0 truncate">{a.empresa}</span>
-                    <span className="flex-1 text-gray-600 text-[12.5px] truncate font-sans" title={a.detalle || a.documento}>
-                      {a.documento}{a.detalle ? ` · ${a.detalle}` : ''}
-                    </span>
-                    <span className={`text-[10px] font-extrabold rounded-lg px-2 py-0.5 border uppercase tracking-wider shrink-0 ${
-                      estado === 'aprobado' ? 'bg-[#e2f5e9] text-[#1c6b30] border-[#bee7ce]' :
-                      estado === 'rechazado' ? 'bg-[#fbe8e8] text-[#932d2d] border-[#f7cfcf]' :
-                      'bg-[#faf0dc] text-[#8a5a10] border-[#eecd94]'
-                    }`}>
-                      {estado}
-                    </span>
-                    <span className="text-[11.5px] text-gray-400 shrink-0 text-right whitespace-nowrap w-20 font-mono">{a.hora || a.fecha}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-gray-400 text-[13.5px] italic font-sans">No hay actividad con este estado.</div>
-          )}
-          {actividadFiltrada.length > MAX_ACTIVIDAD && (
-            <div className="px-4 py-2.5 text-[11px] text-gray-400 border-t border-cream bg-gray-50/20 text-center font-sans">
-              Mostrando {MAX_ACTIVIDAD} de {actividadFiltrada.length} eventos recientes · Haz clic en "Auditoría" en el menú para ver el historial completo.
-            </div>
-          )}
-        </div>
       </div>
 
-      <div className="text-[10px] text-gray-400 text-right font-sans">Acredita · Panel de Administración · 21/08/2026</div>
+      <div className="text-[10px] text-gray-400 text-right font-sans pt-2">Acredita · Panel de Administración · 21/08/2026</div>
 
     </div>
   );
