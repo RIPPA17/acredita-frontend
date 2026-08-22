@@ -718,7 +718,7 @@ export default function AcreditacionesTab({
         .resps{font-size:10.5px; color:var(--sub); margin-top:1px;}
 
         .gates{display:grid; gap:16px;}
-        .gates.both{grid-template-columns:1fr 1fr;}
+        .gates.both{grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));}
         .gates.solo{grid-template-columns:1fr;}
 
         .gate{background:#fff; border:1px solid var(--cream3); border-radius:16px; overflow:hidden; box-shadow:0 10px 26px rgba(20,25,30,0.06);}
@@ -811,8 +811,10 @@ export default function AcreditacionesTab({
 
         .note{max-width:1320px; margin:1.2rem auto 0; font-size:12px; color:var(--sub);}
         
-        @media (max-width:1440px){
-          .gates.both{grid-template-columns:1fr;}
+        @media (max-width:1300px){
+          .gates.both .venc{display:none;}
+        }
+        @media (max-width:1000px){
           .solo .ddual{grid-template-columns:1fr;}
           .venc{display:none;}
         }
