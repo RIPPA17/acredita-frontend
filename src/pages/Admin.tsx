@@ -53,6 +53,7 @@ import ContratistasTab from './admin/ContratistasTab';
 import AcreditacionesTab from './admin/AcreditacionesTab';
 import PlantillasTab from './admin/PlantillasTab';
 import ReglasTab from './admin/ReglasTab';
+import FacturacionTab from './admin/FacturacionTab';
 import AuditoriaTab from './admin/AuditoriaTab';
 import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
@@ -940,14 +941,12 @@ export default function AdminPortal() {
           )}
 
           {activeTab === "facturacion" && (
-            <div className="fade-in">
-              <div className="page-header">
-                <div>
-                  <h2 className="page-title capitalize">{activeTab}</h2>
-                  <p className="page-sub">Panel en desarrollo...</p>
-                </div>
-              </div>
-            </div>
+            <FacturacionTab
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              showToast={showToast}
+            />
           )}
         </div>
       </div>
