@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  FileText,
   SkipForward,
   Building,
   List,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { getContratistas, saveContratistas, getProyectos, getMandantes, calcularEstadoTrabajador, actualizarEstadoDocumento } from "../../data/localStorageDb";
 import { buildColaDocs } from "./colaUtils";
+import DocumentPreview from "./DocumentPreview";
 
 export default function ColaRevisionTab({
   onVerEmpresa, 
@@ -657,20 +657,8 @@ export default function ColaRevisionTab({
  
                     {/* Empty spacer to align visual card centered */}
                     <div className="flex-1 flex items-center justify-center w-full py-6">
-                      <div 
-                        className="bg-[#eeeade] border border-dashed border-[#dedad1] rounded-xl flex flex-col items-center justify-center h-[230px] w-full max-w-[400px] p-6 gap-3 transition-transform shadow-sm"
-                        style={{ transform: `scale(${zoom / 100})` }}
-                      >
-                        <FileText size={44} className="text-brown opacity-85" />
-                        <div className="text-[13px] font-bold text-navy text-center font-mono">
-                          {current.title}.pdf
-                        </div>
-                        <div className="text-[11.5px] text-gray-500 text-center font-sans">
-                          Vista previa del documento cargado por el contratista
-                        </div>
-                        <div className="text-[10.5px] text-[#639922] bg-[#f0fbf0] border border-[#d4f0de] font-semibold rounded-full px-3 py-0.5 mt-1">
-                          ✓ Archivo Digitalizado Correctamente
-                        </div>
+                      <div style={{ transform: `scale(${zoom / 100})` }} className="transition-transform flex justify-center w-full">
+                        <DocumentPreview item={current} />
                       </div>
                     </div>
 
