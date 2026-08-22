@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Trash2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { saveReglas, obtenerDiasRestantes, REGLAS_DEFAULT } from '../../data/localStorageDb';
 import { Contratista, Proyecto } from '../../types';
 
@@ -335,9 +335,9 @@ export default function ReglasTab({
                               setReglas(reglas.filter(r => r.id !== regla.id));
                             }
                           }}
-                          className="text-gray-400 hover:text-red-500"
+                          className="text-[11px] font-bold text-gray-500 bg-cream2 border-none rounded-lg px-2.5 py-2 hover:bg-red-50 hover:text-red-600 transition-all whitespace-nowrap cursor-pointer"
                         >
-                          <Trash2 size={16} />
+                          Eliminar
                         </button>
                       </td>
                     </tr>
