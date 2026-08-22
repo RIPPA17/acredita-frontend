@@ -228,16 +228,16 @@ export default function DashboardTab({
     <div className="fade-in space-y-6">
       <div className="page-header items-start flex-wrap gap-3">
         <div>
-          <div className="text-[10.5px] text-gray-500 mb-1 uppercase tracking-wide">Inicio · Administración</div>
-          <h2 className="page-title text-navy font-bold text-[22px]">Resumen de Acredita</h2>
-          <p className="page-sub text-gray-500 text-[12.5px] mt-1">
+          <div className="text-[11.5px] text-gray-500 mb-1 uppercase tracking-wide">Inicio · Administración</div>
+          <h2 className="page-title text-navy font-bold text-[26px]">Resumen de Acredita</h2>
+          <p className="page-sub text-gray-500 text-[13.5px] mt-1">
             Estado general de mandantes, contratistas, acreditaciones y documentación.
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => showToast?.('Generando reporte de cumplimiento...', 'success')}
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost"
           >
             Exportar reporte
           </button>
@@ -246,54 +246,46 @@ export default function DashboardTab({
               if (primerPendiente) setSelectedDocId(primerPendiente.id);
               setActiveTab('cola');
             }}
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary"
           >
-            Comenzar revisión <ArrowRight size={14} />
+            Comenzar revisión <ArrowRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* Top-level KPIs — sized to hold together at ~1280px+ without wrapping */}
+      {/* Top-level KPIs */}
       <section className="stats">
-        <div className="stat s-brown !p-3">
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">Mandantes activos</span>
-            <Building2 size={14} className="text-brown shrink-0" />
+        <div className="stat s-brown">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Mandantes activos</span>
+            <Building2 size={16} className="text-brown shrink-0" />
           </div>
-          <div className="stat-n !text-[24px]">{totalMandantes}</div>
-          <div className="stat-l !text-[11px] !mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
-            {totalProyectos} proyectos asociados
-          </div>
+          <div className="stat-n">{totalMandantes}</div>
+          <div className="stat-l">{totalProyectos} proyectos asociados</div>
         </div>
-        <div className="stat s-blue !p-3">
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">Contratistas</span>
-            <Users size={14} className="text-[#2f6fb0] shrink-0" />
+        <div className="stat s-blue">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Contratistas</span>
+            <Users size={16} className="text-[#2f6fb0] shrink-0" />
           </div>
-          <div className="stat-n !text-[24px]">{totalContratistas}</div>
-          <div className="stat-l !text-[11px] !mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
-            {contratistasConIncumplimiento} con incumplimientos
-          </div>
+          <div className="stat-n">{totalContratistas}</div>
+          <div className="stat-l">{contratistasConIncumplimiento} con incumplimientos</div>
         </div>
-        <div className="stat s-green !p-3">
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">Trabajadores</span>
-            <HardHat size={14} className="text-[#2a8040] shrink-0" />
+        <div className="stat s-green">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Trabajadores</span>
+            <HardHat size={16} className="text-[#2a8040] shrink-0" />
           </div>
-          <div className="stat-n !text-[24px]">{totalTrabajadores}</div>
-          <div className="stat-l !text-[11px] !mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
-            {pctVigente}% con doc. vigente
-          </div>
+          <div className="stat-n">{totalTrabajadores}</div>
+          <div className="stat-l">{pctVigente}% con documentación vigente</div>
         </div>
-        <div className="stat s-orange !p-3">
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">Revisión pendiente</span>
-            <ClipboardList size={14} className="text-[#d47a1a] shrink-0" />
+        <div className="stat s-orange">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11.5px] font-semibold text-gray-500">Revisión pendiente</span>
+            <ClipboardList size={16} className="text-[#d47a1a] shrink-0" />
           </div>
-          <div className="stat-n !text-[24px]">{revisionPendiente}</div>
-          <div className="stat-l !text-[11px] !mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
-            {prioridadAlta} son prioridad alta
-          </div>
+          <div className="stat-n">{revisionPendiente}</div>
+          <div className="stat-l">{prioridadAlta} son prioridad alta</div>
         </div>
       </section>
 

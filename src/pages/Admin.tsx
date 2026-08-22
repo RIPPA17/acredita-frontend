@@ -165,7 +165,11 @@ const ALERTAS_DASHBOARD = [
 export default function AdminPortal() {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebar_collapsed') === 'true';
+    const stored = localStorage.getItem('sidebar_collapsed');
+    if (stored !== null) return stored === 'true';
+    // Default collapsed on laptops (< ~1440px) so the dashboard's KPI row has
+    // room to render at its intended spacious size without wrapping.
+    return typeof window !== 'undefined' && window.innerWidth < 1440;
   });
 
   const toggleSidebar = () => {
