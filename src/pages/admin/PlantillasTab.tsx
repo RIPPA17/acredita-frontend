@@ -144,7 +144,7 @@ export default function PlantillasTab({
       <div className="relative z-20 -mt-8 max-w-[1200px] mx-auto px-1 flex flex-col gap-5">
 
         {/* Metric Cards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl p-4.5 shadow-[0_14px_30px_rgba(20,25,30,0.08)] border border-cream3 flex flex-col gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-cream text-navy flex items-center justify-center shrink-0">
               <FileText size={16} />
