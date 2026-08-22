@@ -253,48 +253,56 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* Top-level KPIs */}
+      {/* Top-level KPIs — icons wrap in a tinted square badge, like the prototype's .metric-icon */}
       <section className="stats">
-        <div className="stat s-brown">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11.5px] font-semibold text-gray-500">Mandantes activos</span>
-            <Building2 size={16} className="text-brown shrink-0" />
+        <div className="stat s-brown shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[12px] font-bold text-gray-500">Mandantes activos</span>
+            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(154,105,78,0.12)' }}>
+              <Building2 size={17} className="text-brown" />
+            </div>
           </div>
-          <div className="stat-n">{totalMandantes}</div>
+          <div className="stat-n !font-bold">{totalMandantes}</div>
           <div className="stat-l">{totalProyectos} proyectos asociados</div>
         </div>
-        <div className="stat s-blue">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11.5px] font-semibold text-gray-500">Contratistas</span>
-            <Users size={16} className="text-[#2f6fb0] shrink-0" />
+        <div className="stat s-blue shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[12px] font-bold text-gray-500">Contratistas</span>
+            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(47,111,176,0.12)' }}>
+              <Users size={17} className="text-[#2f6fb0]" />
+            </div>
           </div>
-          <div className="stat-n">{totalContratistas}</div>
+          <div className="stat-n !font-bold">{totalContratistas}</div>
           <div className="stat-l">{contratistasConIncumplimiento} con incumplimientos</div>
         </div>
-        <div className="stat s-green">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11.5px] font-semibold text-gray-500">Trabajadores</span>
-            <HardHat size={16} className="text-[#2a8040] shrink-0" />
+        <div className="stat s-green shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[12px] font-bold text-gray-500">Trabajadores</span>
+            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(42,128,64,0.12)' }}>
+              <HardHat size={17} className="text-[#2a8040]" />
+            </div>
           </div>
-          <div className="stat-n">{totalTrabajadores}</div>
+          <div className="stat-n !font-bold">{totalTrabajadores}</div>
           <div className="stat-l">{pctVigente}% con documentación vigente</div>
         </div>
-        <div className="stat s-orange">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11.5px] font-semibold text-gray-500">Revisión pendiente</span>
-            <ClipboardList size={16} className="text-[#d47a1a] shrink-0" />
+        <div className="stat s-orange shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[12px] font-bold text-gray-500">Revisión pendiente</span>
+            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(212,122,26,0.12)' }}>
+              <ClipboardList size={17} className="text-[#d47a1a]" />
+            </div>
           </div>
-          <div className="stat-n">{revisionPendiente}</div>
+          <div className="stat-n !font-bold">{revisionPendiente}</div>
           <div className="stat-l">{prioridadAlta} son prioridad alta</div>
         </div>
       </section>
 
       {/* Hero: what needs attention, and overall accreditation health */}
       <section className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
-        <div className="card p-0 overflow-hidden flex flex-col">
+        <div className="card p-0 overflow-hidden flex flex-col shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="flex justify-between items-start px-5 py-4 border-b border-cream3">
             <div>
-              <div className="text-[15px] font-semibold text-navy">Atención requerida</div>
+              <div className="text-[15px] font-bold text-navy">Atención requerida</div>
               <div className="text-[11.5px] text-gray-500 mt-0.5">Lo más importante para resolver ahora.</div>
             </div>
             <span className="badge b-brown shrink-0">
@@ -321,12 +329,12 @@ export default function DashboardTab({
           </div>
         </div>
 
-        <div className="card">
-          <div className="text-[15px] font-semibold text-navy">Salud de acreditación</div>
+        <div className="card shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="text-[15px] font-bold text-navy">Salud de acreditación</div>
           <div className="text-[11.5px] text-gray-500 mt-0.5 mb-4">Contratistas activos</div>
           <div className="flex items-end justify-between">
-            <span className="text-[34px] font-bold text-navy leading-none">{pctAcreditados}%</span>
-            <span className="text-[11.5px] text-gray-500 mb-1">acreditados</span>
+            <span className="text-[36px] font-extrabold text-navy leading-none">{pctAcreditados}%</span>
+            <span className="text-[12px] text-gray-500 mb-1.5">acreditados</span>
           </div>
           <div className="prog-wrap my-4">
             <div className="prog-fill" style={{ width: `${pctAcreditados}%` }} />
@@ -359,19 +367,19 @@ export default function DashboardTab({
 
       {/* Same-day activity, subordinate to the KPIs above */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="stat-mini">
+        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="stat-mini-n">{waitingCorrectionList.length}</div>
           <div className="stat-mini-l">Esperando corrección</div>
         </div>
-        <div className="stat-mini">
+        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="stat-mini-n">{mockCasosSeguimiento.length}</div>
           <div className="stat-mini-l">Casos en seguimiento</div>
         </div>
-        <div className="stat-mini">
+        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="stat-mini-n" style={{ color: '#1e7a3c' }}>{aprobadosHoy}</div>
           <div className="stat-mini-l">Aprobados hoy</div>
         </div>
-        <div className="stat-mini">
+        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           <div className="stat-mini-n" style={{ color: '#b83232' }}>{rechazadosHoy}</div>
           <div className="stat-mini-l">Rechazados hoy</div>
         </div>
@@ -398,7 +406,7 @@ export default function DashboardTab({
             </div>
           </div>
 
-          <div className="card p-0 overflow-hidden">
+          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
             <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
               {filtros.map(f => (
                 <button
@@ -440,7 +448,7 @@ export default function DashboardTab({
             <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Accesos rápidos</h3>
             <p className="text-[11.5px] text-gray-500 mt-0.5">Tareas frecuentes del administrador.</p>
           </div>
-          <div className="card grid grid-cols-2 gap-2.5">
+          <div className="card grid grid-cols-2 gap-2.5 shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
             <button
               onClick={() => { if (primerPendiente) setSelectedDocId(primerPendiente.id); setActiveTab('cola'); }}
               className="text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
@@ -487,7 +495,7 @@ export default function DashboardTab({
             </p>
           </div>
         </div>
-        <div className="card p-0 overflow-hidden">
+        <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           {mockCasosDecision.map(caso => (
             <div key={caso.id} className="qrow">
               <div className="flex-1 min-w-0">
@@ -526,7 +534,7 @@ export default function DashboardTab({
           </select>
         </div>
 
-        <div className="card p-0 overflow-hidden bg-white/70">
+        <div className="card p-0 overflow-hidden bg-white/70 shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
           {actividadVisible.length > 0 ? (
             actividadVisible.map(a => {
               const estado = normalizarEstado(a.estado);
