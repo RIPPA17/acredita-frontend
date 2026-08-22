@@ -1491,24 +1491,50 @@ export function sembrarDocumentosEjemplo(): number {
   const hoy = new Date();
   const fechaHoy = `${String(hoy.getDate()).padStart(2, '0')} ${meses[hoy.getMonth()]} ${hoy.getFullYear()}`;
 
+  const marcarRevision = (doc: Documento, motivo: string) => {
+    doc.estado = 'revision';
+    doc.subido = fechaHoy;
+    doc.motivo = motivo;
+    doc.observacion = motivo;
+  };
+
+  const yaSembrados = new Set<string>();
+  let sembrados = 0;
+
+  // 1. Preferred picks: one of each document family, by name, for a curated
+  //    mix — works out of the box on a fresh/default dataset.
   const objetivos: Array<{ contratistaId: string; nombreDoc: string; motivo: string }> = [
     { contratistaId: 'tecnicosur', nombreDoc: 'Liquidación de sueldo (mes vigente)', motivo: 'Verificar descuentos legales y base imponible.' },
     { contratistaId: 'lagos-cia', nombreDoc: 'Registro Mutual ACHS', motivo: 'Confirmar vigencia de la póliza mutual.' },
     { contratistaId: 'electrica-sur', nombreDoc: 'F30 SII (mes vigente)', motivo: 'Validar el período tributario declarado.' },
     { contratistaId: 'constructora-velez', nombreDoc: 'Contrato de Trabajo', motivo: 'Revisar cláusulas de jornada y remuneración.' },
   ];
-
-  let sembrados = 0;
   objetivos.forEach(obj => {
     const cObj = list.find(c => c.id === obj.contratistaId);
     const doc = cObj?.documentos.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
     if (!doc) return;
-    doc.estado = 'revision';
-    doc.subido = fechaHoy;
-    doc.motivo = obj.motivo;
-    doc.observacion = obj.motivo;
+    marcarRevision(doc, obj.motivo);
+    yaSembrados.add(`${cObj!.id}_${doc.id}`);
     sembrados++;
   });
+
+  // 2. Fallback: after months of manual testing, a live session's data can
+  //    drift far enough from the seed (documents renamed, contratistas
+  //    edited/removed) that none of the named picks above still exist. Rather
+  //    than silently seeding nothing, grab up to 4 more documents from
+  //    anywhere in the current dataset, still not already in revision.
+  if (sembrados < 4) {
+    for (const c of list) {
+      for (const doc of c.documentos || []) {
+        if (sembrados >= 4) break;
+        if (doc.estado === 'revision' || yaSembrados.has(`${c.id}_${doc.id}`)) continue;
+        marcarRevision(doc, 'Revisar documento cargado por el contratista.');
+        yaSembrados.add(`${c.id}_${doc.id}`);
+        sembrados++;
+      }
+      if (sembrados >= 4) break;
+    }
+  }
 
   if (sembrados > 0) saveContratistas(list);
   return sembrados;
