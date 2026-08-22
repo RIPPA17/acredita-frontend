@@ -256,16 +256,16 @@ export default function ReglasTab({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse table-auto">
               <thead>
                 <tr className="border-b border-cream3">
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Documento</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Vigencia</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Alertar antes</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Criticidad</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Efecto</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right">Acciones</th>
+                  <th className="px-2.5 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Documento</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Vigencia</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Alertar antes</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Criticidad</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Efecto</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Estado</th>
+                  <th className="px-2.5 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -273,43 +273,43 @@ export default function ReglasTab({
                   const rowErr = regla.alertaDias >= regla.diasVigencia;
                   return (
                     <tr key={regla.id} className="hover:bg-[#fbfaf6] transition-colors">
-                      <td className="px-4 py-3">
+                      <td className="px-2.5 py-2">
                         {regla.isNew ? (
                           <input
                             type="text"
-                            className="form-input w-full min-w-[160px]"
+                            className="form-input w-full min-w-[140px] !rounded-md text-[12px] px-2 py-1.5"
                             placeholder="Nombre de documento..."
                             value={regla.documento}
                             onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, documento: e.target.value } : r))}
                           />
                         ) : (
                           <>
-                            <div className="text-[13.5px] font-semibold text-navy">{regla.documento}</div>
-                            <div className="text-[10.5px] text-gray-400 mt-0.5">{rowErr ? '⚠ revisar configuración' : 'Regla activa'}</div>
+                            <div className="text-[12px] font-semibold text-navy whitespace-nowrap">{regla.documento}</div>
+                            <div className="text-[9.5px] text-gray-400 mt-0.5 whitespace-nowrap">{rowErr ? '⚠ revisar configuración' : 'Regla activa'}</div>
                           </>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <input
                           type="number"
                           min={1}
-                          className="form-input w-20"
+                          className="form-input w-14 !rounded-md text-[12px] px-1.5 py-1.5"
                           value={regla.diasVigencia}
                           onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, diasVigencia: Number(e.target.value) } : r))}
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <input
                           type="number"
                           min={0}
-                          className={`form-input w-20 ${rowErr ? 'border-red-400 bg-red-50' : ''}`}
+                          className={`form-input w-14 !rounded-md text-[12px] px-1.5 py-1.5 ${rowErr ? 'border-red-400 bg-red-50' : ''}`}
                           value={regla.alertaDias}
                           onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, alertaDias: Number(e.target.value) } : r))}
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <select
-                          className="form-input w-full min-w-[160px]"
+                          className="form-input w-[128px] !rounded-md text-[11px] px-1.5 py-1.5"
                           value={regla.criticidad}
                           onChange={(e) => setReglas(reglas.map(r => r.id === regla.id ? { ...r, criticidad: e.target.value as Regla['criticidad'] } : r))}
                         >
@@ -318,24 +318,24 @@ export default function ReglasTab({
                           <option value="advertencia">Solo advertencia</option>
                         </select>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`badge border font-semibold whitespace-nowrap ${effectBadgeClass(regla.criticidad)}`}>
+                      <td className="px-2 py-2">
+                        <span className={`badge border font-semibold whitespace-nowrap text-[10px] px-1.5 ${effectBadgeClass(regla.criticidad)}`}>
                           {effectLabel(regla.criticidad)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`badge border font-semibold whitespace-nowrap ${rowErr ? BADGE_CLASS.red : BADGE_CLASS.green}`}>
+                      <td className="px-2 py-2">
+                        <span className={`badge border font-semibold whitespace-nowrap text-[10px] px-1.5 ${rowErr ? BADGE_CLASS.red : BADGE_CLASS.green}`}>
                           {rowErr ? 'Revisar' : 'Activa'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-2.5 py-2 text-right">
                         <button
                           onClick={() => {
                             if (window.confirm(`¿Eliminar la regla de "${regla.documento || 'este documento'}"? Esta acción no se puede deshacer.`)) {
                               setReglas(reglas.filter(r => r.id !== regla.id));
                             }
                           }}
-                          className="text-[11px] font-bold text-gray-500 bg-cream2 border-none rounded-lg px-2.5 py-2 hover:bg-red-50 hover:text-red-600 transition-all whitespace-nowrap cursor-pointer"
+                          className="text-[10px] font-bold text-gray-500 bg-cream2 border-none rounded-md px-2 py-1.5 hover:bg-red-50 hover:text-red-600 transition-all whitespace-nowrap cursor-pointer"
                         >
                           Eliminar
                         </button>
