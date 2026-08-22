@@ -182,17 +182,44 @@ export default function AdminPortal() {
   const GLOBAL_CONTRATISTAS = getContratistas();
   const GLOBAL_PLANTILLA_DOCUMENTOS = getPlantillas();
 
-  const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p, idx) => ({
-    id: idx + 1,
-    nombre: p.nombre,
-    categoria: p.categoria,
-    tipo: idx % 2 === 0 ? "gratuita" : "upsell",
-    actualizacion: "10 May 2026",
-    descargas: idx % 2 === 0 ? "342 descargas" : "85 solicitudes",
-    descripcion: p.nombre.toLowerCase().includes('contrato')
-      ? "Formato estándar de contrato individual para trabajadores contratados por obra o faena, con cláusulas legales al día."
-      : "Matriz de identificación de peligros y evaluación de riesgos. Requiere conocimiento técnico especializado."
-  }));
+  // Cosmetic per-template metadata (version/downloads/update date) for the
+  // 6 seeded templates only — anything added later gets fresh-item defaults
+  // below instead of borrowing one of these entries by coincidence of index.
+  const PLANTILLAS_META = [
+    { version: 'v3.2', actualizacion: '21 Ago 2026', descargasTotal: 246, descargasMes: 82, porActualizar: true },
+    { version: 'v4.0', actualizacion: '18 Ago 2026', descargasTotal: 221, descargasMes: 76, porActualizar: false },
+    { version: 'v2.1', actualizacion: '19 Ago 2026', descargasTotal: 138, descargasMes: 51, porActualizar: true },
+    { version: 'v2.4', actualizacion: '15 Ago 2026', descargasTotal: 177, descargasMes: 39, porActualizar: false },
+    { version: 'v1.4', actualizacion: '05 Ago 2026', descargasTotal: 94, descargasMes: 28, porActualizar: false },
+    { version: 'v1.2', actualizacion: '02 Ago 2026', descargasTotal: 61, descargasMes: 17, porActualizar: false },
+  ];
+
+  const PLANTILLAS_DESCRIPCION: Record<string, string> = {
+    liquidacion: "Comprobante mensual de remuneración del trabajador, con descuentos legales y base imponible.",
+    f30: "Certificado de cumplimiento de obligaciones laborales y previsionales emitido por el SII.",
+    contrato: "Formato estándar de contrato individual para trabajadores contratados por obra o faena, con cláusulas legales al día.",
+    mutual: "Certificado de afiliación y cotizaciones al día ante la mutual de seguridad.",
+    antecedentes: "Certificado de antecedentes penales vigente del trabajador.",
+    odi: "Obligación de informar los riesgos laborales asociados a la faena, firmada por el trabajador.",
+  };
+
+  const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p: any, idx) => {
+    const tipo = p.tipo || (idx % 2 === 0 ? "gratuita" : "upsell");
+    const meta = idx < PLANTILLAS_META.length
+      ? PLANTILLAS_META[idx]
+      : { version: 'v1.0', actualizacion: '22 Ago 2026', descargasTotal: 0, descargasMes: 0, porActualizar: false };
+
+    return {
+      id: idx + 1,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      tipo,
+      modalidad: tipo === 'upsell' ? 'Servicio Acredita' : 'Plantilla gratuita',
+      estado: 'Activa',
+      ...meta,
+      descripcion: PLANTILLAS_DESCRIPCION[p.id] || `Modelo de documento ${p.categoria.toLowerCase()} para contratistas.`
+    };
+  });
 
   const ACTIVIDAD_RECIENTE: any[] = [];
   let actId = 1;
@@ -247,6 +274,7 @@ export default function AdminPortal() {
   const [showSubirPlantillaModal, setShowSubirPlantillaModal] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateCategory, setNewTemplateCategory] = useState("Laboral");
+  const [newTemplateTipo, setNewTemplateTipo] = useState("gratuita");
 
   const handleAddTemplate = () => {
     if (!newTemplateName.trim()) return;
@@ -255,15 +283,18 @@ export default function AdminPortal() {
       id: newId,
       nombre: newTemplateName,
       categoria: newTemplateCategory,
+      tipo: newTemplateTipo,
       frecuencia: 'Única'
     };
     const list = getPlantillas();
     list.push(newTemplate);
     savePlantillas(list);
-    
+
     setNewTemplateName("");
     setNewTemplateCategory("Laboral");
+    setNewTemplateTipo("gratuita");
     setShowSubirPlantillaModal(false);
+    showToast("Plantilla creada correctamente");
   };
   const [reglas, setReglas] = useState<Regla[]>(() => getReglas());
 
@@ -870,7 +901,12 @@ export default function AdminPortal() {
               setNewTemplateName={setNewTemplateName}
               newTemplateCategory={newTemplateCategory}
               setNewTemplateCategory={setNewTemplateCategory}
+              newTemplateTipo={newTemplateTipo}
+              setNewTemplateTipo={setNewTemplateTipo}
               handleAddTemplate={handleAddTemplate}
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              showToast={showToast}
             />
           )}
 
