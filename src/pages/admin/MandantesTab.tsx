@@ -138,59 +138,91 @@ export default function MandantesTab({
 
   return (
     <div className="fade-in">
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Mandantes</h2>
-          <p className="page-sub">
-            Mandantes, proyectos y empresas contratistas en una sola vista
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowInvitarModal(true)}>
-          <Plus size={16} /> Invitar Mandante
-        </button>
-      </div>
+      {/* Premium Dark Brand Band Header */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-navy to-navy-2 px-8 py-4 pb-12 -mx-8 -mt-6">
+        <div className="absolute top-[-30%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[radial-gradient(circle,rgba(154,105,78,0.15),transparent_70%)] pointer-events-none" />
 
-      {/* Severity summary — each chip toggles its own filter */}
-      <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-        {CHIPS.map(({ sev, label, punto }) => (
-          <button
-            key={sev}
-            onClick={() => setSevFiltro(sevFiltro === sev ? null : sev)}
-            aria-pressed={sevFiltro === sev}
-            className={`schip ${sevFiltro === sev ? 'active' : ''}`}
-          >
-            <span>
-              <span className="schip-l block">{label}</span>
-              <span className="schip-n block" style={{ color: COLOR_SEV[sev] }}>
-                {conteo[sev]}
-              </span>
+        <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+          <div>
+            <span className="text-[11px] tracking-[2px] uppercase font-semibold text-gold-hover">
+              Panel de administración
             </span>
-            <span className={`schip-dot ${punto}`} />
-          </button>
-        ))}
-      </div>
+            <h2 className="text-2xl font-semibold text-white mt-1">Mandantes</h2>
+            <p className="text-[13.5px] text-gray-300 mt-1.5 max-w-[550px]">
+              Mandantes, proyectos y empresas contratistas asignadas, con su estado de acreditación en una sola vista.
+            </p>
+          </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            placeholder="Buscar mandante, proyecto o empresa..."
-            className="form-input w-full pl-9 py-2 text-[13.5px]"
-          />
+          <div className="flex gap-2.5 shrink-0">
+            <button
+              onClick={() => setShowInvitarModal(true)}
+              className="px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-hover to-gold text-white hover:brightness-105 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_6px_16px_rgba(179,137,63,0.35)] border-none"
+            >
+              <Plus size={15} />
+              Invitar mandante
+            </button>
+          </div>
         </div>
-        <button onClick={alternarTodos} className="btn btn-ghost whitespace-nowrap">
-          {todosAbiertos ? 'Contraer todo' : 'Expandir todo'}
-        </button>
       </div>
 
-      <div className="flex flex-col gap-2.5">
+      {/* Main Content Area (floated up) */}
+      <div className="relative z-20 -mt-8 max-w-[1200px] mx-auto px-1 flex flex-col gap-5">
+
+        {/* Toolbar Panel */}
+        <div className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden">
+          <div className="p-4 flex flex-wrap items-center justify-between gap-3">
+            {/* Segmented Control */}
+            <div className="flex bg-[#f1efe6] border border-cream3 rounded-xl p-1 gap-1">
+              <button
+                onClick={() => setSevFiltro(null)}
+                className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1 ${
+                  sevFiltro === null
+                    ? 'bg-white text-navy shadow-sm'
+                    : 'text-gray-500 hover:text-navy hover:bg-white/40'
+                }`}
+              >
+                Todos <span className="opacity-60 text-xs ml-0.5">{mandantes.length}</span>
+              </button>
+              {CHIPS.map(({ sev, label, punto }) => (
+                <button
+                  key={sev}
+                  onClick={() => setSevFiltro(sevFiltro === sev ? null : sev)}
+                  aria-pressed={sevFiltro === sev}
+                  className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
+                    sevFiltro === sev
+                      ? 'bg-white text-navy shadow-sm'
+                      : 'text-gray-500 hover:text-navy hover:bg-white/40'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${punto}`} />
+                  {label} <span className="opacity-60 text-xs">{conteo[sev]}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search & Expand toggle */}
+            <div className="flex items-center gap-2 flex-wrap flex-1 justify-end max-w-full">
+              <div className="relative min-w-[200px] flex-1 max-w-[320px]">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  placeholder="Buscar mandante, proyecto o empresa..."
+                  className="form-input w-full pl-9 py-2 text-[13px] bg-[#f1efe6] border-cream3 focus:bg-white transition-all rounded-xl"
+                />
+              </div>
+              <button onClick={alternarTodos} className="btn btn-ghost whitespace-nowrap">
+                {todosAbiertos ? 'Contraer todo' : 'Expandir todo'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
         {visibles.map(m => {
           const abierto = estaAbierto(m);
           const pct = m.docsTotal > 0 ? Math.round((m.docsAprobados / m.docsTotal) * 100) : 0;
@@ -335,6 +367,7 @@ export default function MandantesTab({
         Mostrando {visibles.length} de {mandantes.length} mandantes
         {sevFiltro && ` · filtrando por ${SEVERIDAD_LABEL[sevFiltro]}`}
       </p>
+      </div>
     </div>
   );
 }
