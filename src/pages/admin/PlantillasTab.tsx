@@ -301,64 +301,64 @@ export default function PlantillasTab({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse table-auto">
               <thead>
                 <tr className="border-b border-cream3">
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Plantilla</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Categoría</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Modalidad</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Versión</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Actualización</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Descargas</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right">Acciones</th>
+                  <th className="px-2.5 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Plantilla</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Categoría</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Modalidad</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Versión</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Estado</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Actualización</th>
+                  <th className="px-2 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 whitespace-nowrap">Descargas</th>
+                  <th className="px-2.5 py-2.5 text-[9px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {plantillasFiltradas.length > 0 ? plantillasFiltradas.map((p: any) => (
                   <tr key={p.id} className="hover:bg-[#fbfaf6] transition-colors">
-                    <td className="px-4 py-3 max-w-[260px]">
-                      <div className="text-[13.5px] font-semibold text-navy flex items-center gap-1.5">
+                    <td className="px-2.5 py-2">
+                      <div className="text-[12px] font-semibold text-navy flex items-center gap-1.5 whitespace-nowrap">
                         {p.nombre}
-                        {p.modalidad !== 'Plantilla gratuita' && <Sparkles size={13} className="text-brown shrink-0" />}
+                        {p.modalidad !== 'Plantilla gratuita' && <Sparkles size={12} className="text-brown shrink-0" />}
                       </div>
-                      <div className="text-[11px] text-gray-400 mt-0.5 truncate">{p.descripcion}</div>
+                      <div className="text-[9.5px] text-gray-400 mt-0.5 truncate max-w-[220px]">{p.descripcion}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge border ${CATEGORIA_COLOR[p.categoria] || 'border-cream3 bg-cream2 text-gray-600'}`}>
+                    <td className="px-2 py-2">
+                      <span className={`badge border text-[10px] px-1.5 whitespace-nowrap ${CATEGORIA_COLOR[p.categoria] || 'border-cream3 bg-cream2 text-gray-600'}`}>
                         {p.categoria}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge border ${p.modalidad === 'Plantilla gratuita' ? 'border-cream3 bg-cream2 text-gray-600' : 'border-brown/30 bg-[#f0e4da] text-[#7a5038]'}`}>
+                    <td className="px-2 py-2">
+                      <span className={`badge border text-[10px] px-1.5 whitespace-nowrap ${p.modalidad === 'Plantilla gratuita' ? 'border-cream3 bg-cream2 text-gray-600' : 'border-brown/30 bg-[#f0e4da] text-[#7a5038]'}`}>
                         {p.modalidad}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[12.5px] font-semibold text-navy whitespace-nowrap">{p.version}</td>
-                    <td className="px-4 py-3">
-                      <span className={`badge border ${p.estado === 'Activa' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-cream3 bg-cream2 text-gray-500'}`}>
+                    <td className="px-2 py-2 text-[11px] font-semibold text-navy whitespace-nowrap">{p.version}</td>
+                    <td className="px-2 py-2">
+                      <span className={`badge border text-[10px] px-1.5 whitespace-nowrap ${p.estado === 'Activa' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-cream3 bg-cream2 text-gray-500'}`}>
                         {p.estado}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[12px] text-gray-500 whitespace-nowrap">{p.actualizacion}</td>
-                    <td className="px-4 py-3 text-[12.5px] text-gray-600 whitespace-nowrap">
-                      <b className="text-navy">{p.descargasMes}</b> <span className="text-gray-400">({p.descargasTotal} total)</span>
+                    <td className="px-2 py-2 text-[11px] text-gray-500 whitespace-nowrap">{p.actualizacion}</td>
+                    <td className="px-2 py-2 text-[11px] text-gray-600 whitespace-nowrap">
+                      <b className="text-navy">{p.descargasMes}</b> <span className="text-gray-400">({p.descargasTotal})</span>
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-2.5 py-2 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => { setPlantillaSeleccionada(p); setShowUpdateModal(false); }}
                           title="Gestionar"
-                          className="w-8 h-8 rounded-lg border border-cream3 bg-white text-navy flex items-center justify-center cursor-pointer hover:bg-navy hover:text-white transition-all shrink-0"
+                          className="w-7 h-7 rounded-md border border-cream3 bg-white text-navy flex items-center justify-center cursor-pointer hover:bg-navy hover:text-white transition-all shrink-0"
                         >
-                          <Eye size={14} />
+                          <Eye size={13} />
                         </button>
                         <button
                           onClick={() => { setPlantillaSeleccionada(p); setShowUpdateModal(true); }}
                           title="Actualizar versión"
-                          className="w-8 h-8 rounded-lg bg-gold-soft border border-gold-soft text-gold flex items-center justify-center cursor-pointer hover:bg-gold hover:text-white transition-all shrink-0"
+                          className="w-7 h-7 rounded-md bg-gold-soft border border-gold-soft text-gold flex items-center justify-center cursor-pointer hover:bg-gold hover:text-white transition-all shrink-0"
                         >
-                          <RefreshCcw size={14} />
+                          <RefreshCcw size={13} />
                         </button>
                       </div>
                     </td>
