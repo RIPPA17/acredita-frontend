@@ -357,94 +357,97 @@ export default function DashboardTab({
         </div>
       </section>
 
-      {/* Priority queue and escalated cases, side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-            <div>
-              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-              <p className="text-[11.5px] text-gray-500 mt-0.5">
-                Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
-              </p>
-            </div>
-            <div className="flex gap-3.5 text-[11.5px] text-gray-500">
-              {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-                <span key={s} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
-                  {SEV_LABEL[s]}
-                </span>
-              ))}
-            </div>
+      {/* Priority queue and escalated cases, side by side. Headers and cards
+          are separate grid items placed row-major (row 1 = both headers, row
+          2 = both cards) so each row auto-sizes to its tallest cell and the
+          cards start at the exact same height regardless of header length.
+          `order` keeps the DOM (and mobile single-column view) in natural
+          reading order — header, list, header, list — while md: reorders
+          into the 2x2 layout. */}
+      <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-x-4 gap-y-3">
+        <div className="min-w-0 order-1 md:order-1 flex flex-wrap justify-between items-end gap-3">
+          <div>
+            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">
+              Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
+            </p>
+          </div>
+          <div className="flex gap-3.5 text-[11.5px] text-gray-500">
+            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
+                {SEV_LABEL[s]}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="min-w-0 order-2 md:order-3 card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
+            {filtros.map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFiltroCola(f.id)}
+                className={`chip ${filtroCola === f.id ? 'active' : ''}`}
+              >
+                {f.label} <span className="chip-count">{conteo[f.id]}</span>
+              </button>
+            ))}
           </div>
 
-          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-            <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
-              {filtros.map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setFiltroCola(f.id)}
-                  className={`chip ${filtroCola === f.id ? 'active' : ''}`}
-                >
-                  {f.label} <span className="chip-count">{conteo[f.id]}</span>
-                </button>
-              ))}
-            </div>
-
-            {colaVisible.length > 0 ? (
-              colaVisible.map(item => (
-                <div key={item.key} className="qrow">
-                  <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13.5px] font-semibold text-navy truncate">
-                      {item.empresa} — {item.documento}
-                    </div>
-                    <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
+          {colaVisible.length > 0 ? (
+            colaVisible.map(item => (
+              <div key={item.key} className="qrow">
+                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-semibold text-navy truncate">
+                    {item.empresa} — {item.documento}
                   </div>
-                  <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
-                  <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
-                    {item.accion}
-                  </button>
+                  <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
                 </div>
-              ))
-            ) : (
-              <p className="text-center py-8 text-gray-400 text-[13.5px]">
-                {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
-              </p>
-            )}
-          </div>
+                <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
+                <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
+                  {item.accion}
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="text-center py-8 text-gray-400 text-[13.5px]">
+              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
+            </p>
+          )}
         </div>
 
         {/* Cases escalated to the verification lead. There is no screen for this
             yet, so each row shows a static marker instead of a dead button. */}
-        <div className="min-w-0">
-          <div className="flex justify-between items-end gap-3 mb-3">
-            <div>
-              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy flex items-center gap-2">
-                <ShieldAlert size={17} className="text-[#a32d2d]" />
-                Requieren decisión
-              </h3>
-              <p className="text-[11.5px] text-gray-500 mt-0.5">
-                Casos escalados al Jefe de Verificadores.
-              </p>
-            </div>
+        <div className="min-w-0 order-3 md:order-2 flex justify-between items-end gap-3">
+          <div>
+            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy flex items-center gap-2">
+              <ShieldAlert size={17} className="text-[#a32d2d]" />
+              Requieren decisión
+            </h3>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">
+              Casos escalados al Jefe de Verificadores.
+            </p>
           </div>
-          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-            {mockCasosDecision.map(caso => (
-              <div key={caso.id} className="qrow">
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13.5px] font-semibold text-navy truncate">
-                    {caso.empresa} — {caso.detalle}
-                  </div>
-                  <div className="text-[11.5px] text-gray-500 truncate" title={caso.info}>
-                    {caso.proyecto} · {caso.info}
-                  </div>
+        </div>
+
+        <div className="min-w-0 order-4 md:order-4 card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          {mockCasosDecision.map(caso => (
+            <div key={caso.id} className="qrow">
+              <div className="flex-1 min-w-0">
+                <div className="text-[13.5px] font-semibold text-navy truncate">
+                  {caso.empresa} — {caso.detalle}
                 </div>
-                <span className="text-[11.5px] text-gray-400 shrink-0 flex items-center gap-1.5">
-                  <Clock size={13} /> Escalado
-                </span>
+                <div className="text-[11.5px] text-gray-500 truncate" title={caso.info}>
+                  {caso.proyecto} · {caso.info}
+                </div>
               </div>
-            ))}
-          </div>
+              <span className="text-[11.5px] text-gray-400 shrink-0 flex items-center gap-1.5">
+                <Clock size={13} /> Escalado
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
