@@ -14,7 +14,7 @@ import {
   ChevronRight,
   Briefcase,
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, getMandantes, calcularEstadoTrabajador, actualizarEstadoDocumento } from "../../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, getMandantes, calcularEstadoTrabajador, actualizarEstadoDocumento, sembrarDocumentosEjemplo } from "../../data/localStorageDb";
 import { buildColaDocs } from "./colaUtils";
 import DocumentPreview from "./DocumentPreview";
 
@@ -152,6 +152,13 @@ export default function ColaRevisionTab({
   const selectDoc = (id: number) => {
     setSelectedId(id);
     setReviewTab("documento");
+  };
+
+  const cargarDocumentosEjemplo = () => {
+    const sembrados = sembrarDocumentosEjemplo();
+    if (sembrados === 0) return;
+    const contratistasActualizados = getContratistas();
+    setDocs(buildColaDocs(contratistasActualizados, GLOBAL_PROYECTOS));
   };
 
   const decide = (action: string) => {
@@ -366,6 +373,12 @@ export default function ColaRevisionTab({
                   <p className="text-[13.5px] text-navy font-bold text-center">
                     Cola al día — no hay documentos pendientes
                   </p>
+                  <button
+                    onClick={cargarDocumentosEjemplo}
+                    className="text-brown text-[12.5px] hover:underline font-semibold cursor-pointer border-none bg-transparent"
+                  >
+                    Cargar documentos de ejemplo
+                  </button>
                 </>
               ) : (
                 <>

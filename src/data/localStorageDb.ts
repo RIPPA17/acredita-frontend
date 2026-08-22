@@ -1477,6 +1477,43 @@ export function actualizarEstadoDocumento(
   return { success: true };
 }
 
+/**
+ * Pushes a handful of existing (already-approved) documents back into
+ * "revision" so the reviewer has real, varied examples to look at in Cola de
+ * revisión — one of each document family (liquidación, certificado,
+ * tributario, contrato) — after they've cleared the queue. No new mock
+ * companies or documents are invented; this only flips the estado on real
+ * records that are already part of the seeded data.
+ */
+export function sembrarDocumentosEjemplo(): number {
+  const list = getContratistas();
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const hoy = new Date();
+  const fechaHoy = `${String(hoy.getDate()).padStart(2, '0')} ${meses[hoy.getMonth()]} ${hoy.getFullYear()}`;
+
+  const objetivos: Array<{ contratistaId: string; nombreDoc: string; motivo: string }> = [
+    { contratistaId: 'tecnicosur', nombreDoc: 'Liquidación de sueldo (mes vigente)', motivo: 'Verificar descuentos legales y base imponible.' },
+    { contratistaId: 'lagos-cia', nombreDoc: 'Registro Mutual ACHS', motivo: 'Confirmar vigencia de la póliza mutual.' },
+    { contratistaId: 'electrica-sur', nombreDoc: 'F30 SII (mes vigente)', motivo: 'Validar el período tributario declarado.' },
+    { contratistaId: 'constructora-velez', nombreDoc: 'Contrato de Trabajo', motivo: 'Revisar cláusulas de jornada y remuneración.' },
+  ];
+
+  let sembrados = 0;
+  objetivos.forEach(obj => {
+    const cObj = list.find(c => c.id === obj.contratistaId);
+    const doc = cObj?.documentos.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
+    if (!doc) return;
+    doc.estado = 'revision';
+    doc.subido = fechaHoy;
+    doc.motivo = obj.motivo;
+    doc.observacion = obj.motivo;
+    sembrados++;
+  });
+
+  if (sembrados > 0) saveContratistas(list);
+  return sembrados;
+}
+
 export interface AuditLog {
   id: string;
   fecha: string;
