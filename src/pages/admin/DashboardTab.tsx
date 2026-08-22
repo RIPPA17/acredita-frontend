@@ -81,14 +81,6 @@ export default function DashboardTab({
 
   const alertas = getAlertasVigencia();
 
-  const mockCasosSeguimiento = [
-    { id: "seg-1", empresa: "TécnicoSur SpA", proyecto: "Torre Mackenna", detalle: "ODI de Alejandro Muñoz", info: "2 rechazos consecutivos por huella digital borrosa" },
-    { id: "seg-2", empresa: "Constructora del Sol", proyecto: "Planta Solar", detalle: "Registro Mutual ACHS", info: "Documentación de faena no corresponde al período" },
-    { id: "seg-3", empresa: "Eléctrica del Sur", proyecto: "Torre Mackenna", detalle: "Contrato de Trabajo de Juan Pérez", info: "RUT de trabajador no coincide con credencial" },
-    { id: "seg-4", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "F30 de Empresa", info: "3 intentos fallidos de subida de planilla SII" },
-    { id: "seg-5", empresa: "Servicios Generales Ltda", proyecto: "Costanera Norte", detalle: "Certificado de Antecedentes de Carlos Rojas", info: "Documento con vigencia vencida por 3 meses" }
-  ];
-
   const mockCasosDecision = [
     { id: "dec-1", empresa: "TécnicoSur SpA", proyecto: "Torre Mackenna", detalle: "Certificado ODI", info: "Excepción de firma notarial para trabajador extranjero (Jefe Verificador)" },
     { id: "dec-2", empresa: "Constructora del Sol", proyecto: "Planta Solar", detalle: "Certificado Antecedentes", info: "Discrepancia en validación de firma digital homologada (Jefe Verificador)" },
@@ -365,119 +357,59 @@ export default function DashboardTab({
         </div>
       </section>
 
-      {/* Same-day activity, subordinate to the KPIs above */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="stat-mini-n">{waitingCorrectionList.length}</div>
-          <div className="stat-mini-l">Esperando corrección</div>
+      {/* Unified priority queue, full width now that quick access is gone */}
+      <div>
+        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
+          <div>
+            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">
+              Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
+            </p>
+          </div>
+          <div className="flex gap-3.5 text-[11.5px] text-gray-500">
+            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
+                {SEV_LABEL[s]}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="stat-mini-n">{mockCasosSeguimiento.length}</div>
-          <div className="stat-mini-l">Casos en seguimiento</div>
-        </div>
-        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="stat-mini-n" style={{ color: '#1e7a3c' }}>{aprobadosHoy}</div>
-          <div className="stat-mini-l">Aprobados hoy</div>
-        </div>
-        <div className="stat-mini shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="stat-mini-n" style={{ color: '#b83232' }}>{rechazadosHoy}</div>
-          <div className="stat-mini-l">Rechazados hoy</div>
-        </div>
-      </div>
 
-      {/* Unified priority queue + quick access, side by side like the prototype's
-          "Revisión documental" / "Accesos rápidos" pair */}
-      <div className="grid grid-cols-1 md:grid-cols-[1.3fr_0.9fr] gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-            <div>
-              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-              <p className="text-[11.5px] text-gray-500 mt-0.5">
-                Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
-              </p>
-            </div>
-            <div className="flex gap-3.5 text-[11.5px] text-gray-500">
-              {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-                <span key={s} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
-                  {SEV_LABEL[s]}
-                </span>
-              ))}
-            </div>
+        <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
+            {filtros.map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFiltroCola(f.id)}
+                className={`chip ${filtroCola === f.id ? 'active' : ''}`}
+              >
+                {f.label} <span className="chip-count">{conteo[f.id]}</span>
+              </button>
+            ))}
           </div>
 
-          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-            <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
-              {filtros.map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setFiltroCola(f.id)}
-                  className={`chip ${filtroCola === f.id ? 'active' : ''}`}
-                >
-                  {f.label} <span className="chip-count">{conteo[f.id]}</span>
-                </button>
-              ))}
-            </div>
-
-            {colaVisible.length > 0 ? (
-              colaVisible.map(item => (
-                <div key={item.key} className="qrow">
-                  <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13.5px] font-semibold text-navy truncate">
-                      {item.empresa} — {item.documento}
-                    </div>
-                    <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
+          {colaVisible.length > 0 ? (
+            colaVisible.map(item => (
+              <div key={item.key} className="qrow">
+                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-semibold text-navy truncate">
+                    {item.empresa} — {item.documento}
                   </div>
-                  <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
-                  <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
-                    {item.accion}
-                  </button>
+                  <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
                 </div>
-              ))
-            ) : (
-              <p className="text-center py-8 text-gray-400 text-[13.5px]">
-                {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <div className="mb-3">
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Accesos rápidos</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">Tareas frecuentes del administrador.</p>
-          </div>
-          <div className="card grid grid-cols-2 gap-2.5 shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-            <button
-              onClick={() => { if (primerPendiente) setSelectedDocId(primerPendiente.id); setActiveTab('cola'); }}
-              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
-            >
-              <b className="block text-[12px] font-semibold text-navy">Revisar documentos</b>
-              <span className="block text-[11px] text-gray-500 mt-1">{revisionPendiente} pendientes</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('contratistas')}
-              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
-            >
-              <b className="block text-[12px] font-semibold text-navy">Ver contratistas</b>
-              <span className="block text-[11px] text-gray-500 mt-1">{contratistasConIncumplimiento} con incidencias</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('acreditaciones')}
-              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
-            >
-              <b className="block text-[12px] font-semibold text-navy">Ver acreditaciones</b>
-              <span className="block text-[11px] text-gray-500 mt-1">{totalContratistas} activos</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('auditoria')}
-              className="min-w-0 text-left border border-cream3 rounded-[12px] p-3 hover:border-brown transition-colors"
-            >
-              <b className="block text-[12px] font-semibold text-navy">Consultar auditoría</b>
-              <span className="block text-[11px] text-gray-500 mt-1">Actividad reciente</span>
-            </button>
-          </div>
+                <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
+                <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
+                  {item.accion}
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="text-center py-8 text-gray-400 text-[13.5px]">
+              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
+            </p>
+          )}
         </div>
       </div>
 
