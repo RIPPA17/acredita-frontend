@@ -357,92 +357,94 @@ export default function DashboardTab({
         </div>
       </section>
 
-      {/* Unified priority queue, full width now that quick access is gone */}
-      <div>
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
-            </p>
+      {/* Priority queue and escalated cases, side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
+            <div>
+              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
+              <p className="text-[11.5px] text-gray-500 mt-0.5">
+                Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
+              </p>
+            </div>
+            <div className="flex gap-3.5 text-[11.5px] text-gray-500">
+              {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
+                <span key={s} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
+                  {SEV_LABEL[s]}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-3.5 text-[11.5px] text-gray-500">
-            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-              <span key={s} className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
-                {SEV_LABEL[s]}
-              </span>
-            ))}
+
+          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+            <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
+              {filtros.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setFiltroCola(f.id)}
+                  className={`chip ${filtroCola === f.id ? 'active' : ''}`}
+                >
+                  {f.label} <span className="chip-count">{conteo[f.id]}</span>
+                </button>
+              ))}
+            </div>
+
+            {colaVisible.length > 0 ? (
+              colaVisible.map(item => (
+                <div key={item.key} className="qrow">
+                  <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13.5px] font-semibold text-navy truncate">
+                      {item.empresa} — {item.documento}
+                    </div>
+                    <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
+                  </div>
+                  <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
+                  <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
+                    {item.accion}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-center py-8 text-gray-400 text-[13.5px]">
+                {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
-            {filtros.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFiltroCola(f.id)}
-                className={`chip ${filtroCola === f.id ? 'active' : ''}`}
-              >
-                {f.label} <span className="chip-count">{conteo[f.id]}</span>
-              </button>
-            ))}
+        {/* Cases escalated to the verification lead. There is no screen for this
+            yet, so each row shows a static marker instead of a dead button. */}
+        <div className="min-w-0">
+          <div className="flex justify-between items-end gap-3 mb-3">
+            <div>
+              <h3 className="section-title mb-0 text-[16px] font-semibold text-navy flex items-center gap-2">
+                <ShieldAlert size={17} className="text-[#a32d2d]" />
+                Requieren decisión
+              </h3>
+              <p className="text-[11.5px] text-gray-500 mt-0.5">
+                Casos escalados al Jefe de Verificadores.
+              </p>
+            </div>
           </div>
-
-          {colaVisible.length > 0 ? (
-            colaVisible.map(item => (
-              <div key={item.key} className="qrow">
-                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
+          <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
+            {mockCasosDecision.map(caso => (
+              <div key={caso.id} className="qrow">
                 <div className="flex-1 min-w-0">
                   <div className="text-[13.5px] font-semibold text-navy truncate">
-                    {item.empresa} — {item.documento}
+                    {caso.empresa} — {caso.detalle}
                   </div>
-                  <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
+                  <div className="text-[11.5px] text-gray-500 truncate" title={caso.info}>
+                    {caso.proyecto} · {caso.info}
+                  </div>
                 </div>
-                <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
-                <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
-                  {item.accion}
-                </button>
+                <span className="text-[11.5px] text-gray-400 shrink-0 flex items-center gap-1.5">
+                  <Clock size={13} /> Escalado
+                </span>
               </div>
-            ))
-          ) : (
-            <p className="text-center py-8 text-gray-400 text-[13.5px]">
-              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Cases escalated to the verification lead. There is no screen for this
-          yet, so each row shows a static marker instead of a dead button. */}
-      <div>
-        <div className="flex justify-between items-end gap-3 mb-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy flex items-center gap-2">
-              <ShieldAlert size={17} className="text-[#a32d2d]" />
-              Requieren decisión
-            </h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Casos escalados al Jefe de Verificadores.
-            </p>
+            ))}
           </div>
-        </div>
-        <div className="card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          {mockCasosDecision.map(caso => (
-            <div key={caso.id} className="qrow">
-              <div className="flex-1 min-w-0">
-                <div className="text-[13.5px] font-semibold text-navy truncate">
-                  {caso.empresa} — {caso.detalle}
-                </div>
-                <div className="text-[11.5px] text-gray-500 truncate" title={caso.info}>
-                  {caso.proyecto} · {caso.info}
-                </div>
-              </div>
-              <span className="text-[11.5px] text-gray-400 shrink-0 flex items-center gap-1.5">
-                <Clock size={13} /> Escalado
-              </span>
-            </div>
-          ))}
         </div>
       </div>
 
