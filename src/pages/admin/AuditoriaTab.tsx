@@ -205,7 +205,7 @@ export default function AuditoriaTab({
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
         <div className="bg-white border border-cream3 rounded-xl p-3.5">
           <div className="text-[9.5px] uppercase text-gray-400 font-extrabold tracking-wide">Eventos hoy</div>
           <div className="text-[22px] font-extrabold text-navy mt-1.5">{eventosHoy}</div>
