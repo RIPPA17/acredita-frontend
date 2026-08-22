@@ -848,6 +848,7 @@ export default function AdminPortal() {
               setAprobadosHoy={setAprobadosHoy}
               rechazadosHoy={rechazadosHoy}
               setRechazadosHoy={setRechazadosHoy}
+              showToast={showToast}
             />
           )}
 

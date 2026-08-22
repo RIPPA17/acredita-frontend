@@ -80,3 +80,67 @@ export function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]
   });
   return list;
 }
+
+// Documentos rechazados: misma forma que buildColaDocs, para la pestaña
+// "Esperando corrección" — el contratista debe subir una nueva versión.
+export function buildCorrectionDocs(contratistas: Contratista[], proyectos: Proyecto[]) {
+  const list: any[] = [];
+  let qId = 1;
+  contratistas.forEach(c => {
+    c.documentos.forEach(d => {
+      if (d.estado === 'rechazado') {
+        const pId = d.proyectoId || c.proyectos[0] || 'costanera';
+        const project = proyectos.find(p => p.id === pId);
+
+        list.push({
+          id: qId++,
+          docId: d.id,
+          proyectoId: pId,
+          origen: 'Empresa',
+          emp: c.nombre,
+          rut: c.rut,
+          proyecto: project ? project.nombre : 'Costanera Norte',
+          title: d.nombre,
+          type: d.categoria === 'Laboral' ? 'Liquidación mensual' : d.categoria === 'Tributario' ? 'Declaración mensual SII' : 'Certificación prevención',
+          prio: 'Alta',
+          tag: 'urgente',
+          time: d.fechaRevisado || d.subido || 'Reciente',
+          timeSort: Date.now(),
+          motivoRechazo: d.motivoRechazo || d.motivo || 'Rechazado',
+          explicacionRechazo: d.explicacionRechazo || d.observacion || '',
+        });
+      }
+    });
+
+    c.trabajadores?.forEach(w => {
+      w.documentos?.forEach(wd => {
+        if (wd.estado === 'rechazado') {
+          const pId = wd.proyectoId || c.proyectos[0] || 'costanera';
+          const project = proyectos.find(p => p.id === pId);
+
+          list.push({
+            id: qId++,
+            docId: wd.id,
+            proyectoId: pId,
+            origen: 'Trabajador',
+            trabajadorNombre: w.nombre,
+            trabajadorRut: w.rut,
+            trabajadorCargo: w.cargo || 'Operario',
+            emp: c.nombre,
+            rut: c.rut,
+            proyecto: project ? project.nombre : 'Costanera Norte',
+            title: wd.nombre,
+            type: wd.categoria === 'Laboral' ? 'Documento laboral trabajador' : 'Prevención de riesgos',
+            prio: 'Alta',
+            tag: 'urgente',
+            time: wd.fechaRevisado || wd.subido || 'Reciente',
+            timeSort: Date.now(),
+            motivoRechazo: wd.motivoRechazo || wd.motivo || 'Rechazado',
+            explicacionRechazo: wd.explicacionRechazo || wd.observacion || '',
+          });
+        }
+      });
+    });
+  });
+  return list;
+}
