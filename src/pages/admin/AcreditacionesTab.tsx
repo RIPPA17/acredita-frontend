@@ -811,7 +811,7 @@ export default function AcreditacionesTab({
 
         .note{max-width:1320px; margin:1.2rem auto 0; font-size:12px; color:var(--sub);}
         
-        @media (max-width:1000px){
+        @media (max-width:1440px){
           .gates.both{grid-template-columns:1fr;}
           .solo .ddual{grid-template-columns:1fr;}
           .venc{display:none;}
