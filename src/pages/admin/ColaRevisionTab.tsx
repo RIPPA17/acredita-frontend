@@ -1,10 +1,22 @@
 import { useState } from "react";
-import { CheckCircle, XCircle, Search, AlertTriangle } from "lucide-react";
-import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, sembrarDocumentosEjemplo } from "../../data/localStorageDb";
+import { CheckCircle, XCircle, Search, AlertTriangle, History, ArrowUpRight, X } from "lucide-react";
+import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, simularNuevaVersion, sembrarDocumentosEjemplo } from "../../data/localStorageDb";
 import { buildColaDocs, buildCorrectionDocs } from "./colaUtils";
 import DocumentPreview from "./DocumentPreview";
 
 type Tab = "pending" | "review" | "correction";
+
+interface ClaimInfo {
+  verificador: string;
+  claimedAt: number;
+}
+interface EscalationInfo {
+  supervisor: string;
+  motivo: string;
+}
+
+const CURRENT_VERIFICADOR = "María González";
+const SUPERVISOR = "Ana Ruiz";
 
 const BADGE: Record<string, string> = {
   red: "border-red-200 bg-red-50 text-red-700",
@@ -14,13 +26,40 @@ const BADGE: Record<string, string> = {
   gray: "border-cream3 bg-cream2 text-gray-600",
 };
 
+const VENC_BADGE: Record<string, { label: string; cls: string }> = {
+  vigente: { label: "VIGENTE", cls: BADGE.green },
+  proximo: { label: "PRÓXIMO A VENCER", cls: BADGE.amber },
+  vencido: { label: "VENCIDO", cls: BADGE.red },
+  sin_vencimiento: { label: "SIN VENCIMIENTO", cls: BADGE.gray },
+};
+
 const REASONS = [
   "Documento vencido",
   "Documento ilegible",
   "Documento incorrecto",
   "Datos no coinciden",
-  "Falta información o firma",
+  "Falta información",
+  "Falta firma",
+  "Otro",
 ];
+
+const ESTADO_DOC_LABEL: Record<string, string> = {
+  revision: "Pendiente de revisión",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
+  pendiente: "Pendiente",
+  por_vencer: "Por vencer",
+};
+
+function formatElapsed(fromMs: number): string {
+  const diffMs = Date.now() - fromMs;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "recién tomado";
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `hace ${hours} h ${remMins} min` : `hace ${hours} h`;
+}
 
 export default function ColaRevisionTab({
   onVerEmpresa,
@@ -49,30 +88,28 @@ export default function ColaRevisionTab({
   const [pendingDocs, setPendingDocs] = useState(() => buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS));
   const [correctionDocs, setCorrectionDocs] = useState(() => buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS));
 
-  // "En revisión" ilustra el trabajo en paralelo del equipo: no hay cuentas
-  // de verificador separadas en el demo, así que se simula que 2 de los
-  // documentos reales de la cola ya fueron tomados por otro compañero.
-  // Nota: se usa el `id` numérico secuencial (único dentro de cada lista
-  // construida) como clave, no `docId` — este último es el id real del
-  // documento y solo es único dentro de un mismo contratista, así que dos
-  // contratistas distintos pueden compartir el mismo `docId`.
-  const [claims, setClaims] = useState<Record<number, string>>(() => {
-    if (pendingDocs.length < 3) return {};
-    const sorted = [...pendingDocs].sort((a, b) => (a.prio === "Alta" && b.prio !== "Alta" ? -1 : 1));
-    const claimed: Record<number, string> = {};
-    if (sorted[0]) claimed[sorted[0].id] = "María González";
-    if (sorted[1]) claimed[sorted[1].id] = "Carlos Soto";
-    return claimed;
-  });
+  // Únicamente documentos tomados por el verificador actual en esta sesión —
+  // sin backend ni locking real, solo estado de React. Se usa el `key`
+  // estable de cada item (contratista + trabajador + docId) como clave, no el
+  // `id` numérico secuencial: ese se reasigna desde 1 cada vez que se
+  // reconstruye la lista (tras aprobar/rechazar/simular nueva versión), así
+  // que no sirve como clave persistente entre reconstrucciones.
+  const [claims, setClaims] = useState<Record<string, ClaimInfo>>({});
+  const [escalations, setEscalations] = useState<Record<string, EscalationInfo>>({});
 
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("");
   const [project, setProject] = useState("");
+  const [mandante, setMandante] = useState("");
 
-  const [selectedKey, setSelectedKeyLocal] = useState<number | null>(null);
-  const [checks, setChecks] = useState({ legible: false, corresponde: false, vigente: false });
+  const [selectedKey, setSelectedKeyLocal] = useState<string | null>(null);
+  const [checks, setChecks] = useState({ legible: false, datos: false, vigencia: false });
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
+
+  const [historialOpen, setHistorialOpen] = useState(false);
+  const [escalarOpen, setEscalarOpen] = useState(false);
+  const [escalarMotivo, setEscalarMotivo] = useState("");
 
   const mandanteDeProyecto = (proyectoId: string) => {
     const p = GLOBAL_PROYECTOS.find(pr => pr.id === proyectoId);
@@ -81,37 +118,47 @@ export default function ColaRevisionTab({
     return m ? m.nombre : "—";
   };
 
-  const claimedKeys = new Set(Object.keys(claims).map(Number));
-  const porRevisar = pendingDocs.filter(d => !claimedKeys.has(d.id));
-  const enRevision = pendingDocs.filter(d => claimedKeys.has(d.id));
+  const claimedKeys = new Set(Object.keys(claims));
+  const porRevisar = pendingDocs.filter(d => !claimedKeys.has(d.key));
+  const enRevision = pendingDocs.filter(d => claimedKeys.has(d.key));
   const esperandoCorreccion = correctionDocs;
 
   const listaBase = tab === "pending" ? porRevisar : tab === "review" ? enRevision : esperandoCorreccion;
-  const proyectosDisponibles = Array.from(new Set(pendingDocs.map(d => d.proyecto)));
+  const todos = [...pendingDocs, ...correctionDocs];
+  const proyectosDisponibles = Array.from(new Set(todos.map(d => d.proyecto)));
+  const mandantesDisponibles = Array.from(new Set(todos.map(d => mandanteDeProyecto(d.proyectoId)))).filter(m => m !== "—");
 
   const filtered = listaBase
     .filter(d => {
       if (!search) return true;
       const q = search.toLowerCase();
-      const haystack = [d.title, d.emp, d.trabajadorNombre, d.proyecto].filter(Boolean).join(" ").toLowerCase();
+      const haystack = [d.title, d.emp, d.trabajadorNombre, d.proyecto, mandanteDeProyecto(d.proyectoId)].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(q);
     })
     .filter(d => !priority || d.prio === priority)
     .filter(d => !project || d.proyecto === project)
-    .sort((a, b) => (a.prio === "Alta" && b.prio !== "Alta" ? -1 : b.prio === "Alta" && a.prio !== "Alta" ? 1 : 0));
+    .filter(d => !mandante || mandanteDeProyecto(d.proyectoId) === mandante)
+    .sort((a, b) => {
+      if (a.prio === "Alta" && b.prio !== "Alta") return -1;
+      if (b.prio === "Alta" && a.prio !== "Alta") return 1;
+      return a.timeSort - b.timeSort;
+    });
 
-  const current = filtered.find(d => d.id === selectedKey) ?? filtered[0];
+  const current = filtered.find(d => d.key === selectedKey) ?? filtered[0];
+  const isTaken = !!current && claimedKeys.has(current.key);
+  const currentClaim = current ? claims[current.key] : undefined;
+  const currentEscalation = current ? escalations[current.key] : undefined;
 
   const revisadosHoy = aprobadosHoy + rechazadosHoy;
 
   const resetDecisionForm = () => {
-    setChecks({ legible: false, corresponde: false, vigente: false });
+    setChecks({ legible: false, datos: false, vigencia: false });
     setReason("");
     setNote("");
   };
 
-  const selectDoc = (id: number) => {
-    setSelectedKeyLocal(id);
+  const selectDoc = (key: string) => {
+    setSelectedKeyLocal(key);
     resetDecisionForm();
     if (setSelectedDocId) setSelectedDocId(null);
   };
@@ -122,39 +169,54 @@ export default function ColaRevisionTab({
     resetDecisionForm();
   };
 
-  const refreshAndAdvance = () => {
+  const refreshAndAdvance = (targetTab: Tab = "pending") => {
     const updated = getContratistas();
     const newPending = buildColaDocs(updated, GLOBAL_PROYECTOS);
     const newCorrection = buildCorrectionDocs(updated, GLOBAL_PROYECTOS);
     setPendingDocs(newPending);
     setCorrectionDocs(newCorrection);
     setClaims(prev => {
-      const next: Record<number, string> = {};
-      Object.keys(prev).map(Number).forEach(k => { if (newPending.some(d => d.id === k)) next[k] = prev[k]; });
+      const next: Record<string, ClaimInfo> = {};
+      Object.keys(prev).forEach(k => { if (newPending.some(d => d.key === k)) next[k] = prev[k]; });
       return next;
     });
+    setEscalations(prev => {
+      const next: Record<string, EscalationInfo> = {};
+      Object.keys(prev).forEach(k => { if (newPending.some(d => d.key === k)) next[k] = prev[k]; });
+      return next;
+    });
+    setTab(targetTab);
     setSelectedKeyLocal(null);
     resetDecisionForm();
   };
 
-  const aprobar = () => {
+  const tomarRevision = () => {
     if (!current) return;
-    if (!(checks.legible && checks.corresponde && checks.vigente)) {
+    setClaims(prev => ({ ...prev, [current.key]: { verificador: CURRENT_VERIFICADOR, claimedAt: Date.now() } }));
+    setTab("review");
+    setSelectedKeyLocal(current.key);
+    resetDecisionForm();
+    showToast(`Documento tomado por ${CURRENT_VERIFICADOR}`);
+  };
+
+  const aprobar = () => {
+    if (!current || !isTaken) return;
+    if (!(checks.legible && checks.datos && checks.vigencia)) {
       showToast("Para aprobar, completa el chequeo mínimo", "warning");
       return;
     }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
     if (cObj) {
-      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve");
+      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve", { verificador: currentClaim?.verificador || CURRENT_VERIFICADOR });
       setAprobadosHoy(a => a + 1);
     }
     showToast(`Documento aprobado: ${current.title}`);
-    refreshAndAdvance();
+    refreshAndAdvance("pending");
   };
 
   const rechazar = () => {
-    if (!current) return;
+    if (!current || !isTaken) return;
     if (!reason) { showToast("Selecciona un motivo de rechazo", "warning"); return; }
     if (!note.trim()) { showToast("Indica brevemente qué debe corregir el contratista", "warning"); return; }
     const list = getContratistas();
@@ -163,21 +225,43 @@ export default function ColaRevisionTab({
       actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "reject", {
         motivoRechazo: reason,
         explicacionRechazo: note,
+        verificador: currentClaim?.verificador || CURRENT_VERIFICADOR,
       });
       setRechazadosHoy(r => r + 1);
     }
     showToast(`Documento rechazado: ${current.title}`, "warning");
-    refreshAndAdvance();
+    refreshAndAdvance("pending");
   };
 
-  const siguientePendiente = () => {
-    if (porRevisar.length === 0) {
-      showToast("No quedan documentos pendientes", "warning");
+  const siguienteDocumento = () => {
+    if (!current) return;
+    const idx = filtered.findIndex(d => d.key === current.key);
+    const next = filtered[idx + 1];
+    if (next) {
+      selectDoc(next.key);
+    } else {
+      showToast("No hay más documentos en esta vista", "warning");
+    }
+  };
+
+  const enviarEscalamiento = () => {
+    if (!current) return;
+    if (!escalarMotivo.trim()) { showToast("Indica el motivo del escalamiento", "warning"); return; }
+    setEscalations(prev => ({ ...prev, [current.key]: { supervisor: SUPERVISOR, motivo: escalarMotivo } }));
+    setEscalarOpen(false);
+    setEscalarMotivo("");
+    showToast(`Caso escalado a ${SUPERVISOR}`, "warning");
+  };
+
+  const simularNuevaVersionAction = () => {
+    if (!current) return;
+    const res = simularNuevaVersion(current.contratistaId, current.docId);
+    if (!res.success) {
+      showToast(res.error || "No se pudo simular la nueva versión", "warning");
       return;
     }
-    setTab("pending");
-    setSelectedKeyLocal(null);
-    resetDecisionForm();
+    showToast(`Nueva versión cargada: ${current.title} · v${(current.version || 1) + 1}`);
+    refreshAndAdvance("pending");
   };
 
   const cargarDocumentosEjemplo = () => {
@@ -186,13 +270,13 @@ export default function ColaRevisionTab({
       showToast("No hay más documentos de ejemplo disponibles para cargar", "warning");
       return;
     }
-    refreshAndAdvance();
+    refreshAndAdvance("pending");
     showToast(`${sembrados} documento${sembrados === 1 ? "" : "s"} de ejemplo cargados`);
   };
 
   const TAB_META: Record<Tab, { label: string; count: number; sub: string }> = {
-    pending: { label: "Por revisar", count: porRevisar.length, sub: "Más antiguos primero · prioridad alta arriba" },
-    review: { label: "En revisión", count: enRevision.length, sub: "Documentos tomados por el equipo" },
+    pending: { label: "Por revisar", count: porRevisar.length, sub: "Prioridad alta primero · más antiguos arriba" },
+    review: { label: "En revisión", count: enRevision.length, sub: "Documentos tomados por verificadores" },
     correction: { label: "Esperando corrección", count: esperandoCorreccion.length, sub: "Fuera de la cola normal" },
   };
 
@@ -207,11 +291,6 @@ export default function ColaRevisionTab({
           <p className="text-[13px] text-gray-500 max-w-[900px] leading-relaxed">
             Revisa documentos pendientes, toma una decisión y continúa con el siguiente. El objetivo es minimizar pasos y evitar revisiones duplicadas.
           </p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={siguientePendiente} className="btn btn-ghost border border-cream3">
-            Siguiente pendiente
-          </button>
         </div>
       </div>
 
@@ -260,22 +339,26 @@ export default function ColaRevisionTab({
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar contratista, trabajador o documento..."
+          placeholder="Buscar documento, mandante, contratista, trabajador o proyecto..."
           className="form-input !rounded-lg text-[11px] py-2 px-2.5 flex-1 min-w-[220px]"
         />
-        <select value={priority} onChange={e => setPriority(e.target.value)} className="form-input !rounded-lg text-[11px] py-2 px-2">
-          <option value="">Todas las prioridades</option>
-          <option>Alta</option>
-          <option>Normal</option>
+        <select value={mandante} onChange={e => setMandante(e.target.value)} className="form-input !rounded-lg text-[11px] py-2 px-2">
+          <option value="">Todos los mandantes</option>
+          {mandantesDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         <select value={project} onChange={e => setProject(e.target.value)} className="form-input !rounded-lg text-[11px] py-2 px-2">
           <option value="">Todos los proyectos</option>
           {proyectosDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+        <select value={priority} onChange={e => setPriority(e.target.value)} className="form-input !rounded-lg text-[11px] py-2 px-2">
+          <option value="">Todas las prioridades</option>
+          <option>Alta</option>
+          <option>Normal</option>
+        </select>
       </div>
 
       {/* Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_290px] gap-3.5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[310px_1fr] xl:grid-cols-[310px_1fr_300px] gap-3.5 items-start">
         {/* Queue list */}
         <section className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden flex flex-col">
           <div className="p-3.5 border-b border-cream3 flex justify-between items-center gap-3">
@@ -297,29 +380,56 @@ export default function ColaRevisionTab({
             </div>
           </div>
           <div className="max-h-[640px] overflow-y-auto">
-            {filtered.length > 0 ? filtered.map(d => (
-              <div
-                key={d.id}
-                onClick={() => selectDoc(d.id)}
-                className={`p-3 border-b border-cream2 cursor-pointer transition-colors border-l-[3px] ${
-                  current?.id === d.id ? "bg-gold-soft/40 border-l-brown" : "border-l-transparent hover:bg-[#fbfaf6]"
-                }`}
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div className="text-[11.5px] font-extrabold text-navy leading-snug">{d.title}</div>
-                  <span className={`badge border text-[8.5px] px-1.5 whitespace-nowrap shrink-0 ${d.prio === "Alta" ? BADGE.red : BADGE.gray}`}>{d.prio}</span>
+            {filtered.length > 0 ? filtered.map(d => {
+              const claim = claims[d.key];
+              const escalation = escalations[d.key];
+              return (
+                <div
+                  key={d.key}
+                  onClick={() => selectDoc(d.key)}
+                  className={`p-3 border-b border-cream2 cursor-pointer transition-colors border-l-[3px] ${
+                    current?.key === d.key ? "bg-gold-soft/40 border-l-brown" : "border-l-transparent hover:bg-[#fbfaf6]"
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="text-[11.5px] font-extrabold text-navy leading-snug">{d.title}</div>
+                    <div className="flex gap-1 shrink-0">
+                      {d.version > 1 && <span className={`badge border text-[8.5px] px-1.5 whitespace-nowrap ${BADGE.blue}`}>V{d.version}</span>}
+                      <span className={`badge border text-[8.5px] px-1.5 whitespace-nowrap ${d.prio === "Alta" ? BADGE.red : BADGE.gray}`}>{d.prio}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 mt-1">
+                    <span className={`badge border text-[8px] px-1.5 whitespace-nowrap ${d.origen === "Trabajador" ? BADGE.blue : BADGE.gray}`}>
+                      {d.origen === "Trabajador" ? "TRABAJADOR" : "EMPRESA"}
+                    </span>
+                    {escalation && <span className={`badge border text-[8px] px-1.5 whitespace-nowrap ${BADGE.red}`}>ESCALADO</span>}
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                    <div className="truncate">{mandanteDeProyecto(d.proyectoId)}</div>
+                    <div className="font-semibold text-navy truncate">{d.emp}</div>
+                    {d.origen === "Trabajador" && <div className="truncate">{d.trabajadorNombre} · {d.proyecto}</div>}
+                    {d.origen === "Empresa" && <div className="truncate">{d.proyecto}</div>}
+                  </div>
+                  <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-cream2 text-[9.5px] text-gray-400">
+                    {tab === "review" && claim ? (
+                      <span className="text-blue-700 font-semibold">{claim.verificador} · {formatElapsed(claim.claimedAt)}</span>
+                    ) : tab === "correction" ? (
+                      <span className="truncate">{d.motivoRechazo}</span>
+                    ) : (
+                      <span>{d.time}</span>
+                    )}
+                    {tab === "correction" && (
+                      <button
+                        onClick={e => { e.stopPropagation(); selectDoc(d.key); setHistorialOpen(true); }}
+                        className="text-[9px] font-bold text-brown hover:underline cursor-pointer border-none bg-transparent shrink-0"
+                      >
+                        Ver detalle
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
-                  <div className="font-semibold text-navy truncate">{d.emp}</div>
-                  {d.origen === "Trabajador" && <div className="truncate">{d.trabajadorNombre}</div>}
-                  <div className="truncate">{d.proyecto}</div>
-                </div>
-                <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-cream2 text-[9.5px] text-gray-400">
-                  <span>{d.time}</span>
-                  {tab === "review" && <span className="text-blue-700 font-semibold">{claims[d.id]}</span>}
-                </div>
-              </div>
-            )) : (
+              );
+            }) : (
               <div className="p-8 text-center text-[11.5px] text-gray-400">No hay documentos en esta vista.</div>
             )}
           </div>
@@ -338,23 +448,48 @@ export default function ColaRevisionTab({
               </div>
 
               <div className="p-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-3.5">
                   {[
                     ["Mandante", mandanteDeProyecto(current.proyectoId)],
                     ["Contratista", current.emp],
-                    ["Trabajador", current.trabajadorNombre || "—"],
                     ["Proyecto", current.proyecto],
-                    ["Cargado", current.time],
+                    ["Trabajador", current.origen === "Trabajador" ? current.trabajadorNombre : "No aplica · Documento empresa"],
                   ].map(([label, value]) => (
                     <div key={label} className="border border-cream3 rounded-lg p-2">
                       <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">{label}</label>
                       <strong className="block text-[10.5px] text-navy mt-0.5 truncate" title={value}>{value}</strong>
                     </div>
                   ))}
+                  <div className="border border-cream3 rounded-lg p-2">
+                    <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">Tipo</label>
+                    <span className={`badge border font-semibold mt-0.5 ${current.origen === "Trabajador" ? BADGE.blue : BADGE.gray}`}>
+                      {current.origen === "Trabajador" ? "TRABAJADOR" : "EMPRESA"}
+                    </span>
+                  </div>
+                  <div className="border border-cream3 rounded-lg p-2 sm:col-span-2">
+                    <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">Requisito</label>
+                    <strong className="block text-[10.5px] text-navy mt-0.5 truncate" title={current.requisito}>{current.requisito}</strong>
+                  </div>
+                  <div className="border border-cream3 rounded-lg p-2">
+                    <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">Vigencia requerida</label>
+                    <strong className="block text-[10.5px] text-navy mt-0.5 truncate">{current.vigenciaLabel}</strong>
+                  </div>
+                  <div className="border border-cream3 rounded-lg p-2">
+                    <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">Vencimiento</label>
+                    <strong className="block text-[10.5px] text-navy mt-0.5">{current.vencimiento && current.vencimiento !== "—" ? current.vencimiento : "Sin vencimiento"}</strong>
+                    <span className={`badge border font-semibold mt-1 text-[8px] ${VENC_BADGE[current.vencEstado].cls}`}>{VENC_BADGE[current.vencEstado].label}</span>
+                  </div>
+                  <div className="border border-cream3 rounded-lg p-2">
+                    <label className="block text-[8px] uppercase text-gray-400 font-extrabold tracking-wide">Versión</label>
+                    <strong className="block text-[10.5px] text-navy mt-0.5">v{current.version}</strong>
+                  </div>
                 </div>
 
-                <div className="relative bg-gradient-to-b from-gray-50 to-gray-100 border border-cream3 rounded-xl min-h-[400px] flex items-center justify-center p-6">
+                <div className="relative bg-gradient-to-b from-gray-50 to-gray-100 border border-cream3 rounded-xl min-h-[380px] flex items-center justify-center p-6">
                   <div className="absolute top-3 right-3 flex gap-1.5 z-10">
+                    <button onClick={() => setHistorialOpen(true)} className="flex items-center gap-1 text-[9.5px] font-bold text-gray-600 bg-white border border-cream3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-cream2">
+                      <History size={11} /> Ver historial
+                    </button>
                     <button onClick={() => showToast("Vista ampliada disponible como siguiente etapa", "warning")} className="text-[9.5px] font-bold text-gray-600 bg-white border border-cream3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-cream2">
                       Ampliar
                     </button>
@@ -381,6 +516,15 @@ export default function ColaRevisionTab({
                     </span>
                   </div>
                 )}
+
+                {currentEscalation && (
+                  <div className="mt-3.5 bg-red-50 border border-red-200 rounded-xl p-3 flex gap-2 items-start">
+                    <ArrowUpRight size={15} className="text-red-700 shrink-0 mt-0.5" />
+                    <span className="text-[11.5px] text-red-800 leading-relaxed">
+                      <strong>ESCALADO A SUPERVISOR</strong> — {currentEscalation.supervisor}: {currentEscalation.motivo}
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -397,7 +541,7 @@ export default function ColaRevisionTab({
                 <>
                   <Search size={40} className="opacity-30 shrink-0" />
                   <p className="text-[13.5px] text-navy font-bold text-center">No hay documentos en esta vista</p>
-                  <button onClick={() => { setSearch(""); setPriority(""); setProject(""); }} className="text-brown text-[12.5px] hover:underline font-semibold cursor-pointer border-none bg-transparent">
+                  <button onClick={() => { setSearch(""); setPriority(""); setProject(""); setMandante(""); }} className="text-brown text-[12.5px] hover:underline font-semibold cursor-pointer border-none bg-transparent">
                     Limpiar filtros
                   </button>
                 </>
@@ -413,88 +557,208 @@ export default function ColaRevisionTab({
             <div className="text-[10px] text-gray-500 mt-0.5">Revisión rápida del documento</div>
           </div>
 
-          {current ? (
-            <div className="p-3.5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 gap-3.5">
-              <div>
-                <div className={`text-[10.5px] font-semibold px-2.5 py-2 rounded-lg mb-3 ${BADGE.blue}`}>
-                  {tab === "pending" && "Disponible para tomar revisión."}
-                  {tab === "review" && `Documento tomado por ${claims[current.id]}.`}
-                  {tab === "correction" && "Fuera de la cola normal. Esperando una nueva versión del contratista."}
-                </div>
-
-                {tab !== "correction" && (
-                  <>
-                    <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Chequeo mínimo</div>
-                    <div className="flex flex-col gap-2">
-                      {[
-                        ["legible", "Documento legible", "Se puede revisar correctamente."],
-                        ["corresponde", "Corresponde a la persona / empresa", "Nombre o RUT consistente."],
-                        ["vigente", "Documento vigente", "Fecha válida según el requisito."],
-                      ].map(([key, title, desc]) => (
-                        <label key={key} className="flex gap-2 items-start p-2.5 border border-cream3 rounded-lg bg-cream2/40 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            checked={(checks as any)[key]}
-                            onChange={e => setChecks(prev => ({ ...prev, [key]: e.target.checked }))}
-                          />
-                          <div>
-                            <b className="block text-[10.5px] text-navy">{title}</b>
-                            <span className="block text-[9px] text-gray-400 mt-0.5">{desc}</span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                )}
+          {!current ? (
+            <div className="p-6 text-center text-[11.5px] text-gray-400">Selecciona un documento de la lista.</div>
+          ) : tab === "correction" ? (
+            <div className="p-3.5">
+              <div className={`text-[10.5px] font-semibold px-2.5 py-2 rounded-lg mb-3 ${BADGE.red}`}>
+                Fuera de la cola normal. Esperando una nueva versión del contratista.
               </div>
-
-              {tab !== "correction" ? (
-                <div>
-                  <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Si rechazas</div>
-                  <select value={reason} onChange={e => setReason(e.target.value)} className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full mb-2">
-                    <option value="">Seleccionar motivo...</option>
-                    {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <textarea
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="Indica brevemente qué debe corregir el contratista..."
-                    className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full min-h-[80px] resize-y"
-                  />
-
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <button onClick={aprobar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-emerald-700 text-white hover:bg-emerald-800 transition-colors cursor-pointer">
-                      <CheckCircle size={14} /> Aprobar
-                    </button>
-                    <button onClick={rechazar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-red-700 text-white hover:bg-red-800 transition-colors cursor-pointer">
-                      <XCircle size={14} /> Rechazar
-                    </button>
-                    <button onClick={siguientePendiente} className="col-span-2 text-[11px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer">
-                      Siguiente documento
-                    </button>
-                  </div>
-                  <div className="text-[9.5px] text-gray-400 leading-relaxed mt-2.5">
-                    Aprobar o rechazar actualiza el estado y deja trazabilidad en Auditoría. Un documento rechazado sale de la cola hasta que el contratista cargue una nueva versión.
-                  </div>
-
-                  <div className="mt-3.5 pt-3 border-t border-cream2 flex flex-col gap-1.5">
-                    <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Verificador</b><span className="font-extrabold text-navy">{tab === "review" ? claims[current.id] : "Sin asignar"}</span></div>
-                    <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Prioridad</b><span className="font-extrabold text-navy">{current.prio}</span></div>
-                    <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Cargado</b><span className="font-extrabold text-navy">{current.time}</span></div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[10.5px] text-gray-500 leading-relaxed">
-                  Este documento fue rechazado y quedó fuera de la cola normal. Se reincorporará automáticamente cuando el contratista cargue una nueva versión.
-                </div>
-              )}
+              <div className="text-[10.5px] text-gray-500 leading-relaxed mb-3">
+                Este documento fue rechazado y quedó fuera de la cola normal. Se reincorporará automáticamente a "Por revisar" cuando el contratista cargue una nueva versión.
+              </div>
+              <button
+                onClick={simularNuevaVersionAction}
+                className="w-full text-[11.5px] font-bold py-2 rounded-lg border-none bg-navy text-white hover:bg-navy2 transition-colors cursor-pointer"
+              >
+                Simular nueva versión
+              </button>
+              <div className="text-[9.5px] text-gray-400 leading-relaxed mt-2">
+                Solo para demostración: simula que el contratista cargó v{(current.version || 1) + 1} y la devuelve a "Por revisar".
+              </div>
+            </div>
+          ) : tab === "pending" ? (
+            <div className="p-3.5">
+              <div className={`text-[10.5px] font-semibold px-2.5 py-2 rounded-lg mb-3 ${BADGE.amber}`}>
+                Disponible para tomar revisión.
+              </div>
+              <button
+                onClick={tomarRevision}
+                className="w-full flex items-center justify-center gap-1.5 text-[12px] font-bold py-2.5 rounded-lg border-none bg-navy text-white hover:bg-navy2 transition-colors cursor-pointer"
+              >
+                Tomar revisión
+              </button>
+              <button
+                onClick={siguienteDocumento}
+                className="w-full mt-2 text-[11px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer"
+              >
+                Siguiente documento
+              </button>
+              <div className="mt-3.5 pt-3 border-t border-cream2 flex flex-col gap-1.5">
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Prioridad</b><span className="font-extrabold text-navy">{current.prio}</span></div>
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Cargado</b><span className="font-extrabold text-navy">{current.time}</span></div>
+              </div>
             </div>
           ) : (
-            <div className="p-6 text-center text-[11.5px] text-gray-400">Selecciona un documento de la lista.</div>
+            <div className="p-3.5">
+              <div className={`text-[10.5px] font-semibold px-2.5 py-2 rounded-lg mb-3 ${BADGE.blue}`}>
+                {`Documento tomado por ${currentClaim?.verificador || CURRENT_VERIFICADOR}${currentClaim ? " · " + formatElapsed(currentClaim.claimedAt) : ""}.`}
+              </div>
+
+              <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Chequeo mínimo</div>
+              <div className="flex flex-col gap-2 mb-3.5">
+                {[
+                  ["legible", "Documento legible", "Se puede revisar correctamente."],
+                  ["datos", "Datos coinciden", "El nombre/RUT corresponde al trabajador o empresa."],
+                  ["vigencia", "Vigencia correcta", "Cumple la regla de vigencia definida."],
+                ].map(([key, title, desc]) => (
+                  <label key={key} className="flex gap-2 items-start p-2.5 border border-cream3 rounded-lg bg-cream2/40 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={(checks as any)[key]}
+                      onChange={e => setChecks(prev => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    <div>
+                      <b className="block text-[10.5px] text-navy">{title}</b>
+                      <span className="block text-[9px] text-gray-400 mt-0.5">{desc}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Si rechazas</div>
+              <select value={reason} onChange={e => setReason(e.target.value)} className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full mb-2">
+                <option value="">Seleccionar motivo...</option>
+                {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="Indica brevemente qué debe corregir el contratista..."
+                className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full min-h-[70px] resize-y"
+              />
+
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button onClick={aprobar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-emerald-700 text-white hover:bg-emerald-800 transition-colors cursor-pointer">
+                  <CheckCircle size={14} /> Aprobar
+                </button>
+                <button onClick={rechazar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-red-700 text-white hover:bg-red-800 transition-colors cursor-pointer">
+                  <XCircle size={14} /> Rechazar
+                </button>
+                <button onClick={siguienteDocumento} className="col-span-2 text-[11px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer">
+                  Siguiente documento
+                </button>
+              </div>
+
+              {currentEscalation ? (
+                <div className="mt-2.5 text-[10.5px] font-semibold px-2.5 py-2 rounded-lg bg-red-50 border border-red-200 text-red-800">
+                  ESCALADO A SUPERVISOR
+                  <div className="font-normal text-[10px] mt-0.5">Escalado a {currentEscalation.supervisor}</div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEscalarOpen(true)}
+                  className="w-full mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer"
+                >
+                  <ArrowUpRight size={13} /> Enviar a supervisor
+                </button>
+              )}
+
+              <div className="text-[9.5px] text-gray-400 leading-relaxed mt-2.5">
+                Aprobar o rechazar actualiza el estado y deja trazabilidad en Auditoría. Un documento rechazado sale de la cola hasta que el contratista cargue una nueva versión.
+              </div>
+
+              <div className="mt-3.5 pt-3 border-t border-cream2 flex flex-col gap-1.5">
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Verificador</b><span className="font-extrabold text-navy">{currentClaim?.verificador || CURRENT_VERIFICADOR}</span></div>
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Prioridad</b><span className="font-extrabold text-navy">{current.prio}</span></div>
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Cargado</b><span className="font-extrabold text-navy">{current.time}</span></div>
+              </div>
+            </div>
           )}
         </section>
       </div>
+
+      {/* Historial modal */}
+      {historialOpen && current && (
+        <div className="fixed inset-0 bg-black/40 z-[1000] flex items-center justify-center p-4" onClick={() => setHistorialOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[440px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-cream3 flex justify-between items-center">
+              <div>
+                <div className="text-[14px] font-extrabold text-navy">Historial</div>
+                <div className="text-[10px] text-gray-500 mt-0.5 truncate">{current.title}</div>
+              </div>
+              <button onClick={() => setHistorialOpen(false)} className="text-gray-400 hover:text-navy cursor-pointer border-none bg-transparent">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-2.5">
+              <div className="border border-cream3 rounded-lg p-3">
+                <div className="flex justify-between items-center">
+                  <b className="text-[11.5px] text-navy">v{current.raw.version || 1} — Actual</b>
+                  <span className={`badge border font-semibold text-[9px] ${ESTADO_DOC_LABEL[current.raw.estado] === "Rechazado" ? BADGE.red : ESTADO_DOC_LABEL[current.raw.estado] === "Aprobado" ? BADGE.green : BADGE.amber}`}>
+                    {ESTADO_DOC_LABEL[current.raw.estado] || current.raw.estado}
+                  </span>
+                </div>
+                <div className="text-[10px] text-gray-500 mt-1">{current.raw.fechaRevisado || current.raw.subido || "—"}</div>
+                {current.raw.motivoRechazo && (
+                  <div className="text-[10px] text-gray-600 mt-1.5">Motivo: {current.raw.motivoRechazo}</div>
+                )}
+              </div>
+
+              {[...(current.raw.historial || [])].reverse().map((h: any, i: number) => (
+                <div key={i} className="border border-cream3 rounded-lg p-3">
+                  <div className="flex justify-between items-center">
+                    <b className="text-[11.5px] text-navy">v{h.version}</b>
+                    <span className={`badge border font-semibold text-[9px] ${h.estado === "rechazado" ? BADGE.red : BADGE.green}`}>
+                      {h.estado === "rechazado" ? "Rechazado" : "Aprobado"}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1">{h.fecha}</div>
+                  {h.motivoRechazo && <div className="text-[10px] text-gray-600 mt-1.5">Motivo: {h.motivoRechazo}</div>}
+                  {h.verificador && <div className="text-[10px] text-gray-500 mt-0.5">Verificador: {h.verificador}</div>}
+                </div>
+              ))}
+
+              {(!current.raw.historial || current.raw.historial.length === 0) && (
+                <p className="text-[11px] text-gray-400 italic text-center py-2">Sin versiones anteriores.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Escalar a supervisor modal */}
+      {escalarOpen && current && (
+        <div className="fixed inset-0 bg-black/40 z-[1000] flex items-center justify-center p-4" onClick={() => setEscalarOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[420px]" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-cream3 flex justify-between items-center">
+              <div>
+                <div className="text-[14px] font-extrabold text-navy">Enviar a supervisor</div>
+                <div className="text-[10px] text-gray-500 mt-0.5 truncate">{current.title} · {current.emp}</div>
+              </div>
+              <button onClick={() => setEscalarOpen(false)} className="text-gray-400 hover:text-navy cursor-pointer border-none bg-transparent">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <label className="block text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Motivo del escalamiento</label>
+              <textarea
+                value={escalarMotivo}
+                onChange={e => setEscalarMotivo(e.target.value)}
+                placeholder="Explica brevemente por qué este caso necesita revisión del supervisor..."
+                className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full min-h-[90px] resize-y"
+              />
+              <button
+                onClick={enviarEscalamiento}
+                className="w-full mt-3 text-[11.5px] font-bold py-2 rounded-lg border-none bg-navy text-white hover:bg-navy2 transition-colors cursor-pointer"
+              >
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

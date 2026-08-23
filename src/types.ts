@@ -40,6 +40,15 @@ export interface Trabajador {
   documentos?: Documento[];
 }
 
+export interface HistorialVersionDocumento {
+  version: number;
+  estado: 'aprobado' | 'rechazado';
+  fecha: string;
+  motivoRechazo?: string;
+  explicacionRechazo?: string;
+  verificador?: string;
+}
+
 export interface Documento {
   id: string; // e.g. "d1", "d2"
   nombre: string;
@@ -56,6 +65,8 @@ export interface Documento {
   solucionRechazo?: string;
   proyectoId?: string;  // Associated project context
   archivoReferencia?: string;
+  version?: number;                          // Defaults to 1 when absent
+  historial?: HistorialVersionDocumento[];    // Versiones anteriores (superadas por una nueva carga)
 }
 
 export interface Requisito {

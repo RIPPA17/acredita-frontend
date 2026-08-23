@@ -1,5 +1,5 @@
 import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion } from '../types';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento } from '../types';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -1341,6 +1341,7 @@ export function actualizarEstadoDocumento(
     solucionRechazo?: string;
     usuarioEmail?: string;
     usuarioRol?: string;
+    verificador?: string;
   }
 ): { success: boolean; error?: string } {
   const list = getContratistas();
@@ -1351,6 +1352,7 @@ export function actualizarEstadoDocumento(
 
   const actorEmail = options?.usuarioEmail || 'admin@acredita.cl';
   const actorRol = options?.usuarioRol || 'admin';
+  const verificador = options?.verificador || 'Verificador Acredita';
 
   let found = false;
 
@@ -1360,7 +1362,7 @@ export function actualizarEstadoDocumento(
     const prevEstado = compDoc.estado;
     if (action === 'approve') {
       compDoc.estado = 'aprobado';
-      compDoc.revisor = 'Verificador Acredita';
+      compDoc.revisor = verificador;
       compDoc.fechaRevisado = new Date().toLocaleDateString('es-CL');
       compDoc.motivo = undefined;
       compDoc.observacion = undefined;
@@ -1387,7 +1389,7 @@ export function actualizarEstadoDocumento(
       compDoc.solucionRechazo = options?.solucionRechazo;
       compDoc.motivo = options?.explicacionRechazo || 'Rechazado por auditoría';
       compDoc.observacion = options?.explicacionRechazo || 'Rechazado por auditoría';
-      compDoc.revisor = 'Verificador Acredita';
+      compDoc.revisor = verificador;
       compDoc.fechaRevisado = new Date().toLocaleDateString('es-CL');
 
       registrarAuditoria({
@@ -1414,7 +1416,7 @@ export function actualizarEstadoDocumento(
         const prevEstado = workerDoc.estado;
         if (action === 'approve') {
           workerDoc.estado = 'aprobado';
-          workerDoc.revisor = 'Verificador Acredita';
+          workerDoc.revisor = verificador;
           workerDoc.fechaRevisado = new Date().toLocaleDateString('es-CL');
           workerDoc.motivo = undefined;
           workerDoc.observacion = undefined;
@@ -1441,7 +1443,7 @@ export function actualizarEstadoDocumento(
           workerDoc.solucionRechazo = options?.solucionRechazo;
           workerDoc.motivo = options?.explicacionRechazo || 'Rechazado por auditoría';
           workerDoc.observacion = options?.explicacionRechazo || 'Rechazado por auditoría';
-          workerDoc.revisor = 'Verificador Acredita';
+          workerDoc.revisor = verificador;
           workerDoc.fechaRevisado = new Date().toLocaleDateString('es-CL');
 
           registrarAuditoria({
@@ -1470,6 +1472,123 @@ export function actualizarEstadoDocumento(
 
   saveContratistas(list);
   return { success: true };
+}
+
+/**
+ * Simula que el contratista cargó una nueva versión de un documento
+ * previamente rechazado: archiva la versión rechazada en `historial`,
+ * incrementa `version` y vuelve a dejar el documento en 'revision' para que
+ * reingrese a "Por revisar". Solo aplica a documentos en estado 'rechazado'.
+ */
+export function simularNuevaVersion(
+  contratistaId: string,
+  docId: string
+): { success: boolean; error?: string } {
+  const list = getContratistas();
+  const cObj = list.find(c => c.id === contratistaId);
+  if (!cObj) {
+    return { success: false, error: 'Contratista no encontrado' };
+  }
+
+  const aplicarNuevaVersion = (doc: Documento): boolean => {
+    if (doc.estado !== 'rechazado') return false;
+    const versionAnterior = doc.version || 1;
+    const nuevoHistorial: HistorialVersionDocumento = {
+      version: versionAnterior,
+      estado: 'rechazado',
+      fecha: doc.fechaRevisado || doc.subido || '—',
+      motivoRechazo: doc.motivoRechazo || doc.motivo,
+      explicacionRechazo: doc.explicacionRechazo || doc.observacion,
+      verificador: doc.revisor,
+    };
+    doc.historial = [...(doc.historial || []), nuevoHistorial];
+    doc.version = versionAnterior + 1;
+    doc.estado = 'revision';
+    doc.subido = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+    doc.motivo = undefined;
+    doc.observacion = undefined;
+    doc.motivoRechazo = undefined;
+    doc.explicacionRechazo = undefined;
+    doc.solucionRechazo = undefined;
+    doc.revisor = undefined;
+    doc.fechaRevisado = undefined;
+    return true;
+  };
+
+  let found = false;
+  let docNombre = '';
+  let entidadLabel = '';
+  const compDoc = cObj.documentos?.find(d => d.id === docId);
+  if (compDoc && aplicarNuevaVersion(compDoc)) {
+    found = true;
+    docNombre = compDoc.nombre;
+    entidadLabel = `la empresa ${cObj.nombre}`;
+  }
+
+  if (!found) {
+    for (const worker of cObj.trabajadores || []) {
+      const workerDoc = worker.documentos?.find(d => d.id === docId);
+      if (workerDoc && aplicarNuevaVersion(workerDoc)) {
+        found = true;
+        docNombre = workerDoc.nombre;
+        entidadLabel = `el trabajador ${worker.nombre}`;
+        worker.estado = calcularEstadoTrabajador(worker, workerDoc.proyectoId);
+        break;
+      }
+    }
+  }
+
+  if (!found) {
+    return { success: false, error: 'Documento no encontrado o no está rechazado' };
+  }
+
+  saveContratistas(list);
+  registrarAuditoria({
+    usuarioId: 'admin@acredita.cl',
+    rol: 'admin',
+    contratistaId: cObj.id,
+    accion: 'nueva_version_documento',
+    entidad: 'documento',
+    entidadId: docId,
+    estadoAnterior: 'rechazado',
+    estadoNuevo: 'revision',
+    detalle: `Nueva versión cargada para ${docNombre} de ${entidadLabel}`,
+  });
+  return { success: true };
+}
+
+/**
+ * Etiqueta legible de la vigencia requerida para un documento: busca primero
+ * en las reglas de vigencia (días concretos) y si no hay una regla asociada,
+ * cae en la frecuencia del requisito ('Mensual', 'Indefinido', 'Por Proyecto').
+ */
+export function vigenciaRequeridaLabel(nombreDoc: string, requisitoFrecuencia?: string): string {
+  const reglas = getReglas();
+  const regla = reglas.find(r =>
+    nombreDoc.toLowerCase().includes(String(r.documento).toLowerCase()) ||
+    String(r.documento).toLowerCase().includes(nombreDoc.toLowerCase())
+  );
+  if (regla) {
+    const dias = regla.diasVigencia;
+    if (dias === 30) return '30 días';
+    if (dias === 180) return '6 meses';
+    if (dias === 365) return '1 año';
+    return `${dias} días`;
+  }
+  if (requisitoFrecuencia === 'Mensual') return 'Mensual';
+  if (requisitoFrecuencia === 'Indefinido') return 'Sin vencimiento';
+  if (requisitoFrecuencia === 'Por Proyecto') return 'Durante todo el proyecto';
+  return 'Sin vencimiento';
+}
+
+/** Estado visual simple de un vencimiento, para el badge de la Cola de revisión. */
+export function estadoVencimiento(vencimiento: string | undefined): 'vigente' | 'proximo' | 'vencido' | 'sin_vencimiento' {
+  if (!vencimiento || vencimiento === '—') return 'sin_vencimiento';
+  const dias = obtenerDiasRestantes(vencimiento);
+  if (dias === 99999) return 'sin_vencimiento';
+  if (dias < 0) return 'vencido';
+  if (dias <= 30) return 'proximo';
+  return 'vigente';
 }
 
 /**

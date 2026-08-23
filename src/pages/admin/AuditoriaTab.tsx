@@ -28,6 +28,7 @@ const ACCION_INFO: Record<string, { label: string; tipo: string; resultado: Resu
   bloqueo_pago: { label: 'Cambió estado', tipo: 'Pago', resultado: 'Actualizado', badge: 'blue' },
   desbloqueo_pago: { label: 'Liberó pago', tipo: 'Pago', resultado: 'Liberado', badge: 'green' },
   cambios_relevantes_acreditacion: { label: 'Solicitó corrección', tipo: 'Documento', resultado: 'Pendiente', badge: 'amber' },
+  nueva_version_documento: { label: 'Cargó nueva versión', tipo: 'Documento', resultado: 'Pendiente', badge: 'amber' },
   login_exitoso: { label: 'Inició sesión', tipo: 'Contratista', resultado: 'Exitoso', badge: 'green' },
   logout: { label: 'Cerró sesión', tipo: 'Contratista', resultado: 'Exitoso', badge: 'gray' },
   creacion_invitacion: { label: 'Creó contratista', tipo: 'Contratista', resultado: 'Creado', badge: 'green' },
