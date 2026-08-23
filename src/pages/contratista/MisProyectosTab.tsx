@@ -12,23 +12,46 @@ import {
 
 // Mismo mapeo de colores centrales usado en el resto del portal Contratista.
 const BADGE: Record<string, string> = { green: 'b-green', amber: 'b-yellow', red: 'b-red', gray: 'b-gray' };
-const STATE_BORDER: Record<EstadoUI, string> = {
-  Acreditado: 'border-t-[#2a6a3a]',
-  'En proceso': 'border-t-[#d4a000]',
-  Bloqueado: 'border-t-[#c02020]',
-};
-const STATE_ALERT_CLASS: Record<EstadoUI, string> = {
-  Acreditado: 'alert-success',
-  'En proceso': 'alert-warn',
-  Bloqueado: 'alert-danger',
+// Sufijo de clase CSS (contractor-projects-*) por estado de acreditación.
+const STATE_KEY: Record<EstadoUI, string> = {
+  Bloqueado: 'bloqueado',
+  'En proceso': 'proceso',
+  Acreditado: 'acreditado',
 };
 const STATE_ICON: Record<EstadoUI, typeof CheckCircle> = {
   Acreditado: CheckCircle,
   'En proceso': AlertTriangle,
   Bloqueado: AlertCircle,
 };
+const ALERT_PREFIX: Record<EstadoUI, string> = {
+  Bloqueado: 'Bloqueos:',
+  'En proceso': 'Prioridad:',
+  Acreditado: 'Todo al día:',
+};
+const ACCESO_LABEL_CORTO: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
+  habilitado: 'Habilitado',
+  parcial: 'Parcial',
+  bloqueado: 'Bloqueado',
+};
+const ACCESO_TEXT_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
+  habilitado: 'text-[#1a6030]',
+  parcial: 'text-[#a87400]',
+  bloqueado: 'text-[#9a2020]',
+};
 // Orden recomendado: lo que requiere atención primero.
 const PRIORIDAD_ESTADO: Record<EstadoUI, number> = { Bloqueado: 0, 'En proceso': 1, Acreditado: 2 };
+
+function Hero() {
+  return (
+    <div className="contractor-projects-hero">
+      <p className="contractor-projects-hero-eyebrow">Portal contratista</p>
+      <h2 className="contractor-projects-hero-title">Mis proyectos</h2>
+      <p className="contractor-projects-hero-sub">
+        Revisa tu acreditación en cada obra o faena, el estado de acceso y pago, el avance de empresa y trabajadores y las acciones que requieren atención.
+      </p>
+    </div>
+  );
+}
 
 export default function MisProyectosTab({
   contratistaLogueado,
@@ -50,17 +73,14 @@ export default function MisProyectosTab({
 
   if (misProyectos.length === 0) {
     return (
-      <div className="fade-in flex flex-col gap-6">
-        <div className="page-header">
-          <div>
-            <h2 className="page-title">Mis proyectos</h2>
-            <p className="page-sub">Revisa tu acreditación, acceso, pago y trabajadores en cada obra o faena.</p>
+      <div className="fade-in flex flex-col">
+        <Hero />
+        <div className="contractor-projects-floating">
+          <div className="card py-14 flex flex-col items-center justify-center text-center">
+            <FileText size={38} className="text-gray-300 mb-3" />
+            <p className="font-semibold text-navy text-[15.4px]">Todavía no tienes proyectos asociados.</p>
+            <p className="text-sm text-gray-500 mt-1 max-w-md">Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
           </div>
-        </div>
-        <div className="card py-14 flex flex-col items-center justify-center text-center">
-          <FileText size={38} className="text-gray-300 mb-3" />
-          <p className="font-semibold text-navy text-[15.4px]">Todavía no tienes proyectos asociados.</p>
-          <p className="text-sm text-gray-500 mt-1 max-w-md">Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
         </div>
       </div>
     );
@@ -128,6 +148,12 @@ export default function MisProyectosTab({
   const totalEnProceso = proyectosInfo.filter(i => i.estadoUI === 'En proceso').length;
   const totalBloqueados = proyectosInfo.filter(i => i.estadoUI === 'Bloqueado').length;
 
+  // "Activos": proyectos cuyo estado real así lo indica; si el campo no
+  // distingue nada (todo el catálogo vigente se modela como 'Activo'), cae
+  // de vuelta a contar todos los asignados en vez de mostrar 0 en falso.
+  const proyectosActivosReales = misProyectos.filter(p => String(p.estado).toLowerCase() === 'activo').length;
+  const totalProyectosActivos = proyectosActivosReales > 0 ? proyectosActivosReales : misProyectos.length;
+
   // Orden: Bloqueado primero, luego En proceso, luego Acreditado; después por nombre.
   const proyectosOrdenados = [...proyectosInfo].sort((a, b) => {
     const diff = PRIORIDAD_ESTADO[a.estadoUI] - PRIORIDAD_ESTADO[b.estadoUI];
@@ -149,164 +175,164 @@ export default function MisProyectosTab({
   const irATrabajadores = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('trabajadores'); };
 
   return (
-    <div className="fade-in flex flex-col gap-5">
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Mis proyectos</h2>
-          <p className="page-sub">Revisa tu acreditación, acceso, pago y trabajadores en cada obra o faena.</p>
-          <p className="text-[12.5px] text-gray-500 mt-1">{contratistaLogueado.nombre} · RUT {contratistaLogueado.rut}</p>
-        </div>
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="form-input pl-9 w-64"
-            placeholder="Buscar proyecto o mandante..."
-            aria-label="Buscar proyecto o mandante"
-          />
-        </div>
-      </div>
+    <div className="fade-in flex flex-col">
+      <Hero />
 
-      {/* KPIs: siempre 4 en una sola línea, sin envolver */}
-      <div className="grid grid-cols-4 gap-[10px] mb-4">
-        <div className="card p-4">
-          <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Proyectos activos</p>
-          <p className="text-[22px] font-bold text-navy">{misProyectos.length}</p>
-          <p className="text-[11.5px] text-gray-500 mt-0.5">Obras y faenas asignadas</p>
+      <div className="contractor-projects-floating flex flex-col gap-5">
+        {/* Identidad del contratista + buscador */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <p className="text-[20px] font-bold text-navy leading-tight">{contratistaLogueado.nombre}</p>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">RUT {contratistaLogueado.rut} · {misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} activo{misProyectos.length === 1 ? '' : 's'}</p>
+          </div>
+          <div className="relative w-full md:w-auto">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="form-input pl-9 w-full md:w-[280px]"
+              placeholder="Buscar proyecto o mandante..."
+              aria-label="Buscar proyecto o mandante"
+            />
+          </div>
         </div>
-        <div className="card p-4">
-          <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Acreditados</p>
-          <p className="text-[22px] font-bold text-[#1a6030]">{totalAcreditados}</p>
-          <p className="text-[11.5px] text-gray-500 mt-0.5">Sin acciones pendientes</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">En proceso</p>
-          <p className="text-[22px] font-bold text-[#a87400]">{totalEnProceso}</p>
-          <p className="text-[11.5px] text-gray-500 mt-0.5">Requieren seguimiento</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Bloqueados</p>
-          <p className="text-[22px] font-bold text-[#9a2020]">{totalBloqueados}</p>
-          <p className="text-[11.5px] text-gray-500 mt-0.5">Requieren acción prioritaria</p>
-        </div>
-      </div>
 
-      {/* Filtros */}
-      <div className="flex gap-2 flex-wrap" role="group" aria-label="Filtrar proyectos por estado">
-        {([
-          ['Todos', misProyectos.length],
-          ['Acreditado', totalAcreditados],
-          ['En proceso', totalEnProceso],
-          ['Bloqueado', totalBloqueados],
-        ] as Array<[typeof filter, number]>).map(([f, count]) => (
-          <button
-            key={f}
-            type="button"
-            aria-pressed={filter === f}
-            className={`chip ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {f} <span className="chip-count">{count}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Grid de proyectos */}
-      {proyectosFiltrados.length === 0 ? (
-        <div className="card py-10 flex flex-col items-center justify-center text-center text-gray-500 gap-3">
-          <Search size={28} className="text-gray-300" />
-          <p>No encontramos proyectos con esos filtros.</p>
-          {hayFiltrosActivos && (
-            <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>Limpiar filtros</button>
-          )}
+        {/* KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="contractor-projects-kpi">
+            <p className="contractor-projects-kpi-title">Proyectos activos</p>
+            <p className="contractor-projects-kpi-value text-navy">{totalProyectosActivos}</p>
+            <p className="contractor-projects-kpi-foot">Obras y faenas asignadas</p>
+          </div>
+          <div className="contractor-projects-kpi">
+            <p className="contractor-projects-kpi-title">Acreditados</p>
+            <p className="contractor-projects-kpi-value text-[#1a6030]">{totalAcreditados}</p>
+            <p className="contractor-projects-kpi-foot">Sin acciones pendientes</p>
+          </div>
+          <div className="contractor-projects-kpi">
+            <p className="contractor-projects-kpi-title">En proceso</p>
+            <p className="contractor-projects-kpi-value text-[#a87400]">{totalEnProceso}</p>
+            <p className="contractor-projects-kpi-foot">Requieren seguimiento</p>
+          </div>
+          <div className="contractor-projects-kpi">
+            <p className="contractor-projects-kpi-title">Bloqueados</p>
+            <p className="contractor-projects-kpi-value text-[#9a2020]">{totalBloqueados}</p>
+            <p className="contractor-projects-kpi-foot">Requieren acción prioritaria</p>
+          </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {proyectosFiltrados.map(info => {
-            const { proyecto: p, mandante, estadoUI, badge, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
-            const StatusIcon = STATE_ICON[estadoUI];
-            const accesoBadge = estadoAcceso.estado === 'habilitado' ? 'b-green' : estadoAcceso.estado === 'bloqueado' ? 'b-red' : 'b-yellow';
-            const pagoBadge = accesoPago.pagoBloqueado ? 'b-red' : 'b-green';
-            const esSeleccionado = p.id === selectedProyectoId;
 
-            return (
-              <div
-                key={p.id}
-                className={`card !p-0 overflow-hidden flex flex-col border-t-4 ${STATE_BORDER[estadoUI]} hover:shadow-md transition-shadow ${esSeleccionado ? 'ring-2 ring-brown' : ''}`}
-              >
-                <div className="p-4 border-b border-cream">
-                  <div className="flex justify-between items-start gap-2 mb-1">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
-                        <Building2 size={13} /> {mandante?.nombre || 'Mandante no disponible'}
+        {/* Filtros */}
+        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filtrar proyectos por estado">
+          {([
+            ['Todos', misProyectos.length],
+            ['Acreditado', totalAcreditados],
+            ['En proceso', totalEnProceso],
+            ['Bloqueado', totalBloqueados],
+          ] as Array<[typeof filter, number]>).map(([f, count]) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filter === f}
+              className={`contractor-projects-filter ${filter === f ? 'contractor-projects-filter-active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {f} <span className="contractor-projects-filter-count">{count}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Grid de proyectos */}
+        {proyectosFiltrados.length === 0 ? (
+          <div className="card py-10 flex flex-col items-center justify-center text-center text-gray-500 gap-3">
+            <Search size={28} className="text-gray-300" />
+            <p>No encontramos proyectos con esos filtros.</p>
+            {hayFiltrosActivos && (
+              <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>Limpiar filtros</button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {proyectosFiltrados.map(info => {
+              const { proyecto: p, mandante, estadoUI, badge, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
+              const StatusIcon = STATE_ICON[estadoUI];
+              const esSeleccionado = p.id === selectedProyectoId;
+
+              return (
+                <div
+                  key={p.id}
+                  className={`contractor-projects-card state-${STATE_KEY[estadoUI]} ${esSeleccionado ? 'selected' : ''}`}
+                >
+                  <div className="p-4 border-b border-cream">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
+                          <Building2 size={13} /> {mandante?.nombre || 'Mandante no disponible'}
+                        </div>
+                        <h3 className="text-[17.5px] font-bold text-navy mt-1">{p.nombre}</h3>
                       </div>
-                      <h3 className="text-[16.5px] font-bold text-navy mt-0.5">{p.nombre}</h3>
+                      <span className={`badge ${badge} shrink-0`}>{estadoUI}</span>
                     </div>
-                    <span className={`badge ${badge} shrink-0`}>{estadoUI}</span>
-                  </div>
-                  {esSeleccionado && <p className="text-[10.5px] text-brown font-semibold mt-1">Proyecto seleccionado</p>}
-                </div>
-
-                <div className="p-4 flex-1 flex flex-col gap-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-cream2 border border-cream3 rounded-xl p-2.5 flex flex-col items-center text-center">
-                      <Lock size={14} className="text-gray-400 mb-0.5" />
-                      <span className="text-[9.5px] text-gray-400 font-semibold uppercase tracking-wider">Acceso</span>
-                      <span className={`badge ${accesoBadge} text-[10px] mt-1`}>{estadoAcceso.label.replace('Acceso ', '')}</span>
-                    </div>
-                    <div className="bg-cream2 border border-cream3 rounded-xl p-2.5 flex flex-col items-center text-center">
-                      <Wallet size={14} className="text-gray-400 mb-0.5" />
-                      <span className="text-[9.5px] text-gray-400 font-semibold uppercase tracking-wider">Pago</span>
-                      <span className={`badge ${pagoBadge} text-[10px] mt-1`}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</span>
-                    </div>
+                    {esSeleccionado && <p className="text-[10.5px] text-brown font-semibold mt-1.5">Proyecto seleccionado</p>}
                   </div>
 
-                  <div>
-                    <div className="flex justify-between text-[12px] font-semibold text-navy mb-1">
-                      <span>Empresa</span>
-                      <span className="text-gray-500 font-medium">{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal} obligatorios` : 'Sin requisitos obligatorios'}</span>
+                  <div className="p-4 flex-1 flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="contractor-projects-mini">
+                        <p className="contractor-projects-mini-label">Acceso</p>
+                        <p className={`contractor-projects-mini-value ${ACCESO_TEXT_COLOR[estadoAcceso.estado]}`}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</p>
+                      </div>
+                      <div className="contractor-projects-mini">
+                        <p className="contractor-projects-mini-label">Pago</p>
+                        <p className={`contractor-projects-mini-value ${accesoPago.pagoBloqueado ? 'text-[#9a2020]' : 'text-[#1a6030]'}`}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</p>
+                      </div>
                     </div>
-                    <div className="prog-wrap"><div className="prog-fill" style={{ width: `${empresaPct}%` }}></div></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[12px] font-semibold text-navy mb-1">
-                      <span>Trabajadores</span>
-                      <span className="text-gray-500 font-medium">{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores agregados'}</span>
+
+                    <div>
+                      <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1.5">
+                        <span>Empresa</span>
+                        <span className="text-gray-500 font-medium">{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal} obligatorios` : 'Sin requisitos obligatorios'}</span>
+                      </div>
+                      <div className="prog-wrap"><div className="prog-fill" style={{ width: `${empresaPct}%` }}></div></div>
                     </div>
-                    <div className="prog-wrap"><div className="prog-fill" style={{ width: `${trabajadoresPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
+                    <div>
+                      <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1.5">
+                        <span>Trabajadores</span>
+                        <span className="text-gray-500 font-medium">{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores agregados'}</span>
+                      </div>
+                      <div className="prog-wrap"><div className="prog-fill" style={{ width: `${trabajadoresPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
+                    </div>
+
+                    <div className={`contractor-projects-alert state-${STATE_KEY[estadoUI]}`}>
+                      <StatusIcon size={15} className="shrink-0 mt-0.5" />
+                      <span><strong>{ALERT_PREFIX[estadoUI]}</strong> {problemaPrincipal}</span>
+                    </div>
+
+                    <p className="text-[11.5px] text-gray-500">
+                      {proximoVenc
+                        ? <>Próximo vencimiento: <strong className="text-navy font-semibold">{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
+                        : 'Sin vencimientos próximos'}
+                    </p>
                   </div>
 
-                  <div className={`alert ${STATE_ALERT_CLASS[estadoUI]} !mb-0 text-[11.5px] items-start`}>
-                    <StatusIcon size={15} className="shrink-0 mt-0.5" />
-                    <span>{problemaPrincipal}</span>
-                  </div>
-
-                  <div className="text-[11.5px] text-gray-500">
-                    {proximoVenc
-                      ? <>Próximo vencimiento: <strong className="text-navy">{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
-                      : 'Sin vencimientos próximos'}
-                  </div>
-                </div>
-
-                <div className="p-4 pt-0 mt-auto flex flex-col gap-2">
-                  <button
-                    className={`btn ${estadoUI === 'Bloqueado' ? 'btn-reject' : 'btn-primary'} btn-sm w-full`}
-                    onClick={() => irAInicio(p.id)}
-                  >
-                    Ver proyecto
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className="btn btn-secondary btn-sm" onClick={() => irADocumentos(p.id)}>Documentos</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => irATrabajadores(p.id)}>Trabajadores</button>
+                  <div className="p-4 pt-3 mt-auto border-t border-cream flex flex-col gap-2">
+                    <button
+                      className={`btn ${estadoUI === 'Bloqueado' ? 'btn-reject' : 'btn-primary'} btn-sm w-full`}
+                      onClick={() => irAInicio(p.id)}
+                    >
+                      Ver proyecto
+                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="btn contractor-projects-btn-ghost btn-sm" onClick={() => irADocumentos(p.id)}>Documentos</button>
+                      <button className="btn contractor-projects-btn-ghost btn-sm" onClick={() => irATrabajadores(p.id)}>Trabajadores</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
