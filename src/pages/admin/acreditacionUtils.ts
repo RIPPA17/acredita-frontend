@@ -3,19 +3,35 @@ import {
   esDocumentoCumplido,
   esVencidoPorFecha,
   esTrabajadorAsignado,
-  calcularEstadoTrabajador,
   calcularEstadoAcreditacion,
 } from '../../data/localStorageDb';
-import { Contratista, Proyecto, Mandante, Documento } from '../../types';
+import { Contratista, Proyecto, Mandante, Documento, Requisito } from '../../types';
+import { buildDocumentoQueueKey } from './colaUtils';
 
 export type Estado = 'Aprobado' | 'En proceso' | 'Vencido/Bloqueado';
 export type DocEstado = 'Aprobado' | 'Rechazado' | 'Vencido' | 'En revisión' | 'Por vencer' | 'Pendiente';
+// Color de las barras/indicadores de Empresa y Trabajadores en la tabla:
+// 'ok' (verde) todos los obligatorios cumplidos, 'warn' (ámbar) hay
+// pendientes/en revisión, 'danger' (rojo) hay un obligatorio rechazado o
+// vencido — nunca solamente "porcentaje < 100".
+export type Visual = 'ok' | 'warn' | 'danger';
 
+// Identifica sin ambigüedad qué elemento concreto genera un bloqueo, para
+// que "Ir al problema" pueda navegar directo a él (Cola de revisión si el
+// documento está vivo ahí, o la ficha de acreditación en su defecto).
 export interface Blocker {
   tipo: 'Empresa' | 'Trabajador';
   nombre: string;
   detalle: string;
   estado: DocEstado;
+  contratistaId: string;
+  proyectoId: string;
+  docId?: string;
+  docKey?: string;
+  trabajadorRut?: string;
+  trabajadorNombre?: string;
+  requisitoId?: string;
+  requisitoNombre?: string;
 }
 
 export interface AcredRow {
@@ -29,10 +45,12 @@ export interface AcredRow {
   proyectoNombre: string;
   company: { ok: number; total: number };
   workers: { ok: number; total: number };
+  companyVisual: Visual;
+  workersVisual: Visual;
   estado: Estado;
   blockers: Blocker[];
-  companyDocs: Array<{ nombre: string; estado: DocEstado }>;
-  workerList: Array<{ nombre: string; estado: DocEstado }>;
+  companyDocs: Array<{ nombre: string; estado: DocEstado; obligatorio: boolean }>;
+  workerList: Array<{ nombre: string; rut: string; estado: DocEstado }>;
 }
 
 const matchDoc = (docs: Documento[] | undefined, proyectoId: string, reqNombre: string) =>
@@ -43,11 +61,23 @@ const matchDoc = (docs: Documento[] | undefined, proyectoId: string, reqNombre: 
 
 const docEstadoLabel = (doc: Documento | undefined): DocEstado => {
   if (!doc) return 'Pendiente';
+  if (doc.estado === 'pendiente') return 'Pendiente';
   if (doc.estado === 'revision') return 'En revisión';
   if (doc.estado === 'rechazado') return 'Rechazado';
   if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
   if (doc.estado === 'por_vencer') return 'Por vencer';
   return 'Aprobado';
+};
+
+// Un documento solo se puede resolver directamente en Cola de revisión
+// mientras siga "vivo" ahí: en revisión (Por revisar/En revisión) o
+// rechazado (Esperando corrección). Un documento aprobado pero vencido por
+// fecha, o uno que nunca se cargó, no existe en la cola — para esos casos
+// "Ir al problema" debe abrir la ficha de acreditación en su lugar.
+const docKeyIfRevisable = (doc: Documento | undefined, contratistaId: string, trabajadorRut?: string): string | undefined => {
+  if (!doc) return undefined;
+  if (doc.estado !== 'revision' && doc.estado !== 'rechazado') return undefined;
+  return buildDocumentoQueueKey(contratistaId, doc.id, trabajadorRut);
 };
 
 export const badgeClass = (s: string) => {
@@ -77,44 +107,104 @@ export function buildAcreditacionRows(
       const companyReqs = reqs.filter(r => r.destino === 'empresa');
       const workerReqs = reqs.filter(r => r.destino === 'trabajador');
 
-      const companyDocs = companyReqs.map(req => {
+      // --- Empresa: el score principal (X/Y) y el color solo consideran
+      // requisitos obligatorios. Uno opcional puede aparecer en la lista de
+      // Empresa marcado "Opcional", pero nunca baja el score ni bloquea.
+      const companyDocsFull = companyReqs.map(req => {
         const doc = matchDoc(c.documentos, proyectoId, req.nombre);
-        return { nombre: req.nombre, estado: docEstadoLabel(doc), obligatorio: req.obligatorio, cumplido: esDocumentoCumplido(doc, req) };
+        return { req, doc, nombre: req.nombre, estado: docEstadoLabel(doc), obligatorio: req.obligatorio, cumplido: esDocumentoCumplido(doc, req) };
       });
-      const companyOk = companyDocs.filter(d => d.cumplido).length;
-      const companyTotal = companyDocs.length;
+      const mandatoryCompanyDocs = companyDocsFull.filter(d => d.obligatorio);
+      const companyOk = mandatoryCompanyDocs.filter(d => d.cumplido).length;
+      const companyTotal = mandatoryCompanyDocs.length;
+      const companyVisual: Visual = mandatoryCompanyDocs.some(d => d.estado === 'Rechazado' || d.estado === 'Vencido')
+        ? 'danger'
+        : mandatoryCompanyDocs.some(d => !d.cumplido)
+          ? 'warn'
+          : 'ok';
 
+      // --- Trabajadores: estado granular por trabajador (Aprobado / En
+      // revisión / Pendiente / Rechazado / Vencido / Por vencer), calculado
+      // sobre sus propios requisitos obligatorios en este proyecto. Se
+      // guarda además el primer requisito obligatorio incumplido de cada
+      // trabajador, para poder construir un blocker concreto.
       const projectWorkers = (c.trabajadores || []).filter(w => esTrabajadorAsignado(w, proyectoId, proyectos));
-      const workerList: Array<{ nombre: string; estado: DocEstado }> = projectWorkers.map(w => {
-        const wState = calcularEstadoTrabajador(w, proyectoId);
-        const estado: DocEstado = wState === 'aprobado' ? 'Aprobado' : wState === 'rechazado' ? 'Rechazado' : wState === 'por_vencer' ? 'Por vencer' : 'Pendiente';
-        return { nombre: w.nombre, estado };
+      const workerList: Array<{ nombre: string; rut: string; estado: DocEstado }> = [];
+      const workerIssues = new Map<string, { req: Requisito; doc?: Documento; estado: DocEstado }>();
+
+      projectWorkers.forEach(w => {
+        const wDocs = workerReqs.map(req => {
+          const doc = matchDoc(w.documentos, proyectoId, req.nombre);
+          return { req, doc, estado: docEstadoLabel(doc), cumplido: esDocumentoCumplido(doc, req) };
+        });
+        const mandatory = wDocs.filter(d => d.req.obligatorio);
+
+        const rechazadoOVencido = mandatory.find(d => d.estado === 'Rechazado' || d.estado === 'Vencido');
+        const enRevision = mandatory.find(d => d.estado === 'En revisión');
+        const faltante = mandatory.find(d => d.estado === 'Pendiente' && !d.cumplido);
+        const porVencer = mandatory.find(d => d.estado === 'Por vencer');
+
+        let estado: DocEstado;
+        let issue: { req: Requisito; doc?: Documento; estado: DocEstado } | undefined;
+        if (rechazadoOVencido) { estado = rechazadoOVencido.estado; issue = rechazadoOVencido; }
+        else if (enRevision) { estado = 'En revisión'; issue = enRevision; }
+        else if (faltante) { estado = 'Pendiente'; issue = faltante; }
+        else if (porVencer) { estado = 'Por vencer'; }
+        else { estado = 'Aprobado'; }
+
+        workerList.push({ nombre: w.nombre, rut: w.rut, estado });
+        if (issue) workerIssues.set(w.rut, issue);
       });
+
+      // "Por vencer" sigue siendo válido mientras el documento no haya
+      // vencido, así que cuenta como trabajador acreditado.
       const workerOk = workerList.filter(w => w.estado === 'Aprobado' || w.estado === 'Por vencer').length;
       const workerTotal = workerList.length;
+      const workersVisual: Visual = workerList.some(w => w.estado === 'Rechazado' || w.estado === 'Vencido')
+        ? 'danger'
+        : workerList.some(w => w.estado === 'Pendiente' || w.estado === 'En revisión')
+          ? 'warn'
+          : 'ok';
 
+      // --- Estado general: única fuente de verdad, sin lógica paralela ---
       const estadoAcred = calcularEstadoAcreditacion(c, proyectoId);
       const estado: Estado = estadoAcred === 'No acreditado' ? 'En proceso' : estadoAcred;
 
+      // --- Blockers: solo requisitos obligatorios incumplidos, cada uno con
+      // suficiente información para navegar directo al problema.
       const blockers: Blocker[] = [];
-      companyDocs.forEach(d => {
-        if (d.obligatorio && !d.cumplido) {
-          blockers.push({ tipo: 'Empresa', nombre: c.nombre, detalle: `${d.nombre} · ${d.estado.toLowerCase()}`, estado: d.estado });
-        }
+      mandatoryCompanyDocs.forEach(d => {
+        if (d.cumplido) return;
+        blockers.push({
+          tipo: 'Empresa',
+          nombre: d.nombre,
+          detalle: `Documento ${d.estado.toLowerCase()}`,
+          estado: d.estado,
+          contratistaId: c.id,
+          proyectoId,
+          docId: d.doc?.id,
+          docKey: docKeyIfRevisable(d.doc, c.id),
+          requisitoId: d.req.id,
+          requisitoNombre: d.req.nombre,
+        });
       });
       workerList.forEach(w => {
-        if (w.estado === 'Rechazado' || w.estado === 'Pendiente') {
-          const failingReq = workerReqs.find(req => {
-            const doc = matchDoc(c.trabajadores?.find(t => t.nombre === w.nombre)?.documentos, proyectoId, req.nombre);
-            return req.obligatorio && !esDocumentoCumplido(doc, req);
-          });
-          blockers.push({
-            tipo: 'Trabajador',
-            nombre: w.nombre,
-            detalle: failingReq ? `${failingReq.nombre} · ${w.estado.toLowerCase()}` : `Requisitos ${w.estado.toLowerCase()}`,
-            estado: w.estado,
-          });
-        }
+        if (w.estado === 'Aprobado' || w.estado === 'Por vencer') return;
+        const issue = workerIssues.get(w.rut);
+        blockers.push({
+          tipo: 'Trabajador',
+          nombre: w.nombre,
+          detalle: issue ? `${issue.req.nombre} · ${issue.estado.toLowerCase()}` : `Requisitos ${w.estado.toLowerCase()}`,
+          estado: w.estado,
+          contratistaId: c.id,
+          proyectoId,
+          docId: issue?.doc?.id,
+          docKey: issue ? docKeyIfRevisable(issue.doc, c.id, w.rut) : undefined,
+          trabajadorRut: w.rut,
+          trabajadorNombre: w.nombre,
+          requisitoId: issue?.req.id,
+          requisitoNombre: issue?.req.nombre,
+        });
       });
 
       return {
@@ -128,9 +218,11 @@ export function buildAcreditacionRows(
         proyectoNombre: proyecto.nombre,
         company: { ok: companyOk, total: companyTotal },
         workers: { ok: workerOk, total: workerTotal },
+        companyVisual,
+        workersVisual,
         estado,
         blockers,
-        companyDocs: companyDocs.map(d => ({ nombre: d.nombre, estado: d.estado })),
+        companyDocs: companyDocsFull.map(d => ({ nombre: d.nombre, estado: d.estado, obligatorio: d.obligatorio })),
         workerList,
       };
     })

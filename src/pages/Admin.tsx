@@ -902,6 +902,10 @@ export default function AdminPortal() {
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
+              onIrARevision={(docKey) => {
+                setSelectedDocKey(docKey);
+                setActiveTab('cola');
+              }}
               showToast={showToast}
             />
           )}
@@ -1111,7 +1115,8 @@ export default function AdminPortal() {
 
       {selectedAcreditacionContratista && (
         <FichaAcreditacion
-          tipo="empresa"
+          tipo={selectedAcreditacionContratista._fichaTrabajador ? 'trabajador' : 'empresa'}
+          trabajador={selectedAcreditacionContratista._fichaTrabajador}
           contratista={selectedAcreditacionContratista}
           proyectoId={selectedAcreditacionContratista._fichaProyectoId || selectedAcreditacionContratista.proyectos[0] || 'costanera'}
           onClose={() => setSelectedAcreditacionContratista(null)}

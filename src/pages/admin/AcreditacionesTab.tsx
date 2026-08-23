@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { Contratista, Proyecto, Mandante } from '../../types';
-import { AcredRow, buildAcreditacionRows, badgeClass } from './acreditacionUtils';
+import { AcredRow, Blocker, buildAcreditacionRows, badgeClass } from './acreditacionUtils';
 
 export default function AcreditacionesTab({
   GLOBAL_CONTRATISTAS,
   GLOBAL_PROYECTOS,
   GLOBAL_MANDANTES,
   setSelectedAcreditacionContratista,
+  onIrARevision,
   showToast,
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
   GLOBAL_MANDANTES: Mandante[];
   setSelectedAcreditacionContratista: (c: any) => void;
+  onIrARevision?: (docKey: string) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [search, setSearch] = useState('');
@@ -29,6 +31,19 @@ export default function AcreditacionesTab({
   const countBloqueadas = rows.filter(r => r.estado === 'Vencido/Bloqueado').length;
   const countTotal = rows.length;
 
+  // El proyecto depende del mandante elegido: no tiene sentido ofrecer
+  // proyectos de otros mandantes una vez filtrado.
+  const proyectosFiltrables = mandanteFilter
+    ? GLOBAL_PROYECTOS.filter(p => p.mandanteId === mandanteFilter)
+    : GLOBAL_PROYECTOS;
+
+  const handleMandanteChange = (id: string) => {
+    setMandanteFilter(id);
+    if (proyectoFilter && !GLOBAL_PROYECTOS.some(p => p.id === proyectoFilter && (!id || p.mandanteId === id))) {
+      setProyectoFilter('');
+    }
+  };
+
   const filtered = rows.filter(r => {
     if (statusFilter && r.estado !== statusFilter) return false;
     if (mandanteFilter && r.mandanteId !== mandanteFilter) return false;
@@ -44,6 +59,26 @@ export default function AcreditacionesTab({
   const current = filtered.find(r => r.key === selectedKey) ?? filtered[0];
 
   const selectRow = (key: string) => setSelectedKey(key);
+
+  // "Ir al problema": si el bloqueo tiene un documento vivo en Cola de
+  // revisión, se abre exactamente ese documento allí; si no (falta cargar,
+  // o el problema no tiene documento asociado), se abre la ficha completa
+  // de la acreditación, enfocada en el trabajador cuando corresponde.
+  const handleIrAlProblema = (blocker: Blocker) => {
+    if (blocker.docKey && onIrARevision) {
+      onIrARevision(blocker.docKey);
+      return;
+    }
+    if (!current) return;
+    const focusTrabajador = blocker.tipo === 'Trabajador'
+      ? current.contratista.trabajadores?.find(w => w.rut === blocker.trabajadorRut)
+      : undefined;
+    setSelectedAcreditacionContratista({
+      ...current.contratista,
+      _fichaProyectoId: blocker.proyectoId,
+      _fichaTrabajador: focusTrabajador,
+    });
+  };
 
   return (
     <div className="acredv2 fade-in pb-10">
@@ -144,7 +179,6 @@ export default function AcreditacionesTab({
           <div className="title">Acreditaciones</div>
           <p className="sub">Vista consolidada por contratista, mandante y proyecto. Permite detectar rápidamente qué acreditaciones están aprobadas, en proceso o bloqueadas y entrar directo al problema.</p>
         </div>
-        <button className="btn" onClick={() => showToast('Exportando acreditaciones filtradas a CSV', 'success')}>Exportar</button>
       </div>
 
       <div className="kpis">
@@ -168,13 +202,13 @@ export default function AcreditacionesTab({
             <option>En proceso</option>
             <option>Vencido/Bloqueado</option>
           </select>
-          <select className="filter" value={mandanteFilter} onChange={e => setMandanteFilter(e.target.value)}>
+          <select className="filter" value={mandanteFilter} onChange={e => handleMandanteChange(e.target.value)}>
             <option value="">Todos los mandantes</option>
             {GLOBAL_MANDANTES.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
           </select>
           <select className="filter" value={proyectoFilter} onChange={e => setProyectoFilter(e.target.value)}>
             <option value="">Todos los proyectos</option>
-            {GLOBAL_PROYECTOS.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            {proyectosFiltrables.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </select>
         </div>
       </div>
@@ -217,11 +251,11 @@ export default function AcreditacionesTab({
                       </td>
                       <td>
                         <div className="name">{r.company.ok}/{r.company.total}</div>
-                        <div className={`progress ${cp < 100 ? 'warn' : ''}`}><div style={{ width: `${cp}%` }} /></div>
+                        <div className={`progress ${r.companyVisual === 'danger' ? 'red' : r.companyVisual === 'warn' ? 'warn' : ''}`}><div style={{ width: `${cp}%` }} /></div>
                       </td>
                       <td>
                         <div className="name">{r.workers.ok}/{r.workers.total}</div>
-                        <div className={`progress ${wp < 100 ? (r.estado === 'Vencido/Bloqueado' ? 'red' : 'warn') : ''}`}><div style={{ width: `${wp}%` }} /></div>
+                        <div className={`progress ${r.workersVisual === 'danger' ? 'red' : r.workersVisual === 'warn' ? 'warn' : ''}`}><div style={{ width: `${wp}%` }} /></div>
                       </td>
                       <td><span className={`badge ${badgeClass(r.estado)}`} title={r.estado}>{r.estado === 'Vencido/Bloqueado' ? 'Bloqueado' : r.estado}</span></td>
                       <td>
@@ -269,7 +303,13 @@ export default function AcreditacionesTab({
                   <div className="summary-card">
                     <div className="label">Empresa</div>
                     <div className="big">{current.company.ok}/{current.company.total}</div>
-                    <div className="desc">{current.company.ok === current.company.total ? 'Requisitos aprobados' : `${current.company.total - current.company.ok} requisito${current.company.total - current.company.ok === 1 ? '' : 's'} pendiente${current.company.total - current.company.ok === 1 ? '' : 's'}`}</div>
+                    <div className="desc">
+                      {current.company.total === 0
+                        ? 'Sin requisitos obligatorios'
+                        : current.company.ok === current.company.total
+                          ? 'Requisitos obligatorios aprobados'
+                          : `${current.company.total - current.company.ok} requisito${current.company.total - current.company.ok === 1 ? '' : 's'} obligatorio${current.company.total - current.company.ok === 1 ? '' : 's'} pendiente${current.company.total - current.company.ok === 1 ? '' : 's'}`}
+                    </div>
                   </div>
                   <div className="summary-card">
                     <div className="label">Trabajadores</div>
@@ -291,7 +331,7 @@ export default function AcreditacionesTab({
                       <span className={`badge ${badgeClass(b.estado)}`}>{b.estado}</span>
                     </div>
                     <div className="blocker-actions">
-                      <button className="icon" onClick={() => showToast(`Ver documento o trabajador asociado: ${b.nombre}`, 'warning')}>Ir al problema</button>
+                      <button className="icon" onClick={() => handleIrAlProblema(b)}>Ir al problema</button>
                     </div>
                   </div>
                 )) : (
@@ -312,15 +352,28 @@ export default function AcreditacionesTab({
                 <button className={`tab ${miniTab === 'company' ? 'active' : ''}`} onClick={() => setMiniTab('company')}>Empresa</button>
               </div>
               <div className="mini-list">
-                {(miniTab === 'workers' ? current.workerList : current.companyDocs).length === 0 && (
-                  <p style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>Sin registros.</p>
+                {miniTab === 'workers' ? (
+                  current.workerList.length === 0 ? (
+                    <p style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>Sin trabajadores asignados.</p>
+                  ) : current.workerList.map((w, i) => (
+                    <div className="mini-row" key={i}>
+                      <div><b>{w.nombre}</b></div>
+                      <span className={`badge ${badgeClass(w.estado)}`}>{w.estado}</span>
+                    </div>
+                  ))
+                ) : (
+                  current.companyDocs.length === 0 ? (
+                    <p style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>Sin registros.</p>
+                  ) : current.companyDocs.map((d, i) => (
+                    <div className="mini-row" key={i}>
+                      <div><b>{d.nombre}</b></div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {!d.obligatorio && <span className="badge gray">Opcional</span>}
+                        <span className={`badge ${badgeClass(d.estado)}`}>{d.estado}</span>
+                      </div>
+                    </div>
+                  ))
                 )}
-                {(miniTab === 'workers' ? current.workerList : current.companyDocs).map((item, i) => (
-                  <div className="mini-row" key={i}>
-                    <div><b>{item.nombre}</b></div>
-                    <span className={`badge ${badgeClass(item.estado)}`}>{item.estado}</span>
-                  </div>
-                ))}
               </div>
 
               <div className="cta">

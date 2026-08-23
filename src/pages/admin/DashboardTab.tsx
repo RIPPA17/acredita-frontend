@@ -58,7 +58,7 @@ export default function DashboardTab({
     if (r.estado === 'Vencido/Bloqueado') {
       const empresaBlockers = r.blockers.filter(b => b.tipo === 'Empresa');
       const trabajadorBlockers = r.blockers.filter(b => b.tipo === 'Trabajador');
-      if (empresaBlockers.length > 0) return `${empresaBlockers[0].detalle}. La acreditación no puede completarse.`;
+      if (empresaBlockers.length > 0) return `${empresaBlockers[0].nombre} (${empresaBlockers[0].detalle}). La acreditación no puede completarse.`;
       if (trabajadorBlockers.length > 0) return `${trabajadorBlockers.length} trabajador${trabajadorBlockers.length === 1 ? '' : 'es'} impide${trabajadorBlockers.length === 1 ? '' : 'n'} completar la acreditación.`;
       return 'Requisitos obligatorios rechazados o vencidos.';
     }

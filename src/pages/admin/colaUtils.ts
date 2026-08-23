@@ -19,6 +19,15 @@ function requisitoDescripcion(nombreDoc: string): string {
   return `${nombreDoc} vigente`;
 }
 
+// Identificador ESTABLE de un documento dentro de la Cola de revisión:
+// contratista + (trabajador, si aplica) + documento. Es la misma convención
+// que usan claims/escalamientos en ColaRevisionTab (sobrevive a que se
+// reconstruya la lista tras cada acción) y la reutiliza Acreditaciones para
+// que "Ir al problema" pueda apuntar exactamente al documento correcto.
+export function buildDocumentoQueueKey(contratistaId: string, docId: string, trabajadorRut?: string): string {
+  return `${contratistaId}::${trabajadorRut ? trabajadorRut + '::' : ''}${docId}`;
+}
+
 function buildQueueItem(
   d: Documento,
   origen: 'Empresa' | 'Trabajador',
@@ -54,7 +63,7 @@ function buildQueueItem(
     // reasigna desde 1 cada vez, así que no sirve como clave persistente para
     // claims/escalamientos). `docId` tampoco alcanza: solo es único dentro de
     // un mismo contratista. Se combina contratista + (trabajador) + docId.
-    key: `${c.id}::${worker ? worker.rut + '::' : ''}${d.id}`,
+    key: buildDocumentoQueueKey(c.id, d.id, worker?.rut),
     docId: d.id,
     proyectoId: pId,
     origen,
