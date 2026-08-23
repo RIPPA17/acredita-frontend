@@ -14,6 +14,15 @@ import {
 } from '../../../data/localStorageDb';
 import { docEstadoLabel, DocEstado } from '../../admin/acreditacionUtils';
 
+export function normalizarNombreDocumento(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
 export function matchDocumentoRequisito(
   docs: Documento[] | undefined,
   proyectoId: string,
@@ -22,8 +31,7 @@ export function matchDocumentoRequisito(
   return (docs || []).find(
     d =>
       d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(reqNombre.toLowerCase()) ||
-        reqNombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      normalizarNombreDocumento(d.nombre) === normalizarNombreDocumento(reqNombre)
   );
 }
 
@@ -62,7 +70,6 @@ export function buildRequisitosTrabajador(
 }
 
 export function impactoLabel(requisito: Requisito): string {
-  if (!requisito.obligatorio) return 'Opcional';
   switch (requisito.criticidad) {
     case 'bloquea_ambas':
       return 'Bloquea acceso y pago';
@@ -71,7 +78,7 @@ export function impactoLabel(requisito: Requisito): string {
     case 'bloquea_acceso':
       return 'Bloquea acceso';
     default:
-      return 'Advertencia';
+      return 'Solo advertencia';
   }
 }
 

@@ -1,12 +1,23 @@
 import { useState } from 'react';
-import { esTrabajadorAsignado, getRequisitos } from '../../data/localStorageDb';
-import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
+import {
+  calcularEstadoTrabajador,
+  DEMO_TODAY,
+  esPorVencerPorFecha,
+  esTrabajadorAsignado,
+  esVencidoPorFecha,
+  getContratistas,
+  getRequisitos,
+  obtenerDiasRestantes,
+  saveContratistas,
+} from '../../data/localStorageDb';
+import { Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
 import { DocEstado } from '../admin/acreditacionUtils';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
   impactoLabel,
-  motivoRechazo,
+  matchDocumentoRequisito,
+  normalizarNombreDocumento,
   RequisitoConDoc,
 } from './inicio/inicioUtils';
 
@@ -40,6 +51,37 @@ interface Row extends RequisitoConDoc {
   ownerNombre: string;
 }
 
+function estadoEfectivo(doc: Documento | undefined, requisito: Requisito): DocEstado {
+  if (!doc || doc.estado === 'pendiente') return 'Pendiente';
+  if (doc.estado === 'rechazado') return 'Rechazado';
+  if (doc.estado === 'revision') return 'En revisión';
+  if (doc.estado === 'por_vencer') return 'Por vencer';
+  if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
+  if (esPorVencerPorFecha(doc.vencimiento, requisito.alertaDias)) return 'Por vencer';
+  return 'Aprobado';
+}
+
+function fechaCargaDemo(): string {
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(DEMO_TODAY);
+}
+
+function idDocumento(item: Row, contratistaId: string, proyectoId: string): string {
+  const owner = item.worker?.rut || 'empresa';
+  return `doc_${contratistaId}_${proyectoId}_${item.requisito.id}_${owner}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '_');
+}
+
+function archivoDocumento(item: Row, version: number): string {
+  const nombre = normalizarNombreDocumento(item.requisito.nombre).replace(/\s+/g, '-');
+  return `${nombre}-v${version}.pdf`;
+}
+
 function accionDoc(item: Row): { label: string; cls: string } {
   if (!item.doc) return { label: 'Subir', cls: 'doc-btn-primary' };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
@@ -57,7 +99,7 @@ function stateCopy(item: RequisitoConDoc): string {
         ? 'Este requisito obligatorio todavía no tiene un documento cargado. Mientras siga pendiente puede impedir completar la acreditación.'
         : 'Este requisito es opcional. Puedes subirlo, pero su ausencia no bloquea la acreditación.';
     case 'Rechazado':
-      return 'Acredita rechazó esta versión. Corrige exactamente la observación indicada y reemplaza el documento.';
+      return 'Acredita rechazó esta versión. Debes corregir exactamente la observación indicada y reemplazar el documento.';
     case 'Vencido':
       return 'El documento dejó de estar vigente. Mientras siga vencido, aplica el bloqueo definido por este requisito.';
     case 'En revisión':
@@ -72,7 +114,7 @@ function stateCopy(item: RequisitoConDoc): string {
 function guidanceText(item: RequisitoConDoc): string {
   switch (item.estado) {
     case 'Rechazado':
-      return item.doc?.solucionRechazo || 'Corrige exactamente la observación indicada y vuelve a subir el documento.';
+      return item.doc?.solucionRechazo || '';
     case 'Vencido':
       return item.doc?.solucionRechazo || 'Solicita una versión vigente y reemplaza este documento cuanto antes.';
     case 'Por vencer':
@@ -100,16 +142,16 @@ export default function SubirTab({
   allMandantes,
   selectedProyectoId,
   setSelectedProyectoId,
-  setSelectedDocumentForPanel,
-  setSelectedWorkerForDocs,
+  onDataChanged,
+  showToast,
 }: {
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
   allMandantes: Mandante[];
   selectedProyectoId: string;
   setSelectedProyectoId: (id: string) => void;
-  setSelectedDocumentForPanel: (d: Documento | null) => void;
-  setSelectedWorkerForDocs: (w: Trabajador | null) => void;
+  onDataChanged: () => void;
+  showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [scope, setScope] = useState<Scope>('todos');
   const [search, setSearch] = useState('');
@@ -127,6 +169,7 @@ export default function SubirTab({
     ? [
         ...buildRequisitosEmpresa(contratistaLogueado, proyectoActual.id, requisitosAll).map(item => ({
           ...item,
+          estado: estadoEfectivo(item.doc, item.requisito),
           key: item.requisito.id,
           scope: 'empresa' as const,
           ownerNombre: contratistaLogueado.nombre,
@@ -134,6 +177,7 @@ export default function SubirTab({
         ...trabajadoresAsignados.flatMap(w =>
           buildRequisitosTrabajador(w, proyectoActual.id, requisitosAll).map(item => ({
             ...item,
+            estado: estadoEfectivo(item.doc, item.requisito),
             key: `${item.requisito.id}::${w.rut}`,
             scope: 'trabajadores' as const,
             ownerNombre: w.nombre,
@@ -147,7 +191,7 @@ export default function SubirTab({
   const porVencer = allItems.filter(i => i.estado === 'Por vencer').length;
   const aprobados = allItems.filter(i => i.estado === 'Aprobado').length;
 
-  const q = search.trim().toLowerCase();
+  const q = normalizarNombreDocumento(search);
   const filtrados = allItems
     .filter(i => {
       const scopeOk = scope === 'todos' || i.scope === scope;
@@ -156,14 +200,16 @@ export default function SubirTab({
       else if (statusFilter === 'revision') statusOk = i.estado === 'En revisión';
       else if (statusFilter === 'por_vencer') statusOk = i.estado === 'Por vencer';
       else if (statusFilter === 'aprobado') statusOk = i.estado === 'Aprobado';
-      const qOk = !q || i.requisito.nombre.toLowerCase().includes(q) || i.ownerNombre.toLowerCase().includes(q);
+      const qOk = !q || [i.requisito.nombre, i.ownerNombre, i.requisito.categoria]
+        .some(value => normalizarNombreDocumento(value).includes(q));
       return scopeOk && statusOk && qOk;
     })
     .sort((a, b) => {
       const p = DOC_PRIORITY[a.estado] - DOC_PRIORITY[b.estado];
       if (p !== 0) return p;
       if (a.requisito.obligatorio !== b.requisito.obligatorio) return a.requisito.obligatorio ? -1 : 1;
-      return a.ownerNombre.localeCompare(b.ownerNombre, 'es');
+      const ownerOrder = a.ownerNombre.localeCompare(b.ownerNombre, 'es');
+      return ownerOrder || a.requisito.nombre.localeCompare(b.requisito.nombre, 'es');
     });
 
   const grupos: Array<['Empresa' | 'Trabajadores', Row[]]> = [];
@@ -178,10 +224,84 @@ export default function SubirTab({
     setSelectedKey(null);
   };
 
-  const abrirAccion = (item: Row) => {
-    if (!item.doc) return;
-    setSelectedWorkerForDocs(item.worker ?? null);
-    setSelectedDocumentForPanel(item.doc);
+  const subirDocumento = (item: Row) => {
+    if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado)) return;
+
+    const contratistas = getContratistas();
+    const contratistaIndex = contratistas.findIndex(c => c.id === contratistaLogueado.id);
+    if (contratistaIndex === -1) {
+      showToast('No fue posible encontrar al contratista.', 'error');
+      return;
+    }
+
+    const contratista = contratistas[contratistaIndex];
+    let documentos: Documento[];
+    let trabajador: Trabajador | undefined;
+
+    if (item.scope === 'trabajadores') {
+      trabajador = contratista.trabajadores?.find(w => w.rut === item.worker?.rut);
+      if (!trabajador) {
+        showToast('No fue posible encontrar al trabajador del requisito.', 'error');
+        return;
+      }
+      trabajador.documentos ||= [];
+      documentos = trabajador.documentos;
+    } else {
+      documentos = contratista.documentos;
+    }
+
+    let documento = matchDocumentoRequisito(documentos, selectedProyectoId, item.requisito.nombre);
+    const fecha = fechaCargaDemo();
+
+    if (!documento) {
+      documento = {
+        id: idDocumento(item, contratista.id, selectedProyectoId),
+        nombre: item.requisito.nombre,
+        categoria: item.requisito.categoria,
+        estado: 'revision',
+        vencimiento: '—',
+        proyectoId: selectedProyectoId,
+        subido: fecha,
+        version: 1,
+        archivoReferencia: archivoDocumento(item, 1),
+        historial: [],
+      };
+      documentos.push(documento);
+    } else {
+      const versionAnterior = documento.version || 1;
+      const tieneVersionAnterior = Boolean(documento.archivoReferencia || documento.subido || documento.estado !== 'pendiente');
+      if (tieneVersionAnterior) {
+        documento.historial = [
+          ...(documento.historial || []),
+          {
+            version: versionAnterior,
+            estado: documento.estado,
+            fecha: documento.fechaRevisado || documento.subido || '—',
+            motivoRechazo: documento.motivoRechazo || documento.motivo,
+            explicacionRechazo: documento.explicacionRechazo || documento.observacion,
+            verificador: documento.revisor,
+          },
+        ];
+        documento.version = versionAnterior + 1;
+      } else {
+        documento.version = versionAnterior;
+      }
+      documento.estado = 'revision';
+      documento.subido = fecha;
+      documento.archivoReferencia = archivoDocumento(item, documento.version || 1);
+      documento.motivoRechazo = undefined;
+      documento.explicacionRechazo = undefined;
+      documento.solucionRechazo = undefined;
+      documento.motivo = undefined;
+      documento.observacion = undefined;
+      documento.revisor = undefined;
+      documento.fechaRevisado = undefined;
+    }
+
+    if (trabajador) trabajador.estado = calcularEstadoTrabajador(trabajador, selectedProyectoId);
+    saveContratistas(contratistas);
+    onDataChanged();
+    showToast('Documento enviado a revisión por Acredita.', 'success');
   };
 
   if (!proyectoActual) {
@@ -297,6 +417,15 @@ export default function SubirTab({
                         key={item.key}
                         className={`doc-row ${selectedKey === item.key ? 'selected' : ''}`}
                         onClick={() => setSelectedKey(item.key)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedKey(item.key);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={selectedKey === item.key}
                       >
                         <div className="doc-main">
                           <div className="doc-title-line">
@@ -319,9 +448,11 @@ export default function SubirTab({
                         </div>
                         <button
                           className={`doc-btn ${cls}`}
-                          disabled={!item.doc}
-                          title={!item.doc ? 'La carga de documentos nuevos aún no está disponible en este entorno de demostración.' : undefined}
-                          onClick={e => { e.stopPropagation(); setSelectedKey(item.key); abrirAccion(item); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setSelectedKey(item.key);
+                            if (label !== 'Ver') subirDocumento(item);
+                          }}
                         >
                           {label}
                         </button>
@@ -356,6 +487,12 @@ export default function SubirTab({
                       <span className="doc-impact">{impactoLabel(selected.requisito)}</span>
                     </div>
 
+                    {selected.estado === 'Por vencer' && selected.doc && (
+                      <div className="doc-date">
+                        Vence en {obtenerDiasRestantes(selected.doc.vencimiento)} día{obtenerDiasRestantes(selected.doc.vencimiento) === 1 ? '' : 's'}.
+                      </div>
+                    )}
+
                     <div className="doc-tags">
                       <span className={`doc-req-chip ${selected.requisito.obligatorio ? 'required' : 'optional'}`}>{selected.requisito.obligatorio ? 'Obligatorio' : 'Opcional'}</span>
                       <span className="doc-req-chip">{selected.requisito.frecuencia}</span>
@@ -366,16 +503,16 @@ export default function SubirTab({
                       <p>{stateCopy(selected)}</p>
                     </div>
 
-                    {(selected.estado === 'Rechazado' || selected.estado === 'Vencido') && (
+                    {selected.estado === 'Rechazado' && (selected.doc?.motivoRechazo || selected.doc?.motivo || selected.doc?.observacion) && (
                       <div className="doc-info-box red">
                         <strong>Motivo</strong>
-                        <p>{motivoRechazo(selected.doc)}</p>
+                        <p>{selected.doc.motivoRechazo || selected.doc.motivo || selected.doc.observacion}</p>
                       </div>
                     )}
 
                     {guidanceText(selected) && (
                       <div className={`doc-info-box ${selected.estado === 'Rechazado' || selected.estado === 'Vencido' ? 'red' : selected.estado === 'Por vencer' ? 'yellow' : ''}`}>
-                        <strong>{selected.estado === 'Pendiente' ? 'Qué debes hacer' : 'Cómo corregirlo'}</strong>
+                        <strong>{selected.estado === 'Pendiente' ? 'Qué debes hacer' : selected.estado === 'Por vencer' ? 'Renovación anticipada' : 'Cómo corregirlo'}</strong>
                         <p>{guidanceText(selected)}</p>
                       </div>
                     )}
@@ -412,9 +549,16 @@ export default function SubirTab({
                             <div className="doc-history-date">{h.fecha}</div>
                             <div>
                               <div className="doc-history-name">Versión {h.version}</div>
-                              <div className="doc-history-note">{h.explicacionRechazo || h.motivoRechazo || (h.estado === 'aprobado' ? 'Aprobado por Acredita.' : 'Rechazado por Acredita.')}</div>
+                              {(h.explicacionRechazo || h.motivoRechazo || h.verificador) && (
+                                <div className="doc-history-note">
+                                  {h.explicacionRechazo || h.motivoRechazo}
+                                  {h.verificador ? `${h.explicacionRechazo || h.motivoRechazo ? ' · ' : ''}Verificado por ${h.verificador}` : ''}
+                                </div>
+                              )}
                             </div>
-                            <span className={`doc-badge ${h.estado === 'aprobado' ? 'doc-badge-green' : 'doc-badge-red'}`}>{h.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span>
+                            <span className={`doc-badge ${h.estado === 'aprobado' ? 'doc-badge-green' : h.estado === 'rechazado' ? 'doc-badge-red' : h.estado === 'por_vencer' ? 'doc-badge-yellow' : 'doc-badge-blue'}`}>
+                              {h.estado === 'aprobado' ? 'Aprobado' : h.estado === 'rechazado' ? 'Rechazado' : h.estado === 'por_vencer' ? 'Por vencer' : h.estado === 'revision' ? 'En revisión' : 'Pendiente'}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -424,9 +568,10 @@ export default function SubirTab({
                       <button className="doc-btn doc-btn-ghost" onClick={() => setSelectedKey(null)}>Cerrar</button>
                       <button
                         className={`doc-btn ${cls}`}
-                        disabled={!selected.doc}
-                        title={!selected.doc ? 'La carga de documentos nuevos aún no está disponible en este entorno de demostración.' : undefined}
-                        onClick={() => abrirAccion(selected)}
+                        onClick={() => {
+                          if (label !== 'Ver') subirDocumento(selected);
+                          else if (selected.doc?.archivoReferencia) showToast(`Archivo actual: ${selected.doc.archivoReferencia}`, 'success');
+                        }}
                       >
                         {selected.estado === 'En revisión' || selected.estado === 'Aprobado' ? 'Ver documento' : label}
                       </button>

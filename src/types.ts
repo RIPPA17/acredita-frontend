@@ -42,7 +42,7 @@ export interface Trabajador {
 
 export interface HistorialVersionDocumento {
   version: number;
-  estado: 'aprobado' | 'rechazado';
+  estado: Documento['estado'];
   fecha: string;
   motivoRechazo?: string;
   explicacionRechazo?: string;

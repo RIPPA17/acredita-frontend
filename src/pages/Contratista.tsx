@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Bell, LayoutDashboard, Folder, Upload, Archive, Sparkles, Users, 
+  Bell, LayoutDashboard, Folder, Upload, Users,
   Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight, ArrowLeft,
   FileCheck, Clock, X, XCircle, CloudUpload, Download, Eye,
   Building2, MapPin, Search, Info, FileText, Plus, Send, ShieldCheck, Banknote,
@@ -16,8 +16,6 @@ import DocumentDetailPanel from './contratista/DocumentDetailPanel';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
-import BibliotecaTab from './contratista/BibliotecaTab';
-import AsesoriaTab from './contratista/AsesoriaTab';
 import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
 
@@ -52,11 +50,12 @@ export default function ContratistaPortal() {
     aprobacionEmail: true
   });
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
+  const [dataRevision, setDataRevision] = useState(0);
   const [newWorkerForm, setNewWorkerForm] = useState({
     nombre: '',
     rut: '',
     cargo: '',
-    faena: 'Torre Mackenna'
+    faena: ''
   });
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
@@ -65,13 +64,11 @@ export default function ContratistaPortal() {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'proyectos', label: 'Mis proyectos', icon: Folder },
-    { id: 'subir', label: 'Subir documentos', icon: Upload, badge: 2, section: 'Documentos' },
-    { id: 'biblioteca', label: 'Biblioteca', icon: Archive },
-    { id: 'asesoria', label: 'Asesoría experta', icon: Sparkles, section: 'Herramientas' },
-    { id: 'trabajadores', label: 'Mis trabajadores', icon: Users },
-    { id: 'config', label: 'Configuración', icon: Settings, section: 'Cuenta' },
+    { id: 'subir', label: 'Documentos', icon: Upload },
+    { id: 'trabajadores', label: 'Trabajadores', icon: Users },
+    { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
   // Load contractors, projects, and mandantes from localStorageDb
@@ -102,7 +99,7 @@ export default function ContratistaPortal() {
       ) || [];
       setTrabajadoresData(projectWorkers);
     }
-  }, [selectedProyectoId]);
+  }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
 
   React.useEffect(() => {
     const invs = getInvitaciones();
@@ -138,6 +135,7 @@ export default function ContratistaPortal() {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const todayStr = `${day} ${months[today.getMonth()]} ${today.getFullYear()}`;
 
+    let updated = false;
     if (currentIdx !== -1) {
       if (workerRut) {
         const workerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === workerRut);
@@ -163,7 +161,7 @@ export default function ContratistaPortal() {
               w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
             ) || [];
             setTrabajadoresData(projectWorkers);
-            showToast(actionMsg, 'success');
+            updated = true;
           }
         }
       } else {
@@ -181,7 +179,7 @@ export default function ContratistaPortal() {
           saveContratistas(list);
           
           setDocumentosData(list[currentIdx].documentos.filter(d => d.proyectoId === selectedProyectoId));
-          showToast(actionMsg, 'success');
+          updated = true;
         }
       }
     }
@@ -217,7 +215,7 @@ export default function ContratistaPortal() {
       });
     }
 
-    showToast(actionMsg, 'success');
+    if (updated) showToast(actionMsg, 'success');
   };
 
   const handleAddWorkerSubmit = (e: React.FormEvent) => {
@@ -286,13 +284,17 @@ export default function ContratistaPortal() {
       nombre: '',
       rut: '',
       cargo: '',
-      faena: 'Torre Mackenna'
+      faena: ''
     });
     setShowAddWorkerModal(false);
     showToast('Trabajador agregado con éxito');
   };
 
   if (tieneProyecto && !invitacionAceptada) {
+    const invitacionPendiente = getInvitaciones().find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
+    const requisitosInvitacion = invitacionPendiente
+      ? getRequisitos().filter(req => req.proyectoId === invitacionPendiente.proyectoId && req.activo !== false)
+      : [];
     return (
       <div className="min-h-screen flex items-center justify-center bg-cream2 p-4 font-sans text-navy">
         <div className="card max-w-md w-full fade-in shadow-xl border-none">
@@ -307,17 +309,17 @@ export default function ContratistaPortal() {
                 <Building2 size={24} />
               </div>
               <div>
-                <div className="font-semibold text-navy text-[15.4px]">Constructora Andina SA</div>
-                <div className="text-[13.2px] text-gray-500">Proyecto Torre Mackenna</div>
+                <div className="font-semibold text-navy text-[15.4px]">{invitacionPendiente?.mandanteNombre || 'Mandante'}</div>
+                <div className="text-[13.2px] text-gray-500">{invitacionPendiente?.proyectoNombre || 'Proyecto'}</div>
               </div>
             </div>
             
             <div className="border-t border-cream3 pt-4">
               <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Documentos requeridos:</p>
               <ul className="text-[13.2px] text-gray-600 flex flex-col gap-2.5">
-                <li className="flex items-center gap-2"><FileText size={16} className="text-gray-400" /> Contrato de trabajo</li>
-                <li className="flex items-center gap-2"><FileText size={16} className="text-gray-400" /> Liquidaciones de sueldo</li>
-                <li className="flex items-center gap-2"><FileText size={16} className="text-gray-400" /> F30 SII</li>
+                {requisitosInvitacion.map(req => (
+                  <li key={req.id} className="flex items-center gap-2"><FileText size={16} className="text-gray-400" /> {req.nombre}</li>
+                ))}
               </ul>
             </div>
           </div>
@@ -527,7 +529,6 @@ export default function ContratistaPortal() {
           <div className="sb-label">Principal</div>
           {menuItems.map(item => (
             <React.Fragment key={item.id}>
-              {item.section && <div className="sb-label mt-2">{item.section}</div>}
               <button 
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
@@ -535,7 +536,6 @@ export default function ContratistaPortal() {
               >
                 <item.icon size={18} className="shrink-0" /> 
                 <span className="flex-1">{item.label}</span>
-                {item.badge && <span className="sb-badge bg-brown">{item.badge}</span>}
               </button>
             </React.Fragment>
           ))}
@@ -573,14 +573,12 @@ export default function ContratistaPortal() {
               <div className="sb-label">Principal</div>
               {menuItems.map(item => (
                 <React.Fragment key={item.id}>
-                  {item.section && <div className="sb-label mt-2">{item.section}</div>}
                   <button 
                     onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                     className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
                   >
                     <item.icon size={18} className="shrink-0" /> 
                     <span className="flex-1">{item.label}</span>
-                    {item.badge && <span className="sb-badge bg-brown">{item.badge}</span>}
                   </button>
                 </React.Fragment>
               ))}
@@ -631,8 +629,8 @@ export default function ContratistaPortal() {
               allMandantes={allMandantes}
               selectedProyectoId={selectedProyectoId}
               setSelectedProyectoId={setSelectedProyectoId}
-              setSelectedDocumentForPanel={setSelectedDocumentForPanel}
-              setSelectedWorkerForDocs={setSelectedWorkerForDocs}
+              onDataChanged={() => setDataRevision(value => value + 1)}
+              showToast={showToast}
             />
           )}
 
@@ -649,14 +647,6 @@ export default function ContratistaPortal() {
               setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
             />
-          )}
-
-          {activeTab === 'biblioteca' && (
-            <BibliotecaTab setShowAddWorkerModal={setShowAddWorkerModal} />
-          )}
-
-          {activeTab === 'asesoria' && (
-            <AsesoriaTab />
           )}
 
           {activeTab === 'trabajadores' && (
