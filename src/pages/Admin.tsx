@@ -906,8 +906,9 @@ export default function AdminPortal() {
             <AcreditacionesTab
               GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
-              setActiveTab={setActiveTab}
+              showToast={showToast}
             />
           )}
 
@@ -1118,7 +1119,7 @@ export default function AdminPortal() {
         <FichaAcreditacion
           tipo="empresa"
           contratista={selectedAcreditacionContratista}
-          proyectoId={selectedAcreditacionContratista.proyectos[0] || 'costanera'}
+          proyectoId={selectedAcreditacionContratista._fichaProyectoId || selectedAcreditacionContratista.proyectos[0] || 'costanera'}
           onClose={() => setSelectedAcreditacionContratista(null)}
           rol="admin"
           onRevisarDocumento={(doc) => {
