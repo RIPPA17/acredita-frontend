@@ -66,6 +66,7 @@ export default function ColaRevisionTab({
   setRechazadosHoy,
   showToast,
   verificadores,
+  verificadorActualId,
   claimsRevision,
   setClaimsRevision,
 }: {
@@ -78,6 +79,7 @@ export default function ColaRevisionTab({
   setRechazadosHoy: (updater: (n: number) => number) => void;
   showToast: (msg: string, type?: "success" | "error" | "warning") => void;
   verificadores: Verificador[];
+  verificadorActualId?: string | null;
   claimsRevision: ClaimRevision[];
   setClaimsRevision: (data: ClaimRevision[]) => void;
 }) {
@@ -88,8 +90,11 @@ export default function ColaRevisionTab({
   // Verificador operativo actual y supervisor de escalamiento: se resuelven
   // desde el equipo central (nunca strings hardcodeados), y se recalculan si
   // el equipo cambia (p. ej. alguien pasa a Offline o se crea un nuevo
-  // verificador) sin necesitar recargar la página.
-  const currentVerificador = useMemo(() => getVerificadorActual(), [verificadores]);
+  // verificador) o si Configuración → General cambia quién opera la cola —
+  // sin necesitar recargar la página. `verificadorActualId` no se lee
+  // directamente aquí (getVerificadorActual() ya resuelve el id persistido);
+  // solo se agrega a las deps para forzar el recálculo cuando cambia.
+  const currentVerificador = useMemo(() => getVerificadorActual(), [verificadores, verificadorActualId]);
   const supervisor = useMemo(() => getSupervisorActual(), [verificadores]);
   const nombreVerificador = (id: string | undefined) =>
     (id && verificadores.find(v => v.id === id)?.nombre) || "Verificador no disponible";

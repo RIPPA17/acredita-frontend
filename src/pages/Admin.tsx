@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   LayoutDashboard,
   ClipboardList,
   Users,
-  FileCode2,
-  SlidersHorizontal,
-  CreditCard,
   ShieldCheck,
   LogOut,
   AlertCircle,
@@ -38,15 +35,15 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck
+  ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck, Settings
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getVerificadores, saveVerificadores, getClaimsRevision, saveClaimsRevision, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getVerificadores, saveVerificadores, getVerificadorActualId, setVerificadorActual, getVerificadorActual, getClaimsRevision, saveClaimsRevision, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
 import { Contratista, Proyecto, Requisito, Verificador, ClaimRevision } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
 import { buildColaDocs, buildCorrectionDocs } from './admin/colaUtils';
 import { pruneClaimsRevision } from './admin/verificadorUtils';
-import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS, GLOBAL_PLANTILLA_DOCUMENTOS } from './admin/globalData';
+import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS } from './admin/globalData';
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
 import MandantesTab from './admin/MandantesTab';
 import ContratistasTab from './admin/ContratistasTab';
@@ -54,23 +51,15 @@ import ProyectosTab from './admin/ProyectosTab';
 import ProyectoDetailDrawer from './admin/ProyectoDetailDrawer';
 import VerificadoresTab from './admin/VerificadoresTab';
 import VerificadorDetailDrawer from './admin/VerificadorDetailDrawer';
+import ConfiguracionTab from './admin/ConfiguracionTab';
 import AcreditacionesTab from './admin/AcreditacionesTab';
-import PlantillasTab from './admin/PlantillasTab';
-import ReglasTab from './admin/ReglasTab';
-import FacturacionTab from './admin/FacturacionTab';
 import AuditoriaTab from './admin/AuditoriaTab';
 import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import DocumentoDetailModal from './admin/DocumentoDetailModal';
 
-type Regla = {
-  id: number;
-  documento: string;
-  diasVigencia: number;
-  alertaDias: number;
-  criticidad: "bloquea_pago" | "bloquea_acceso" | "advertencia";
-  isNew?: boolean;
-};
+const iniciales = (nombre: string) =>
+  nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
 type LogEntry = {
   id: number;
@@ -185,46 +174,6 @@ export default function AdminPortal() {
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
-  const GLOBAL_PLANTILLA_DOCUMENTOS = getPlantillas();
-
-  // Cosmetic per-template metadata (version/downloads/update date) for the
-  // 6 seeded templates only — anything added later gets fresh-item defaults
-  // below instead of borrowing one of these entries by coincidence of index.
-  const PLANTILLAS_META = [
-    { version: 'v3.2', actualizacion: '21 Ago 2026', descargasTotal: 246, descargasMes: 82, porActualizar: true },
-    { version: 'v4.0', actualizacion: '18 Ago 2026', descargasTotal: 221, descargasMes: 76, porActualizar: false },
-    { version: 'v2.1', actualizacion: '19 Ago 2026', descargasTotal: 138, descargasMes: 51, porActualizar: true },
-    { version: 'v2.4', actualizacion: '15 Ago 2026', descargasTotal: 177, descargasMes: 39, porActualizar: false },
-    { version: 'v1.4', actualizacion: '05 Ago 2026', descargasTotal: 94, descargasMes: 28, porActualizar: false },
-    { version: 'v1.2', actualizacion: '02 Ago 2026', descargasTotal: 61, descargasMes: 17, porActualizar: false },
-  ];
-
-  const PLANTILLAS_DESCRIPCION: Record<string, string> = {
-    liquidacion: "Comprobante mensual de remuneración del trabajador, con descuentos legales y base imponible.",
-    f30: "Certificado de cumplimiento de obligaciones laborales y previsionales emitido por el SII.",
-    contrato: "Formato estándar de contrato individual para trabajadores contratados por obra o faena, con cláusulas legales al día.",
-    mutual: "Certificado de afiliación y cotizaciones al día ante la mutual de seguridad.",
-    antecedentes: "Certificado de antecedentes penales vigente del trabajador.",
-    odi: "Obligación de informar los riesgos laborales asociados a la faena, firmada por el trabajador.",
-  };
-
-  const PLANTILLAS = GLOBAL_PLANTILLA_DOCUMENTOS.map((p: any, idx) => {
-    const tipo = p.tipo || (idx % 2 === 0 ? "gratuita" : "upsell");
-    const meta = idx < PLANTILLAS_META.length
-      ? PLANTILLAS_META[idx]
-      : { version: 'v1.0', actualizacion: '22 Ago 2026', descargasTotal: 0, descargasMes: 0, porActualizar: false };
-
-    return {
-      id: idx + 1,
-      nombre: p.nombre,
-      categoria: p.categoria,
-      tipo,
-      modalidad: tipo === 'upsell' ? 'Servicio Acredita' : 'Plantilla gratuita',
-      estado: 'Activa',
-      ...meta,
-      descripcion: PLANTILLAS_DESCRIPCION[p.id] || `Modelo de documento ${p.categoria.toLowerCase()} para contratistas.`
-    };
-  });
 
   const ACTIVIDAD_RECIENTE: any[] = [];
   let actId = 1;
@@ -281,6 +230,7 @@ export default function AdminPortal() {
     setProyectos(freshProyectos);
     setRequisitos(getRequisitos());
     setVerificadores(getVerificadores());
+    setVerificadorActualIdState(getVerificadorActualId());
     // Red de seguridad: al cambiar de pestaña, descarta claims cuyo
     // documento ya no esté en la cola (p. ej. modificado por otro flujo).
     setClaimsRevision(pruneClaimsRevision(getClaimsRevision(), freshContratistas, freshProyectos));
@@ -319,36 +269,22 @@ export default function AdminPortal() {
   useEffect(() => {
     if (!verificadorSeleccionado) setTabVerificador("resumen");
   }, [verificadorSeleccionado]);
+  // Verificador operativo actual (Configuración → General): estado reactivo
+  // separado del arreglo `verificadores`, para que cambiar quién opera la
+  // Cola se refleje al instante ahí sin depender de que la lista de
+  // verificadores también cambie de referencia.
+  const [verificadorActualId, setVerificadorActualIdState] = useState<string | null>(() => getVerificadorActualId());
+  const handleSetVerificadorActual = (id: string) => {
+    setVerificadorActual(id);
+    setVerificadorActualIdState(id);
+    showToast("Verificador operativo actualizado");
+  };
+  // Identidad mostrada en el topbar: se resuelve desde el equipo central de
+  // verificadores (nunca un nombre hardcodeado), y se recalcula cuando
+  // cambia el equipo o el verificador operativo actual.
+  const topbarVerificador = useMemo(() => getVerificadorActual(), [verificadores, verificadorActualId]);
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
-  const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
-  const [busquedaPlantilla, setBusquedaPlantilla] = useState("");
-  const [showSubirPlantillaModal, setShowSubirPlantillaModal] = useState(false);
-  const [newTemplateName, setNewTemplateName] = useState("");
-  const [newTemplateCategory, setNewTemplateCategory] = useState("Laboral");
-  const [newTemplateTipo, setNewTemplateTipo] = useState("gratuita");
-
-  const handleAddTemplate = () => {
-    if (!newTemplateName.trim()) return;
-    const newId = 'p_' + Date.now();
-    const newTemplate = {
-      id: newId,
-      nombre: newTemplateName,
-      categoria: newTemplateCategory,
-      tipo: newTemplateTipo,
-      frecuencia: 'Única'
-    };
-    const list = getPlantillas();
-    list.push(newTemplate);
-    savePlantillas(list);
-
-    setNewTemplateName("");
-    setNewTemplateCategory("Laboral");
-    setNewTemplateTipo("gratuita");
-    setShowSubirPlantillaModal(false);
-    showToast("Plantilla creada correctamente");
-  };
-  const [reglas, setReglas] = useState<Regla[]>(() => getReglas());
 
   const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>(() => {
     const dbLogs = getAuditLogs().map(log => ({
@@ -499,10 +435,8 @@ export default function AdminPortal() {
     { id: "contratistas", label: "Contratistas", icon: Users },
     { id: "proyectos", label: "Proyectos", icon: FolderOpen },
     { id: "verificadores", label: "Verificadores", icon: UserCheck },
-    { id: "plantillas", label: "Plantillas", icon: FileCode2, section: "Configuración" },
-    { id: "reglas", label: "Reglas de vigencia", icon: SlidersHorizontal },
-    { id: "facturacion", label: "Facturación", icon: CreditCard },
-    { id: "auditoria", label: "Auditoría", icon: ShieldAlert, badgePunto: hayAccesosFallidos, badgeTipo: "alerta" },
+    { id: "auditoria", label: "Auditoría", icon: ShieldAlert, section: "Sistema", badgePunto: hayAccesosFallidos, badgeTipo: "alerta" },
+    { id: "configuracion", label: "Configuración", icon: Settings },
   ];
 
   const PROYECTOS_BUSQUEDA = proyectos.map(p => {
@@ -693,7 +627,7 @@ export default function AdminPortal() {
                   <span className="font-semibold text-navy text-[15px]">
                     Notificaciones
                   </span>
-                  <span className="badge b-red">2 urgentes</span>
+                  <span className="badge b-red">1 urgente</span>
                 </div>
 
                 {/* Items */}
@@ -712,23 +646,6 @@ export default function AdminPortal() {
                       </p>
                       <p className="text-[11.5px] text-gray-400 mt-1">
                         Hace 2 horas
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 px-4 py-3 bg-yellow-50 hover:bg-yellow-100/60 transition-colors cursor-pointer">
-                    <AlertTriangle
-                      size={18}
-                      className="text-yellow-600 shrink-0 mt-0.5"
-                    />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-yellow-800">
-                        Plantilla "F30 SII" desactualizada
-                      </p>
-                      <p className="text-[12.5px] text-yellow-700 mt-0.5">
-                        Revisar antes del 31 de mayo — Gestión de plantillas
-                      </p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">
-                        Hace 5 horas
                       </p>
                     </div>
                   </div>
@@ -776,10 +693,12 @@ export default function AdminPortal() {
           </div>
           <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
-              AD
+              {topbarVerificador ? iniciales(topbarVerificador.nombre) : "?"}
             </div>
             <span className="text-[14.3px] text-cream">
-              Revisora · Ana Díaz
+              {topbarVerificador
+                ? `${topbarVerificador.rol === 'supervisor' ? 'Supervisor' : 'Verificador'} · ${topbarVerificador.nombre}`
+                : "Usuario operativo no disponible"}
             </span>
           </div>
         </div>
@@ -921,6 +840,7 @@ export default function AdminPortal() {
               setRechazadosHoy={setRechazadosHoy}
               showToast={showToast}
               verificadores={verificadores}
+              verificadorActualId={verificadorActualId}
               claimsRevision={claimsRevision}
               setClaimsRevision={setClaimsRevision}
             />
@@ -975,32 +895,6 @@ export default function AdminPortal() {
             />
           )}
 
-          {activeTab === "plantillas" && (
-            <PlantillasTab
-              PLANTILLAS={PLANTILLAS}
-              activeFilterPlantillas={activeFilterPlantillas}
-              setActiveFilterPlantillas={setActiveFilterPlantillas}
-              busquedaPlantilla={busquedaPlantilla}
-              setBusquedaPlantilla={setBusquedaPlantilla}
-              showSubirPlantillaModal={showSubirPlantillaModal}
-              setShowSubirPlantillaModal={setShowSubirPlantillaModal}
-              newTemplateName={newTemplateName}
-              setNewTemplateName={setNewTemplateName}
-              newTemplateCategory={newTemplateCategory}
-              setNewTemplateCategory={setNewTemplateCategory}
-              newTemplateTipo={newTemplateTipo}
-              setNewTemplateTipo={setNewTemplateTipo}
-              handleAddTemplate={handleAddTemplate}
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
-              showToast={showToast}
-            />
-          )}
-
-          {activeTab === "reglas" && (
-            <ReglasTab reglas={reglas} setReglas={setReglas} showToast={showToast} GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS} GLOBAL_PROYECTOS={GLOBAL_PROYECTOS} />
-          )}
-
           {activeTab === "auditoria" && (
             <AuditoriaTab
               auditoriaLogs={auditoriaLogs}
@@ -1023,11 +917,11 @@ export default function AdminPortal() {
             />
           )}
 
-          {activeTab === "facturacion" && (
-            <FacturacionTab
-              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+          {activeTab === "configuracion" && (
+            <ConfiguracionTab
+              verificadores={verificadores}
+              verificadorActualId={verificadorActualId}
+              onSetVerificadorActual={handleSetVerificadorActual}
               showToast={showToast}
             />
           )}

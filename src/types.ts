@@ -122,6 +122,18 @@ export interface ActividadVerificador {
   fecha: string;
 }
 
+// Catálogo reutilizable para configurar requisitos de proyecto — solo el
+// nombre/categoría/destino sugerido. Vigencia, alertas, obligatoriedad y
+// criticidad son atributos del requisito concreto (Proyecto → Requisitos),
+// nunca de la plantilla base.
+export interface PlantillaBase {
+  id: string;
+  nombre: string;
+  categoria: 'Laboral' | 'Tributario' | 'Prevención';
+  destino: 'empresa' | 'trabajador';
+  activo: boolean;
+}
+
 export interface Invitacion {
   id: string;
   contratistaId: string;

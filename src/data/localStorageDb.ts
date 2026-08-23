@@ -372,6 +372,47 @@ export function getActividadHoyPorVerificador(verificadorId: string): { aprobado
   };
 }
 
+// Todas las claves de localStorage que pertenecen a los datos de trabajo del
+// MVP (excluye 'acredita_session', que identifica al usuario logueado, no un
+// dato del negocio). Mantener sincronizada con cualquier clave 'acredita_*'
+// nueva que se agregue en este archivo.
+const ACREDITA_DATA_KEYS = [
+  'acredita_db_initialized',
+  'acredita_contratistas',
+  'acredita_proyectos',
+  'acredita_mandantes',
+  'acredita_plantillas',
+  'acredita_requisitos',
+  'acredita_reglas',
+  'acredita_verificadores',
+  'acredita_verificador_actual',
+  'acredita_claims_revision',
+  'acredita_actividad_verificadores',
+  'acredita_invitaciones',
+  'acredita_audit_logs',
+];
+
+// Herramienta de desarrollo: vuelve a cargar el estado inicial del MVP.
+// Borra únicamente las claves de datos de Acredita (nunca localStorage.clear(),
+// que arrastraría datos de otras apps del mismo dominio) y fuerza a initDb()
+// a re-sembrar todo desde cero, exactamente como en el primer arranque.
+// Mantiene la sesión activa: es un reinicio de los datos, no un logout.
+export function resetDemoData(): void {
+  if (typeof window === 'undefined') return;
+  ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
+  initDb();
+}
+
+// Herramienta de desarrollo: elimina también la sesión activa, dejando el
+// navegador sin ningún dato de Acredita — a diferencia de resetDemoData(),
+// no vuelve a sembrar nada automáticamente (initDb() lo hará en el próximo
+// arranque de la app).
+export function limpiarDatosLocales(): void {
+  if (typeof window === 'undefined') return;
+  ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
+  localStorage.removeItem('acredita_session');
+}
+
 export const DEMO_TODAY = new Date(2026, 7, 22); // 22 de Agosto, 2026
 
 export function parseVencimientoDate(vencimientoStr: string): Date | null {

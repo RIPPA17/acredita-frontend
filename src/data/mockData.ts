@@ -11,12 +11,12 @@ export const VERIFICADORES: Verificador[] = [
 ];
 
 export const PLANTILLA_DOCUMENTOS = [
-  { id: 'liquidacion', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador' },
-  { id: 'f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', frecuencia: 'Mensual', destino: 'empresa' },
-  { id: 'contrato', nombre: 'Contrato de Trabajo', categoria: 'Laboral', frecuencia: 'Indefinido', destino: 'trabajador' },
-  { id: 'mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', frecuencia: 'Mensual', destino: 'empresa' },
-  { id: 'antecedentes', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador' },
-  { id: 'odi', nombre: 'ODI 2026', categoria: 'Prevención', frecuencia: 'Por Proyecto', destino: 'trabajador' },
+  { id: 'liquidacion', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador', activo: true },
+  { id: 'f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', frecuencia: 'Mensual', destino: 'empresa', activo: true },
+  { id: 'contrato', nombre: 'Contrato de Trabajo', categoria: 'Laboral', frecuencia: 'Indefinido', destino: 'trabajador', activo: true },
+  { id: 'mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', frecuencia: 'Mensual', destino: 'empresa', activo: true },
+  { id: 'antecedentes', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador', activo: true },
+  { id: 'odi', nombre: 'ODI 2026', categoria: 'Prevención', frecuencia: 'Por Proyecto', destino: 'trabajador', activo: true },
 ];
 
 export const MANDANTES: Mandante[] = [
