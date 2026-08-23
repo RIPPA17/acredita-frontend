@@ -8,8 +8,21 @@ export const REGLAS_DEFAULT = [
   { id: 4, documento: "Certificado Antecedentes", diasVigencia: 180, alertaDias: 15, criticidad: "advertencia" }
 ];
 
+// Versión del esquema de datos guardados en localStorage. Subir este número
+// cuando se agregue una migración nueva en runMigrations() — initDb() se
+// encarga de aplicarla una sola vez, sin pedirle nada al usuario.
+const DB_SCHEMA_VERSION = 2;
+const SCHEMA_VERSION_KEY = 'acredita_schema_version';
+
 export function initDb() {
-  if (typeof window !== 'undefined' && !localStorage.getItem('acredita_db_initialized')) {
+  if (typeof window === 'undefined') return;
+  seedIfNeeded();
+  runMigrations();
+}
+
+function seedIfNeeded() {
+  if (localStorage.getItem('acredita_db_initialized')) return;
+  {
     // 1. Initialize project-specific requirements
     const defaultRequisitos: Requisito[] = [];
     PROYECTOS.forEach(proj => {
@@ -101,7 +114,123 @@ export function initDb() {
     localStorage.setItem('acredita_verificadores', JSON.stringify(VERIFICADORES));
     localStorage.setItem('acredita_verificador_actual', JSON.stringify('ver_maria'));
     localStorage.setItem('acredita_db_initialized', 'true');
+    // Los datos recién sembrados ya tienen la forma más reciente (documentos
+    // con proyectoId, etc.) — quedan al día, sin necesidad de migrar nada.
+    localStorage.setItem(SCHEMA_VERSION_KEY, String(DB_SCHEMA_VERSION));
   }
+}
+
+function normalizarNombreDocumento(nombre: string): string {
+  return (nombre || '').trim().toLowerCase();
+}
+
+// Un documento legacy a veces ya traía su id prefijado con OTRO proyecto
+// (ej. "costanera_d1") aunque le faltara el campo proyectoId. Si no se
+// limpia ese prefijo antes de migrar, el nuevo id terminaría duplicado
+// (ej. "hospital_costanera_d1"). Se prueba contra todos los proyectos del
+// contratista, no solo el destino, porque el prefijo puede ser de cualquiera.
+function idBaseDocumentoLegacy(docId: string, proyectoIds: string[]): string {
+  for (const pid of proyectoIds) {
+    if (docId.startsWith(`${pid}_`)) return docId.slice(pid.length + 1);
+  }
+  return docId;
+}
+
+// Migra documentos legacy sin proyectoId: cada uno se copia una vez por
+// proyecto del contratista, preservando estado/vencimiento/motivo/etc.
+// Idempotente: si para un (proyectoId, nombre normalizado) ya existe un
+// documento, no crea otro — así correrla varias veces no duplica nada.
+function migrarDocumentosLegacy(docs: Documento[], proyectoIds: string[]): { docs: Documento[]; changed: boolean } {
+  if (proyectoIds.length === 0) return { docs, changed: false };
+  const legacyDocs = docs.filter(d => !d.proyectoId);
+  if (legacyDocs.length === 0) return { docs, changed: false };
+
+  const conProyecto = docs.filter(d => !!d.proyectoId);
+  const existingKeys = new Set(conProyecto.map(d => `${d.proyectoId}::${normalizarNombreDocumento(d.nombre)}`));
+  const existingIds = new Set(docs.map(d => d.id));
+  const nuevos: Documento[] = [];
+
+  legacyDocs.forEach(legacyDoc => {
+    const baseId = idBaseDocumentoLegacy(legacyDoc.id, proyectoIds);
+    proyectoIds.forEach(pId => {
+      const key = `${pId}::${normalizarNombreDocumento(legacyDoc.nombre)}`;
+      if (existingKeys.has(key)) return; // ya existe un documento real para ese proyecto
+
+      let targetId = `${pId}_${baseId}`;
+      let suffix = 0;
+      while (existingIds.has(targetId)) {
+        suffix += 1;
+        targetId = `${pId}_${baseId}_${suffix}`;
+      }
+
+      nuevos.push({ ...legacyDoc, id: targetId, proyectoId: pId });
+      existingKeys.add(key);
+      existingIds.add(targetId);
+    });
+  });
+
+  // Los legacy sin proyectoId quedan reemplazados por sus copias por proyecto
+  // (o por el documento real que ya existía) — nunca se dejan huérfanos sin
+  // proyectoId, para que los filtros por proyecto los encuentren siempre.
+  return { docs: [...conProyecto, ...nuevos], changed: true };
+}
+
+// Migración a la versión 2 del esquema: navegadores que usaron una versión
+// anterior de la app pueden tener contratistas con documentos (de empresa o
+// de trabajadores) sin proyectoId. El código actual filtra siempre por
+// proyectoId, así que esos documentos se volvían invisibles y el Inicio
+// mostraba "Proyecto recién iniciado" aunque hubiera datos reales.
+// Transforma los datos existentes en vez de resembrarlos, para no perder
+// cambios ya hechos por el usuario (aprobaciones, rechazos, cargas, etc).
+function migrarProyectoIdLegacy(): void {
+  const raw = localStorage.getItem('acredita_contratistas');
+  if (!raw) return;
+
+  let contratistas: Contratista[];
+  try {
+    contratistas = JSON.parse(raw);
+  } catch (e) {
+    return;
+  }
+  if (!Array.isArray(contratistas)) return;
+
+  let anyChanged = false;
+  contratistas.forEach(c => {
+    const proyectoIds = c.proyectos || [];
+
+    const empresaResult = migrarDocumentosLegacy(c.documentos || [], proyectoIds);
+    if (empresaResult.changed) {
+      c.documentos = empresaResult.docs;
+      anyChanged = true;
+    }
+
+    (c.trabajadores || []).forEach(w => {
+      const workerResult = migrarDocumentosLegacy(w.documentos || [], proyectoIds);
+      if (workerResult.changed) {
+        w.documentos = workerResult.docs;
+        anyChanged = true;
+      }
+    });
+  });
+
+  if (anyChanged) {
+    localStorage.setItem('acredita_contratistas', JSON.stringify(contratistas));
+  }
+}
+
+// Aplica las migraciones pendientes según acredita_schema_version. Se llama
+// en cada initDb(), pero solo hace trabajo real cuando la versión guardada
+// quedó atrás — por eso es segura de ejecutar muchas veces (idempotente) y
+// no requiere que el usuario recargue dos veces ni borre su navegador.
+function runMigrations(): void {
+  const stored = parseInt(localStorage.getItem(SCHEMA_VERSION_KEY) || '0', 10);
+  if (stored >= DB_SCHEMA_VERSION) return;
+
+  if (stored < 2) {
+    migrarProyectoIdLegacy();
+  }
+
+  localStorage.setItem(SCHEMA_VERSION_KEY, String(DB_SCHEMA_VERSION));
 }
 
 export function getContratistas(): Contratista[] {
@@ -378,6 +507,7 @@ export function getActividadHoyPorVerificador(verificadorId: string): { aprobado
 // nueva que se agregue en este archivo.
 const ACREDITA_DATA_KEYS = [
   'acredita_db_initialized',
+  'acredita_schema_version',
   'acredita_contratistas',
   'acredita_proyectos',
   'acredita_mandantes',

@@ -4,7 +4,7 @@ import {
   calcularAccesoPago,
   getRequisitos,
   getMotivoBloqueoTrabajador,
-  obtenerDiasRestantes,
+  esTrabajadorAsignado,
 } from '../../data/localStorageDb';
 import { Contratista, Proyecto, Documento, Mandante, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel, badgeClass as acredBadgeClass } from '../admin/acreditacionUtils';
@@ -12,9 +12,11 @@ import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
   impactoLabel,
-  motivoRechazo,
+  motivoEmpresaItem,
+  accionEmpresaLabel,
   prioridadItem,
   encontrarProximoVencimiento,
+  getEstadoAccesoProyecto,
 } from './inicio/inicioUtils';
 
 // Mapea los colores centrales (green/amber/red/gray) a las clases de badge
@@ -102,19 +104,27 @@ export default function DashboardTab({
   const proyectoRow = rows.find(r => r.proyectoId === proyectoActual.id);
   const rowsByProyecto = new Map(rows.map(r => [r.proyectoId, r]));
 
+  // --- Trabajadores realmente asignados a este proyecto: mismo criterio
+  // central que usa buildAcreditacionRows (esTrabajadorAsignado), nunca
+  // trabajadoresData "a secas" — así la card principal, "Tus proyectos" y
+  // las demás secciones jamás pueden contarse historias distintas. ---
+  const trabajadoresAsignados = (contratistaLogueado.trabajadores || []).filter(w =>
+    esTrabajadorAsignado(w, proyectoActual.id, misProyectos)
+  );
+
   const accesoPago = calcularAccesoPago(contratistaLogueado, proyectoActual.id);
-  const trabajadoresBloqueados = trabajadoresData.filter(w => calcularEstadoTrabajador(w, proyectoActual.id) === 'rechazado').length;
+  const estadoAcceso = getEstadoAccesoProyecto(contratistaLogueado, proyectoActual.id, trabajadoresAsignados);
 
   const empresaObligatoriosOk = proyectoRow?.company.ok ?? 0;
   const empresaObligatoriosTotal = proyectoRow?.company.total ?? 0;
   const trabajadoresOk = proyectoRow?.workers.ok ?? approvedWorkers;
   const trabajadoresTotal = proyectoRow?.workers.total ?? totalWorkers;
 
-  const proyectoReicenIniciado = documentosData.length === 0 && trabajadoresData.length === 0;
+  const proyectoRecienIniciado = documentosData.length === 0 && trabajadoresAsignados.length === 0;
 
   const requisitosAll = getRequisitos();
   const empresaItems = buildRequisitosEmpresa(contratistaLogueado, proyectoActual.id, requisitosAll);
-  const workerItemsAll = trabajadoresData.flatMap(w => buildRequisitosTrabajador(w, proyectoActual.id, requisitosAll));
+  const workerItemsAll = trabajadoresAsignados.flatMap(w => buildRequisitosTrabajador(w, proyectoActual.id, requisitosAll));
   const proximoVenc = encontrarProximoVencimiento([...empresaItems, ...workerItemsAll]);
 
   // --- Bloqueos / pendientes: una fila por requisito de empresa incumplido +
@@ -125,26 +135,15 @@ export default function DashboardTab({
   empresaItems.forEach(item => {
     const prioridad = prioridadItem(item);
     if (prioridad >= 99) return;
-    const dias = item.doc ? obtenerDiasRestantes(item.doc.vencimiento) : undefined;
-    const motivo =
-      item.estado === 'Rechazado'
-        ? motivoRechazo(item.doc)
-        : item.estado === 'Vencido'
-        ? 'Documento vencido.'
-        : item.estado === 'Por vencer'
-        ? `Vence en ${dias} día${dias === 1 ? '' : 's'}.`
-        : item.doc
-        ? 'Documento enviado a revisión.'
-        : 'Documento no cargado.';
     bloqueoItems.push({
       tipo: 'Empresa',
       nombre: item.requisito.nombre,
       estadoLabel: item.estado,
       estadoBadge: BADGE[acredBadgeClass(item.estado)] || 'b-gray',
-      motivo,
+      motivo: motivoEmpresaItem(item),
       impacto: impactoLabel(item.requisito),
       prioridad,
-      accionLabel: item.estado === 'Rechazado' ? 'Corregir' : item.doc ? 'Ver documento' : 'Subir',
+      accionLabel: accionEmpresaLabel(item.estado, !!item.doc),
       onAccion: () => {
         setActiveTab('subir');
         if (item.doc) setSelectedDocumentForPanel(item.doc);
@@ -152,7 +151,7 @@ export default function DashboardTab({
     });
   });
 
-  trabajadoresData.forEach(w => {
+  trabajadoresAsignados.forEach(w => {
     const estado = calcularEstadoTrabajador(w, proyectoActual.id);
     if (estado === 'aprobado') return;
     const prioridad = estado === 'rechazado' ? 1 : estado === 'por_vencer' ? 3 : 4;
@@ -179,29 +178,32 @@ export default function DashboardTab({
   const primerBloqueoPago = bloqueoItems.find(i => i.prioridad === 0);
   const primerBloqueoAcceso = bloqueoItems.find(i => i.prioridad === 1);
   const hayAlertaHoy = !!primerBloqueoPago || !!primerBloqueoAcceso;
+  // Si lo único que bloquea es un documento "En revisión", el contratista ya
+  // hizo su parte — la alerta no puede pedirle que "corrija" algo que está
+  // esperando a Acredita.
   const mensajeAlertaHoy = primerBloqueoPago
-    ? `Tu pago está retenido por "${primerBloqueoPago.nombre}". Corrígelo para habilitarlo.`
+    ? primerBloqueoPago.estadoLabel === 'En revisión'
+      ? `Tu pago está retenido por "${primerBloqueoPago.nombre}", que ya está en revisión — Acredita lo evaluará pronto.`
+      : `Tu pago está retenido por "${primerBloqueoPago.nombre}". Corrígelo para habilitarlo.`
     : primerBloqueoAcceso
-    ? `Tu acceso a faena está bloqueado por "${primerBloqueoAcceso.nombre}". Corrígelo para poder ingresar.`
+    ? primerBloqueoAcceso.estadoLabel === 'En revisión'
+      ? `Tu acceso a faena está bloqueado por "${primerBloqueoAcceso.nombre}", que ya está en revisión — Acredita lo evaluará pronto.`
+      : `Tu acceso a faena está bloqueado por "${primerBloqueoAcceso.nombre}". Corrígelo para poder ingresar.`
     : '';
 
   // --- Empresa opcionales (nunca bloquean, solo informativos) ---
   const empresaOpcionales = empresaItems.filter(i => !i.requisito.obligatorio);
   const empresaOpcionalesOk = empresaOpcionales.filter(i => i.estado === 'Aprobado' || i.estado === 'Por vencer').length;
 
-  // --- Acceso / Pago: estado de despliegue compuesto a partir de las dos
-  // señales centrales (calcularAccesoPago para la empresa, calcularEstadoTrabajador
-  // por trabajador) — nunca una lógica de acreditación nueva ---
-  let accesoEstado: 'habilitado' | 'bloqueado' | 'parcial';
-  if (!accesoPago.accesoBloqueado && trabajadoresBloqueados === 0) accesoEstado = 'habilitado';
-  else if (accesoPago.accesoBloqueado && (trabajadoresTotal === 0 || trabajadoresBloqueados === trabajadoresTotal)) accesoEstado = 'bloqueado';
-  else accesoEstado = 'parcial';
-
-  const accesoLabel = accesoEstado === 'habilitado' ? 'Acceso habilitado' : accesoEstado === 'bloqueado' ? 'Acceso bloqueado' : 'Acceso parcialmente bloqueado';
-  const accesoBadge = accesoEstado === 'habilitado' ? 'b-green' : accesoEstado === 'bloqueado' ? 'b-red' : 'b-yellow';
+  // --- Acceso / Pago: el acceso se compone con getEstadoAccesoProyecto()
+  // (mismo helper para la card principal y para "Tus proyectos", nunca
+  // pueden contradecirse); el pago sigue dependiendo solo de la criticidad
+  // de empresa vía calcularAccesoPago() — nunca de trabajadores pendientes. ---
+  const accesoLabel = estadoAcceso.label;
+  const accesoBadge = estadoAcceso.estado === 'habilitado' ? 'b-green' : estadoAcceso.estado === 'bloqueado' ? 'b-red' : 'b-yellow';
   const accesoDetalle = [
     accesoPago.motivoAcceso && !accesoPago.motivoAcceso.startsWith('Trabajador') ? accesoPago.motivoAcceso : undefined,
-    trabajadoresBloqueados > 0 ? `${trabajadoresBloqueados} trabajador${trabajadoresBloqueados === 1 ? '' : 'es'} no puede${trabajadoresBloqueados === 1 ? '' : 'n'} ingresar por documentos rechazados o vencidos.` : undefined,
+    estadoAcceso.detalle,
   ].filter(Boolean).join(' ');
 
   const pagoLabel = accesoPago.pagoBloqueado ? 'Pago retenido' : 'Pago habilitado';
@@ -213,7 +215,8 @@ export default function DashboardTab({
   const statusIconColor = estadoUI === 'Acreditado' ? 'text-green-600' : estadoUI === 'Bloqueado' ? 'text-red-600' : 'text-yellow-600';
 
   const empresaProgressPct = empresaObligatoriosTotal > 0 ? Math.round((empresaObligatoriosOk / empresaObligatoriosTotal) * 100) : 100;
-  const workersProgressPct = trabajadoresTotal > 0 ? Math.round((trabajadoresOk / trabajadoresTotal) * 100) : 100;
+  // 0 trabajadores no es "100% acreditado": es que no se ha agregado a nadie.
+  const workersProgressPct = trabajadoresTotal > 0 ? Math.round((trabajadoresOk / trabajadoresTotal) * 100) : 0;
 
   return (
     <div className="fade-in flex flex-col gap-6">
@@ -257,7 +260,7 @@ export default function DashboardTab({
         </div>
       )}
 
-      {proyectoReicenIniciado ? (
+      {proyectoRecienIniciado ? (
         <div className="card bg-cream border border-cream3 p-8 flex flex-col items-center text-center">
           <FileText size={34} className="text-brown mb-3" />
           <p className="font-semibold text-navy text-[16px]">Proyecto recién iniciado</p>
@@ -294,9 +297,19 @@ export default function DashboardTab({
                 <div>
                   <div className="flex justify-between items-center text-[13.2px] font-semibold text-navy mb-1.5">
                     <span>Trabajadores acreditados</span>
-                    <span className="text-gray-500 font-medium">{trabajadoresOk} / {trabajadoresTotal}</span>
+                    <span className="text-gray-500 font-medium">
+                      {trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal}` : 'Sin trabajadores agregados'}
+                    </span>
                   </div>
                   <div className="prog-wrap"><div className="prog-fill" style={{ width: `${workersProgressPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
+                  {trabajadoresTotal === 0 && (
+                    <button
+                      className="btn btn-secondary btn-sm mt-2 py-1 text-[11.5px]"
+                      onClick={() => setActiveTab('trabajadores')}
+                    >
+                      Agregar trabajadores
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -426,10 +439,10 @@ export default function DashboardTab({
               </button>
             </div>
             {(() => {
-              const pendientes = trabajadoresData
+              const pendientes = trabajadoresAsignados
                 .map(w => ({ w, estado: calcularEstadoTrabajador(w, proyectoActual.id) }))
                 .filter(x => x.estado !== 'aprobado');
-              if (trabajadoresData.length === 0) {
+              if (trabajadoresAsignados.length === 0) {
                 return <p className="text-sm text-gray-500 py-4 text-center">Este proyecto todavía no tiene trabajadores asignados.</p>;
               }
               if (pendientes.length === 0) {
@@ -484,7 +497,11 @@ export default function DashboardTab({
               const mandante = allMandantes.find(m => m.id === p.mandanteId);
               const estadoP = r ? estadoUILabel(r.estado) : 'En proceso';
               const badgeP = r ? BADGE[acredBadgeClass(r.estado)] : 'b-yellow';
-              const accesoPagoP = calcularAccesoPago(contratistaLogueado, p.id);
+              // Mismo helper que la card principal: así "Tus proyectos" nunca
+              // puede mostrar un acceso distinto al de la card de arriba.
+              const trabajadoresP = (contratistaLogueado.trabajadores || []).filter(w => esTrabajadorAsignado(w, p.id, misProyectos));
+              const estadoAccesoP = getEstadoAccesoProyecto(contratistaLogueado, p.id, trabajadoresP);
+              const pagoP = calcularAccesoPago(contratistaLogueado, p.id);
               return (
                 <div
                   key={p.id}
@@ -497,7 +514,7 @@ export default function DashboardTab({
                   </div>
                   <p className="text-[13.2px] text-gray-500 mb-2">Proyecto {p.nombre}</p>
                   <p className="text-[12.5px] text-gray-600">Empresa {r?.company.ok ?? 0}/{r?.company.total ?? 0} · Trabajadores {r?.workers.ok ?? 0}/{r?.workers.total ?? 0}</p>
-                  <p className="text-[12.5px] text-gray-600 mt-1">{accesoPagoP.accesoBloqueado ? 'Acceso bloqueado' : 'Acceso habilitado'} · {accesoPagoP.pagoBloqueado ? 'Pago retenido' : 'Pago habilitado'}</p>
+                  <p className="text-[12.5px] text-gray-600 mt-1">{estadoAccesoP.label} · {pagoP.pagoBloqueado ? 'Pago retenido' : 'Pago habilitado'}</p>
                 </div>
               );
             })}
@@ -522,7 +539,7 @@ export default function DashboardTab({
                   </thead>
                   <tbody>
                     {empresaItems.map(item => {
-                      const accion = item.estado === 'Rechazado' ? 'Corregir' : item.doc ? 'Ver documento' : 'Subir';
+                      const accion = accionEmpresaLabel(item.estado, !!item.doc);
                       return (
                         <tr key={item.requisito.id} className="border-b border-cream3 last:border-0">
                           <td className="py-2.5 pr-3 font-medium text-navy">{item.requisito.nombre}{!item.requisito.obligatorio && <span className="text-gray-400 font-normal"> (opcional)</span>}</td>
@@ -552,7 +569,7 @@ export default function DashboardTab({
               ...documentosData
                 .filter(d => d.estado === 'aprobado' || d.estado === 'rechazado')
                 .map(d => ({ nombre: `Empresa: ${d.nombre}`, estado: d.estado, fecha: d.fechaRevisado || d.subido })),
-              ...trabajadoresData.flatMap(w =>
+              ...trabajadoresAsignados.flatMap(w =>
                 (w.documentos || [])
                   .filter(d => d.proyectoId === proyectoActual.id && (d.estado === 'aprobado' || d.estado === 'rechazado'))
                   .map(d => ({ nombre: `${w.nombre}: ${d.nombre}`, estado: d.estado, fecha: d.fechaRevisado || d.subido }))
