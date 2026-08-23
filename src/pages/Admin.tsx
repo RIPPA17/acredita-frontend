@@ -40,8 +40,8 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu, ChevronLeft
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
-import { Contratista, Proyecto } from "../types";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
+import { Contratista, Proyecto, Requisito } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
 import { buildColaDocs, buildCorrectionDocs } from './admin/colaUtils';
@@ -49,6 +49,8 @@ import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS, GLOBAL_PLANTIL
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
 import MandantesTab from './admin/MandantesTab';
 import ContratistasTab from './admin/ContratistasTab';
+import ProyectosTab from './admin/ProyectosTab';
+import ProyectoDetailDrawer from './admin/ProyectoDetailDrawer';
 import AcreditacionesTab from './admin/AcreditacionesTab';
 import PlantillasTab from './admin/PlantillasTab';
 import ReglasTab from './admin/ReglasTab';
@@ -254,8 +256,15 @@ export default function AdminPortal() {
   // cambiar de pestaña, para no perder cambios guardados por otros flujos
   // (p. ej. Cola de revisión) que escriben en localStorage por su cuenta.
   const [contratistas, setContratistas] = useState<Contratista[]>(() => getContratistas());
+  // Mismo patrón para proyectos (creación de "Nuevo proyecto" desde
+  // Proyectos) y requisitos (alta/edición/activación desde el drawer de
+  // Proyecto), para que ambos aparezcan al instante sin recargar.
+  const [proyectos, setProyectos] = useState<Proyecto[]>(() => getProyectos());
+  const [requisitos, setRequisitos] = useState<Requisito[]>(() => getRequisitos());
   useEffect(() => {
     setContratistas(getContratistas());
+    setProyectos(getProyectos());
+    setRequisitos(getRequisitos());
   }, [activeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aprobadosHoy, setAprobadosHoy] = useState(2);
@@ -280,6 +289,11 @@ export default function AdminPortal() {
   useEffect(() => {
     if (!clienteSeleccionado) setProyectoContextoContratista(null);
   }, [clienteSeleccionado]);
+  const [proyectoSeleccionado, setProyectoSeleccionado] = useState<any>(null);
+  const [tabProyecto, setTabProyecto] = useState("resumen");
+  useEffect(() => {
+    if (!proyectoSeleccionado) setTabProyecto("resumen");
+  }, [proyectoSeleccionado]);
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
@@ -406,6 +420,42 @@ export default function AdminPortal() {
     }
   };
 
+  const [showNuevoProyectoModal, setShowNuevoProyectoModal] = useState(false);
+  const [formNuevoProyecto, setFormNuevoProyecto] = useState({ nombre: "", mandanteId: "" });
+
+  const resetFormNuevoProyecto = () => {
+    setShowNuevoProyectoModal(false);
+    setFormNuevoProyecto({ nombre: "", mandanteId: "" });
+  };
+
+  const handleCrearProyecto = (e: React.FormEvent) => {
+    e.preventDefault();
+    const { nombre, mandanteId } = formNuevoProyecto;
+    if (!nombre.trim() || !mandanteId) return;
+
+    const nuevoProyecto: Proyecto = {
+      id: `p_${Date.now()}`,
+      nombre: nombre.trim(),
+      mandanteId,
+      estado: 'Activo',
+      contratistas: [],
+    };
+    const listaProyectos = getProyectos();
+    listaProyectos.push(nuevoProyecto);
+    saveProyectos(listaProyectos);
+    setProyectos([...listaProyectos]);
+
+    const listaMandantes = getMandantes();
+    const mandante = listaMandantes.find(m => m.id === mandanteId);
+    if (mandante && !mandante.proyectos.includes(nuevoProyecto.id)) {
+      mandante.proyectos.push(nuevoProyecto.id);
+      saveMandantes(listaMandantes);
+    }
+
+    resetFormNuevoProyecto();
+    showToast("Proyecto creado correctamente");
+  };
+
   const handleSelectDoc = (doc: any) => {
     setSelectedDoc(doc);
   };
@@ -422,6 +472,7 @@ export default function AdminPortal() {
     { id: "acreditaciones", label: "Acreditaciones", icon: ShieldCheck, section: "Operación" },
     { id: "mandantes", label: "Mandantes", icon: Building2, section: "Directorios" },
     { id: "contratistas", label: "Contratistas", icon: Users },
+    { id: "proyectos", label: "Proyectos", icon: FolderOpen },
     { id: "plantillas", label: "Plantillas", icon: FileCode2, section: "Configuración" },
     { id: "reglas", label: "Reglas de vigencia", icon: SlidersHorizontal },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
@@ -434,11 +485,12 @@ export default function AdminPortal() {
     { nombre: "María Pérez", estado: "Offline", revisados: 0 },
   ];
 
-  const PROYECTOS_BUSQUEDA = GLOBAL_PROYECTOS.map(p => {
+  const PROYECTOS_BUSQUEDA = proyectos.map(p => {
     const mandante = GLOBAL_MANDANTES.find(m => m.id === p.mandanteId);
     return {
       nombre: p.nombre,
-      mandante: mandante ? mandante.nombre : "Mandante"
+      mandante: mandante ? mandante.nombre : "Mandante no disponible",
+      proyecto: p,
     };
   });
 
@@ -552,6 +604,12 @@ export default function AdminPortal() {
                       {resultadosPorTipo.proyecto.map((r, i) => (
                         <div
                           key={i}
+                          onClick={() => {
+                            setActiveTab('proyectos');
+                            setProyectoSeleccionado((r.data as any).proyecto);
+                            setBusquedaAbierta(false);
+                            setBusquedaGlobal("");
+                          }}
                           className="flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-cream cursor-pointer"
                         >
                           <span className="text-[13px] text-navy">{r.label}</span>
@@ -812,7 +870,7 @@ export default function AdminPortal() {
           {activeTab === "dashboard" && (
             <DashboardTab
               GLOBAL_CONTRATISTAS={contratistas}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_PROYECTOS={proyectos}
               setActiveTab={setActiveTab}
               aprobadosHoy={aprobadosHoy}
               rechazadosHoy={rechazadosHoy}
@@ -839,7 +897,7 @@ export default function AdminPortal() {
             <MandantesTab
               setShowInvitarModal={setShowInvitarModal}
               GLOBAL_CONTRATISTAS={contratistas}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_PROYECTOS={proyectos}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               onVerFicha={(contratista, proyectoId) =>
                 setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId })
@@ -850,7 +908,7 @@ export default function AdminPortal() {
           {activeTab === "contratistas" && (
             <ContratistasTab
               GLOBAL_CONTRATISTAS={contratistas}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_PROYECTOS={proyectos}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               onVerContratista={(contratista, proyectoId) => {
                 setClienteSeleccionado(contratista);
@@ -859,6 +917,19 @@ export default function AdminPortal() {
               setShowInvitarContratistaModal={setShowInvitarContratistaModal}
             />
           )}
+
+          {activeTab === "proyectos" && (
+            <ProyectosTab
+              GLOBAL_CONTRATISTAS={contratistas}
+              GLOBAL_PROYECTOS={proyectos}
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+              requisitos={requisitos}
+              onVerProyecto={(proyecto) => setProyectoSeleccionado(proyecto)}
+              setShowNuevoProyectoModal={setShowNuevoProyectoModal}
+              selectedProyectoId={proyectoSeleccionado?.id || null}
+            />
+          )}
+
           {activeTab === "plantillas" && (
             <PlantillasTab
               PLANTILLAS={PLANTILLAS}
@@ -896,7 +967,7 @@ export default function AdminPortal() {
           {activeTab === "acreditaciones" && (
             <AcreditacionesTab
               GLOBAL_CONTRATISTAS={contratistas}
-              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_PROYECTOS={proyectos}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
               onIrARevision={(docKey) => {
@@ -1219,7 +1290,7 @@ export default function AdminPortal() {
                       required
                     >
                       <option value="">Selecciona un proyecto...</option>
-                      {GLOBAL_PROYECTOS.map(p => {
+                      {proyectos.map(p => {
                         const mandante = GLOBAL_MANDANTES.find(m => m.id === p.mandanteId);
                         return (
                           <option key={p.id} value={p.id}>
@@ -1249,6 +1320,75 @@ export default function AdminPortal() {
         </div>
       )}
 
+      {showNuevoProyectoModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b border-cream">
+              <h3 className="font-medium text-navy text-[17.6px]">
+                Nuevo proyecto
+              </h3>
+              <button
+                onClick={resetFormNuevoProyecto}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <form onSubmit={handleCrearProyecto} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                    Nombre del proyecto
+                  </label>
+                  <input
+                    type="text"
+                    value={formNuevoProyecto.nombre}
+                    onChange={(e) =>
+                      setFormNuevoProyecto({ ...formNuevoProyecto, nombre: e.target.value })
+                    }
+                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                    placeholder="Costanera Norte"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                    Mandante
+                  </label>
+                  <select
+                    value={formNuevoProyecto.mandanteId}
+                    onChange={(e) =>
+                      setFormNuevoProyecto({ ...formNuevoProyecto, mandanteId: e.target.value })
+                    }
+                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                    required
+                  >
+                    <option value="">Selecciona un mandante...</option>
+                    {GLOBAL_MANDANTES.map(m => (
+                      <option key={m.id} value={m.id}>{m.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-cream">
+                  <button
+                    type="button"
+                    onClick={resetFormNuevoProyecto}
+                    className="btn btn-ghost font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Crear proyecto
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drawer Cliente Seleccionado */}
       {clienteSeleccionado && (
         <ClienteDetailDrawer
@@ -1257,7 +1397,7 @@ export default function AdminPortal() {
           tabCliente={tabCliente}
           setTabCliente={setTabCliente}
           GLOBAL_CONTRATISTAS={contratistas}
-          GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+          GLOBAL_PROYECTOS={proyectos}
           GLOBAL_MANDANTES={GLOBAL_MANDANTES}
           proyectoContexto={proyectoContextoContratista}
           onVerAcreditacion={(contratista, proyectoId, trabajador) => {
@@ -1267,6 +1407,24 @@ export default function AdminPortal() {
             setSelectedDocKey(docKey);
             setActiveTab('cola');
             setClienteSeleccionado(null);
+          }}
+        />
+      )}
+
+      {/* Drawer Proyecto Seleccionado */}
+      {proyectoSeleccionado && (
+        <ProyectoDetailDrawer
+          proyectoSeleccionado={proyectoSeleccionado}
+          setProyectoSeleccionado={setProyectoSeleccionado}
+          tabProyecto={tabProyecto}
+          setTabProyecto={setTabProyecto}
+          GLOBAL_CONTRATISTAS={contratistas}
+          GLOBAL_PROYECTOS={proyectos}
+          GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+          requisitos={requisitos}
+          setRequisitos={setRequisitos}
+          onVerAcreditacion={(contratista, proyectoId) => {
+            setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId });
           }}
         />
       )}
