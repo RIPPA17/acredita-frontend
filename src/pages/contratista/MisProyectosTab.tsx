@@ -1,27 +1,13 @@
 import { useState } from 'react';
-import {
-  Search, Building2, Lock, Wallet, AlertCircle, AlertTriangle, CheckCircle,
-  X, FileText, Eye,
-} from 'lucide-react';
-import {
-  calcularAccesoPago,
-  calcularEstadoTrabajador,
-  esTrabajadorAsignado,
-  getRequisitos,
-  getMotivoBloqueoTrabajador,
-} from '../../data/localStorageDb';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador } from '../../types';
+import { Search, Building2, Lock, Wallet, AlertCircle, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
+import { calcularAccesoPago, esTrabajadorAsignado, getRequisitos } from '../../data/localStorageDb';
+import { Contratista, Proyecto, Mandante, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel, badgeClass as acredBadgeClass, EstadoUI } from '../admin/acreditacionUtils';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
-  impactoLabel,
-  motivoEmpresaItem,
-  accionEmpresaLabel,
-  prioridadItem,
   encontrarProximoVencimiento,
   getEstadoAccesoProyecto,
-  RequisitoConDoc,
 } from './inicio/inicioUtils';
 
 // Mismo mapeo de colores centrales usado en el resto del portal Contratista.
@@ -41,62 +27,26 @@ const STATE_ICON: Record<EstadoUI, typeof CheckCircle> = {
   'En proceso': AlertTriangle,
   Bloqueado: AlertCircle,
 };
-
-interface BloqueoResumen {
-  tipo: 'Empresa' | 'Trabajador';
-  nombre: string;
-  estadoLabel: string;
-  prioridad: number;
-}
-
-function buildBloqueosResumen(
-  proyectoId: string,
-  empresaItems: RequisitoConDoc[],
-  trabajadoresAsignados: Trabajador[]
-): BloqueoResumen[] {
-  const items: BloqueoResumen[] = [];
-  empresaItems.forEach(item => {
-    const prioridad = prioridadItem(item);
-    if (prioridad >= 99) return;
-    items.push({ tipo: 'Empresa', nombre: item.requisito.nombre, estadoLabel: item.estado, prioridad });
-  });
-  trabajadoresAsignados.forEach(w => {
-    const estado = calcularEstadoTrabajador(w, proyectoId);
-    if (estado === 'aprobado') return;
-    const prioridad = estado === 'rechazado' ? 1 : estado === 'por_vencer' ? 3 : 4;
-    const estadoLabel = estado === 'rechazado' ? 'Bloqueado' : estado === 'por_vencer' ? 'Por vencer' : 'Pendiente';
-    items.push({ tipo: 'Trabajador', nombre: w.nombre, estadoLabel, prioridad });
-  });
-  return items.sort((a, b) => a.prioridad - b.prioridad);
-}
+// Orden recomendado: lo que requiere atención primero.
+const PRIORIDAD_ESTADO: Record<EstadoUI, number> = { Bloqueado: 0, 'En proceso': 1, Acreditado: 2 };
 
 export default function MisProyectosTab({
   contratistaLogueado,
   misProyectos,
   allMandantes,
-  setActiveTab,
+  selectedProyectoId,
   setSelectedProyectoId,
-  setSelectedDocumentForPanel,
-  setSelectedWorkerForDocs,
-  setFichaTipo,
-  setFichaTrabajador,
-  setShowFichaAcreditacion,
+  setActiveTab,
 }: {
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
   allMandantes: Mandante[];
-  setActiveTab: (v: string) => void;
+  selectedProyectoId: string;
   setSelectedProyectoId: (id: string) => void;
-  setSelectedDocumentForPanel: (d: Documento | null) => void;
-  setSelectedWorkerForDocs: (v: any | null) => void;
-  setFichaTipo: (v: 'empresa' | 'trabajador') => void;
-  setFichaTrabajador: (v: any) => void;
-  setShowFichaAcreditacion: (v: boolean) => void;
+  setActiveTab: (v: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'Todos' | EstadoUI>('Todos');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'resumen' | 'empresa' | 'trabajadores'>('resumen');
 
   if (misProyectos.length === 0) {
     return (
@@ -104,19 +54,19 @@ export default function MisProyectosTab({
         <div className="page-header">
           <div>
             <h2 className="page-title">Mis proyectos</h2>
-            <p className="page-sub">Revisa tu acreditación en cada obra o faena asignada.</p>
+            <p className="page-sub">Revisa tu acreditación, acceso, pago y trabajadores en cada obra o faena.</p>
           </div>
         </div>
         <div className="card py-14 flex flex-col items-center justify-center text-center">
           <FileText size={38} className="text-gray-300 mb-3" />
           <p className="font-semibold text-navy text-[15.4px]">Todavía no tienes proyectos asociados.</p>
-          <p className="text-sm text-gray-500 mt-1 max-w-md">Cuando un mandante te invite o te asigne a un proyecto, aquí verás su acreditación y requisitos.</p>
+          <p className="text-sm text-gray-500 mt-1 max-w-md">Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
         </div>
       </div>
     );
   }
 
-  // --- Única fuente de verdad de acreditación, igual que en Inicio ---
+  // --- Única fuente de verdad de acreditación: la misma que usa Inicio ---
   const rows = buildAcreditacionRows([contratistaLogueado], misProyectos, allMandantes);
   const rowsByProyecto = new Map(rows.map(r => [r.proyectoId, r]));
   const requisitosAll = getRequisitos();
@@ -127,46 +77,50 @@ export default function MisProyectosTab({
     const estadoUI: EstadoUI = row ? estadoUILabel(row.estado) : 'En proceso';
     const badge = row ? BADGE[acredBadgeClass(row.estado)] : 'b-yellow';
 
-    const trabajadoresAsignados = (contratistaLogueado.trabajadores || []).filter(w =>
+    const trabajadoresProyecto = (contratistaLogueado.trabajadores || []).filter(w =>
       esTrabajadorAsignado(w, p.id, misProyectos)
     );
     const accesoPago = calcularAccesoPago(contratistaLogueado, p.id);
-    const estadoAcceso = getEstadoAccesoProyecto(contratistaLogueado, p.id, trabajadoresAsignados);
+    const estadoAcceso = getEstadoAccesoProyecto(contratistaLogueado, p.id, trabajadoresProyecto);
+
+    // Próximo vencimiento: mismos helpers que Inicio, nunca una ventana fija propia.
     const empresaItems = buildRequisitosEmpresa(contratistaLogueado, p.id, requisitosAll);
-    const workerItemsAll = trabajadoresAsignados.flatMap(w => buildRequisitosTrabajador(w, p.id, requisitosAll));
-    const proximoVenc = encontrarProximoVencimiento([...empresaItems, ...workerItemsAll]);
-    const bloqueos = buildBloqueosResumen(p.id, empresaItems, trabajadoresAsignados);
+    const workerItems = trabajadoresProyecto.flatMap((w: Trabajador) => buildRequisitosTrabajador(w, p.id, requisitosAll));
+    const proximoVenc = encontrarProximoVencimiento([...empresaItems, ...workerItems]);
+
+    // Problema principal: se arma solo con los blockers que ya calculó
+    // buildAcreditacionRows (row.blockers) — ningún cálculo de acreditación
+    // paralelo, solo se compone el texto.
+    const companyBlockers = row?.blockers.filter(b => b.tipo === 'Empresa') ?? [];
+    const workerBlockers = row?.blockers.filter(b => b.tipo === 'Trabajador') ?? [];
+    const problemaParts: string[] = companyBlockers.map(b => `${b.nombre} ${b.estado.toLowerCase()}`);
+    if (workerBlockers.length > 0) {
+      problemaParts.push(`${workerBlockers.length} trabajador${workerBlockers.length === 1 ? '' : 'es'} requiere${workerBlockers.length === 1 ? '' : 'n'} atención`);
+    }
+    const problemaPrincipal = problemaParts.length > 0 ? problemaParts.join(' · ') : 'Sin acciones pendientes';
 
     const empresaOk = row?.company.ok ?? 0;
     const empresaTotal = row?.company.total ?? 0;
     const trabajadoresOk = row?.workers.ok ?? 0;
-    const trabajadoresTotal = row?.workers.total ?? trabajadoresAsignados.length;
-    const empresaPct = empresaTotal > 0 ? Math.round((empresaOk / empresaTotal) * 100) : 100;
+    const trabajadoresTotal = row?.workers.total ?? trabajadoresProyecto.length;
+    const empresaPct = empresaTotal > 0 ? Math.round((empresaOk / empresaTotal) * 100) : 0;
     const trabajadoresPct = trabajadoresTotal > 0 ? Math.round((trabajadoresOk / trabajadoresTotal) * 100) : 0;
-
-    const alertText = bloqueos.length === 0
-      ? 'No tienes bloqueos ni acciones pendientes en este proyecto.'
-      : bloqueos.slice(0, 2).map(b => `${b.tipo === 'Empresa' ? b.nombre : b.nombre} (${b.estadoLabel})`).join(' · ') +
-        (bloqueos.length > 2 ? ` y ${bloqueos.length - 2} más` : '');
 
     return {
       proyecto: p,
       mandante,
       estadoUI,
       badge,
-      trabajadoresAsignados,
       accesoPago,
       estadoAcceso,
-      empresaItems,
       proximoVenc,
-      bloqueos,
+      problemaPrincipal,
       empresaOk,
       empresaTotal,
       trabajadoresOk,
       trabajadoresTotal,
       empresaPct,
       trabajadoresPct,
-      alertText,
     };
   });
 
@@ -174,50 +128,33 @@ export default function MisProyectosTab({
   const totalEnProceso = proyectosInfo.filter(i => i.estadoUI === 'En proceso').length;
   const totalBloqueados = proyectosInfo.filter(i => i.estadoUI === 'Bloqueado').length;
 
+  // Orden: Bloqueado primero, luego En proceso, luego Acreditado; después por nombre.
+  const proyectosOrdenados = [...proyectosInfo].sort((a, b) => {
+    const diff = PRIORIDAD_ESTADO[a.estadoUI] - PRIORIDAD_ESTADO[b.estadoUI];
+    return diff !== 0 ? diff : a.proyecto.nombre.localeCompare(b.proyecto.nombre);
+  });
+
   const q = search.toLowerCase().trim();
-  const proyectosFiltrados = proyectosInfo.filter(i => {
+  const proyectosFiltrados = proyectosOrdenados.filter(i => {
     const okFilter = filter === 'Todos' || i.estadoUI === filter;
     const okSearch = !q || i.proyecto.nombre.toLowerCase().includes(q) || (i.mandante?.nombre || '').toLowerCase().includes(q);
     return okFilter && okSearch;
   });
 
-  const expandido = proyectosInfo.find(i => i.proyecto.id === expandedId);
+  const hayFiltrosActivos = search.trim() !== '' || filter !== 'Todos';
+  const limpiarFiltros = () => { setSearch(''); setFilter('Todos'); };
 
-  const toggleDetail = (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-    } else {
-      setExpandedId(id);
-      setDetailTab('resumen');
-    }
-  };
-
-  const irADocumentos = (proyectoId: string, doc?: Documento) => {
-    setSelectedProyectoId(proyectoId);
-    setActiveTab('subir');
-    if (doc) setSelectedDocumentForPanel(doc);
-  };
-
-  const irATrabajadores = (proyectoId: string, worker?: Trabajador) => {
-    setSelectedProyectoId(proyectoId);
-    setActiveTab('trabajadores');
-    if (worker) setSelectedWorkerForDocs(worker);
-  };
-
-  const verFicha = (proyectoId: string) => {
-    setSelectedProyectoId(proyectoId);
-    setFichaTipo('empresa');
-    setFichaTrabajador(null);
-    setShowFichaAcreditacion(true);
-  };
+  const irAInicio = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('dashboard'); };
+  const irADocumentos = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('subir'); };
+  const irATrabajadores = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('trabajadores'); };
 
   return (
     <div className="fade-in flex flex-col gap-5">
       <div className="page-header">
         <div>
           <h2 className="page-title">Mis proyectos</h2>
-          <p className="page-sub">Acreditación, acceso y pago de cada obra o faena donde prestas servicios.</p>
-          <p className="text-[12.5px] text-gray-500 mt-1">{contratistaLogueado.nombre} · RUT {contratistaLogueado.rut} · {misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} activo{misProyectos.length === 1 ? '' : 's'}</p>
+          <p className="page-sub">Revisa tu acreditación, acceso, pago y trabajadores en cada obra o faena.</p>
+          <p className="text-[12.5px] text-gray-500 mt-1">{contratistaLogueado.nombre} · RUT {contratistaLogueado.rut}</p>
         </div>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -227,11 +164,12 @@ export default function MisProyectosTab({
             onChange={e => setSearch(e.target.value)}
             className="form-input pl-9 w-64"
             placeholder="Buscar proyecto o mandante..."
+            aria-label="Buscar proyecto o mandante"
           />
         </div>
       </div>
 
-      {/* Resumen general: siempre 4 en una sola línea, sin envolver */}
+      {/* KPIs: siempre 4 en una sola línea, sin envolver */}
       <div className="grid grid-cols-4 gap-[10px] mb-4">
         <div className="card p-4">
           <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Proyectos activos</p>
@@ -256,7 +194,7 @@ export default function MisProyectosTab({
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap" role="group" aria-label="Filtrar proyectos por estado">
         {([
           ['Todos', misProyectos.length],
           ['Acreditado', totalAcreditados],
@@ -265,6 +203,8 @@ export default function MisProyectosTab({
         ] as Array<[typeof filter, number]>).map(([f, count]) => (
           <button
             key={f}
+            type="button"
+            aria-pressed={filter === f}
             className={`chip ${filter === f ? 'active' : ''}`}
             onClick={() => setFilter(f)}
           >
@@ -275,30 +215,38 @@ export default function MisProyectosTab({
 
       {/* Grid de proyectos */}
       {proyectosFiltrados.length === 0 ? (
-        <div className="card py-10 flex flex-col items-center justify-center text-center text-gray-500">
-          <Search size={28} className="text-gray-300 mb-2" />
-          <p>No hay proyectos que coincidan con la búsqueda o filtro.</p>
+        <div className="card py-10 flex flex-col items-center justify-center text-center text-gray-500 gap-3">
+          <Search size={28} className="text-gray-300" />
+          <p>No encontramos proyectos con esos filtros.</p>
+          {hayFiltrosActivos && (
+            <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>Limpiar filtros</button>
+          )}
         </div>
       ) : (
-        <div className="card-grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {proyectosFiltrados.map(info => {
-            const { proyecto: p, mandante, estadoUI, badge, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, alertText } = info;
+            const { proyecto: p, mandante, estadoUI, badge, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
             const StatusIcon = STATE_ICON[estadoUI];
             const accesoBadge = estadoAcceso.estado === 'habilitado' ? 'b-green' : estadoAcceso.estado === 'bloqueado' ? 'b-red' : 'b-yellow';
             const pagoBadge = accesoPago.pagoBloqueado ? 'b-red' : 'b-green';
+            const esSeleccionado = p.id === selectedProyectoId;
 
             return (
-              <div key={p.id} className={`card !p-0 overflow-hidden flex flex-col border-t-4 ${STATE_BORDER[estadoUI]} hover:shadow-md transition-shadow`}>
+              <div
+                key={p.id}
+                className={`card !p-0 overflow-hidden flex flex-col border-t-4 ${STATE_BORDER[estadoUI]} hover:shadow-md transition-shadow ${esSeleccionado ? 'ring-2 ring-brown' : ''}`}
+              >
                 <div className="p-4 border-b border-cream">
                   <div className="flex justify-between items-start gap-2 mb-1">
                     <div>
                       <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
-                        <Building2 size={13} /> {mandante?.nombre || 'Mandante'}
+                        <Building2 size={13} /> {mandante?.nombre || 'Mandante no disponible'}
                       </div>
                       <h3 className="text-[16.5px] font-bold text-navy mt-0.5">{p.nombre}</h3>
                     </div>
                     <span className={`badge ${badge} shrink-0`}>{estadoUI}</span>
                   </div>
+                  {esSeleccionado && <p className="text-[10.5px] text-brown font-semibold mt-1">Proyecto seleccionado</p>}
                 </div>
 
                 <div className="p-4 flex-1 flex flex-col gap-3">
@@ -318,195 +266,45 @@ export default function MisProyectosTab({
                   <div>
                     <div className="flex justify-between text-[12px] font-semibold text-navy mb-1">
                       <span>Empresa</span>
-                      <span className="text-gray-500 font-medium">{empresaOk} / {empresaTotal} obligatorios</span>
+                      <span className="text-gray-500 font-medium">{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal} obligatorios` : 'Sin requisitos obligatorios'}</span>
                     </div>
                     <div className="prog-wrap"><div className="prog-fill" style={{ width: `${empresaPct}%` }}></div></div>
                   </div>
                   <div>
                     <div className="flex justify-between text-[12px] font-semibold text-navy mb-1">
                       <span>Trabajadores</span>
-                      <span className="text-gray-500 font-medium">{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores'}</span>
+                      <span className="text-gray-500 font-medium">{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores agregados'}</span>
                     </div>
                     <div className="prog-wrap"><div className="prog-fill" style={{ width: `${trabajadoresPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
                   </div>
 
                   <div className={`alert ${STATE_ALERT_CLASS[estadoUI]} !mb-0 text-[11.5px] items-start`}>
                     <StatusIcon size={15} className="shrink-0 mt-0.5" />
-                    <span>{alertText}</span>
+                    <span>{problemaPrincipal}</span>
                   </div>
 
                   <div className="text-[11.5px] text-gray-500">
                     {proximoVenc
                       ? <>Próximo vencimiento: <strong className="text-navy">{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
-                      : 'Sin vencimientos próximos dentro del período de alerta.'}
+                      : 'Sin vencimientos próximos'}
                   </div>
                 </div>
 
-                <div className="p-3 pt-0 mt-auto flex gap-2">
+                <div className="p-4 pt-0 mt-auto flex flex-col gap-2">
                   <button
-                    className={`btn ${estadoUI === 'Bloqueado' ? 'btn-reject' : 'btn-primary'} btn-sm flex-1`}
-                    onClick={() => toggleDetail(p.id)}
+                    className={`btn ${estadoUI === 'Bloqueado' ? 'btn-reject' : 'btn-primary'} btn-sm w-full`}
+                    onClick={() => irAInicio(p.id)}
                   >
-                    {estadoUI === 'Bloqueado' ? 'Resolver bloqueos' : 'Ver proyecto'}
+                    Ver proyecto
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => irADocumentos(p.id)}>Documentos</button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className="btn btn-secondary btn-sm" onClick={() => irADocumentos(p.id)}>Documentos</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => irATrabajadores(p.id)}>Trabajadores</button>
+                  </div>
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Detalle expandido */}
-      {expandido && (
-        <div className="card fade-in">
-          <div className="flex justify-between items-start gap-4 flex-wrap border-b border-cream3 pb-4 mb-4">
-            <div>
-              <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Detalle del proyecto</p>
-              <h2 className="text-[20px] font-bold text-navy">{expandido.proyecto.nombre}</h2>
-              <p className="text-[12.5px] text-gray-500 mt-0.5">Mandante: {expandido.mandante?.nombre || '—'}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`badge ${expandido.badge}`}>{expandido.estadoUI}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setExpandedId(null)}>
-                <X size={14} className="mr-1" /> Cerrar
-              </button>
-            </div>
-          </div>
-
-          <div className="tab-bar mb-4">
-            {(['resumen', 'empresa', 'trabajadores'] as const).map(t => (
-              <button key={t} className={`tab ${detailTab === t ? 'active' : ''}`} onClick={() => setDetailTab(t)}>
-                {t === 'resumen' ? 'Resumen' : t === 'empresa' ? 'Empresa' : 'Trabajadores'}
-              </button>
-            ))}
-          </div>
-
-          <div className="card-grid mb-4">
-            <div className="card p-3.5">
-              <p className="text-[10.5px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Acreditación</p>
-              <p className="text-[15px] font-bold text-navy">{expandido.estadoUI}</p>
-            </div>
-            <div className="card p-3.5">
-              <p className="text-[10.5px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Acceso</p>
-              <p className="text-[15px] font-bold text-navy">{expandido.estadoAcceso.label}</p>
-            </div>
-            <div className="card p-3.5">
-              <p className="text-[10.5px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Pago</p>
-              <p className="text-[15px] font-bold text-navy">{expandido.accesoPago.pagoBloqueado ? 'Pago retenido' : 'Pago habilitado'}</p>
-            </div>
-            <div className="card p-3.5">
-              <p className="text-[10.5px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Próximo vencimiento</p>
-              <p className="text-[15px] font-bold text-navy">{expandido.proximoVenc ? `${expandido.proximoVenc.dias} día${expandido.proximoVenc.dias === 1 ? '' : 's'}` : 'Sin alertas'}</p>
-            </div>
-          </div>
-
-          {detailTab === 'resumen' && (
-            <div className="grid md:grid-cols-2 gap-5">
-              <div>
-                <h3 className="section-title">Qué requiere atención</h3>
-                <div className={`alert ${STATE_ALERT_CLASS[expandido.estadoUI]} items-start`}>
-                  {(() => { const Icon = STATE_ICON[expandido.estadoUI]; return <Icon size={16} className="shrink-0 mt-0.5" />; })()}
-                  <span>{expandido.alertText}</span>
-                </div>
-                <div className="flex gap-2 flex-wrap mt-3">
-                  <button className="btn btn-primary btn-sm" onClick={() => irADocumentos(expandido.proyecto.id)}>Ir a documentos</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => irATrabajadores(expandido.proyecto.id)}>Ver trabajadores</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => verFicha(expandido.proyecto.id)}>Ver ficha de acreditación</button>
-                </div>
-              </div>
-              <div>
-                <h3 className="section-title">Avance</h3>
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1">
-                      <span>Empresa</span><span className="text-gray-500 font-medium">{expandido.empresaOk} / {expandido.empresaTotal}</span>
-                    </div>
-                    <div className="prog-wrap"><div className="prog-fill" style={{ width: `${expandido.empresaPct}%` }}></div></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1">
-                      <span>Trabajadores</span><span className="text-gray-500 font-medium">{expandido.trabajadoresOk} / {expandido.trabajadoresTotal}</span>
-                    </div>
-                    <div className="prog-wrap"><div className="prog-fill" style={{ width: `${expandido.trabajadoresPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {detailTab === 'empresa' && (
-            <div className="overflow-x-auto">
-              {expandido.empresaItems.length === 0 ? (
-                <p className="text-sm text-gray-500 py-4 text-center">Este proyecto no tiene requisitos de empresa configurados.</p>
-              ) : (
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr>
-                      <th>Requisito</th>
-                      <th>Estado</th>
-                      <th>Vencimiento</th>
-                      <th>Impacto</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expandido.empresaItems.map(item => (
-                      <tr key={item.requisito.id}>
-                        <td className="font-medium text-navy">{item.requisito.nombre}{!item.requisito.obligatorio && <span className="text-gray-400 font-normal"> (opcional)</span>}</td>
-                        <td><span className={`badge ${BADGE[acredBadgeClass(item.estado)] || 'b-gray'} text-[10.5px]`}>{item.estado}</span></td>
-                        <td className="text-gray-500">{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}</td>
-                        <td className="text-gray-500">{impactoLabel(item.requisito)}</td>
-                        <td>
-                          <button className="btn btn-secondary btn-sm" onClick={() => irADocumentos(expandido.proyecto.id, item.doc)}>
-                            {accionEmpresaLabel(item.estado, !!item.doc)}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-
-          {detailTab === 'trabajadores' && (
-            <div className="overflow-x-auto">
-              {expandido.trabajadoresAsignados.length === 0 ? (
-                <p className="text-sm text-gray-500 py-4 text-center">Este proyecto todavía no tiene trabajadores asignados.</p>
-              ) : (
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr>
-                      <th>Trabajador</th>
-                      <th>Estado</th>
-                      <th>Detalle</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expandido.trabajadoresAsignados.map(w => {
-                      const estado = calcularEstadoTrabajador(w, expandido.proyecto.id);
-                      const label = estado === 'aprobado' ? 'Aprobado' : estado === 'rechazado' ? 'Bloqueado' : estado === 'por_vencer' ? 'Por vencer' : 'Pendiente';
-                      const badgeW = estado === 'aprobado' ? 'b-green' : estado === 'rechazado' ? 'b-red' : estado === 'por_vencer' ? 'b-yellow' : 'b-gray';
-                      return (
-                        <tr key={w.rut}>
-                          <td className="font-medium text-navy">{w.nombre}</td>
-                          <td><span className={`badge ${badgeW} text-[10.5px]`}>{label}</span></td>
-                          <td className="text-gray-500">{estado === 'aprobado' ? 'Sin observaciones' : getMotivoBloqueoTrabajador(w, expandido.proyecto.id)}</td>
-                          <td>
-                            <button className="btn btn-secondary btn-sm" onClick={() => irATrabajadores(expandido.proyecto.id, w)}>
-                              <Eye size={13} className="mr-1" /> Ver trabajador
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -642,13 +642,9 @@ export default function ContratistaPortal() {
               contratistaLogueado={contratistaLogueado}
               misProyectos={misProyectos}
               allMandantes={allMandantes}
-              setActiveTab={setActiveTab}
+              selectedProyectoId={selectedProyectoId}
               setSelectedProyectoId={setSelectedProyectoId}
-              setSelectedDocumentForPanel={setSelectedDocumentForPanel}
-              setSelectedWorkerForDocs={setSelectedWorkerForDocs}
-              setFichaTipo={setFichaTipo}
-              setFichaTrabajador={setFichaTrabajador}
-              setShowFichaAcreditacion={setShowFichaAcreditacion}
+              setActiveTab={setActiveTab}
             />
           )}
 
