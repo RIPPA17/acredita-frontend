@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -248,6 +248,15 @@ export default function AdminPortal() {
   });
 
   const [activeTab, setActiveTab] = useState("dashboard");
+  // Fuente reactiva de contratistas: se actualiza explícitamente al
+  // invitar/reasignar (para que la tabla cambie al instante, sin depender
+  // de que algún otro estado fuerce un re-render) y se resincroniza al
+  // cambiar de pestaña, para no perder cambios guardados por otros flujos
+  // (p. ej. Cola de revisión) que escriben en localStorage por su cuenta.
+  const [contratistas, setContratistas] = useState<Contratista[]>(() => getContratistas());
+  useEffect(() => {
+    setContratistas(getContratistas());
+  }, [activeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aprobadosHoy, setAprobadosHoy] = useState(2);
   const [rechazadosHoy, setRechazadosHoy] = useState(1);
@@ -263,6 +272,14 @@ export default function AdminPortal() {
   const [showNotif, setShowNotif] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   const [tabCliente, setTabCliente] = useState("resumen");
+  // Proyecto desde el que se abrió el drawer de Contratistas (si el usuario
+  // tenía un filtro de proyecto activo), independiente de _fichaProyectoId
+  // que usa FichaAcreditacion. Se limpia solo al cerrar el drawer, nunca
+  // queda pegado al contratista siguiente.
+  const [proyectoContextoContratista, setProyectoContextoContratista] = useState<string | null>(null);
+  useEffect(() => {
+    if (!clienteSeleccionado) setProyectoContextoContratista(null);
+  }, [clienteSeleccionado]);
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
@@ -370,6 +387,7 @@ export default function AdminPortal() {
       }
       existente.proyectos.push(proyectoId);
       saveContratistas(list);
+      setContratistas([...list]);
       setResultadoInvitarContratista('agregado');
     } else {
       const nuevo: Contratista = {
@@ -383,6 +401,7 @@ export default function AdminPortal() {
       };
       list.push(nuevo);
       saveContratistas(list);
+      setContratistas([...list]);
       setResultadoInvitarContratista('nuevo');
     }
   };
@@ -792,7 +811,7 @@ export default function AdminPortal() {
           {/* DASHBOARD TAB */}
           {activeTab === "dashboard" && (
             <DashboardTab
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_CONTRATISTAS={contratistas}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               setActiveTab={setActiveTab}
               aprobadosHoy={aprobadosHoy}
@@ -819,7 +838,7 @@ export default function AdminPortal() {
           {activeTab === "mandantes" && (
             <MandantesTab
               setShowInvitarModal={setShowInvitarModal}
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_CONTRATISTAS={contratistas}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               onVerFicha={(contratista, proyectoId) =>
@@ -830,10 +849,13 @@ export default function AdminPortal() {
 
           {activeTab === "contratistas" && (
             <ContratistasTab
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_CONTRATISTAS={contratistas}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
-              onVerContratista={(contratista) => setClienteSeleccionado(contratista)}
+              onVerContratista={(contratista, proyectoId) => {
+                setClienteSeleccionado(contratista);
+                setProyectoContextoContratista(proyectoId || null);
+              }}
               setShowInvitarContratistaModal={setShowInvitarContratistaModal}
             />
           )}
@@ -873,7 +895,7 @@ export default function AdminPortal() {
 
           {activeTab === "acreditaciones" && (
             <AcreditacionesTab
-              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_CONTRATISTAS={contratistas}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
               GLOBAL_MANDANTES={GLOBAL_MANDANTES}
               setSelectedAcreditacionContratista={setSelectedAcreditacionContratista}
@@ -1234,9 +1256,10 @@ export default function AdminPortal() {
           setClienteSeleccionado={setClienteSeleccionado}
           tabCliente={tabCliente}
           setTabCliente={setTabCliente}
-          GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+          GLOBAL_CONTRATISTAS={contratistas}
           GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
           GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+          proyectoContexto={proyectoContextoContratista}
           onVerAcreditacion={(contratista, proyectoId, trabajador) => {
             setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId, _fichaTrabajador: trabajador });
           }}

@@ -76,19 +76,31 @@ function ResumenTab({
 function AcreditacionesTab({
   contratista,
   rows,
+  proyectoContexto,
   onVerAcreditacion,
 }: {
   contratista: Contratista;
   rows: AcredRow[];
+  proyectoContexto?: string | null;
   onVerAcreditacion: (contratista: Contratista, proyectoId: string, trabajador?: Trabajador) => void;
 }) {
   if (contratista.proyectos.length === 0) {
     return <p className="text-[13px] text-gray-400 text-center py-10">Este contratista todavía no tiene proyectos asignados.</p>;
   }
+  // Si el drawer se abrió desde un proyecto filtrado, esa acreditación se
+  // muestra primero y destacada — sin que eso cambie qué proyecto abre
+  // "Ver acreditación" en cada tarjeta (cada una sigue usando su propio
+  // r.proyectoId, nunca el contexto).
+  const ordenadas = proyectoContexto
+    ? [...rows].sort((a, b) => (a.proyectoId === proyectoContexto ? -1 : 0) - (b.proyectoId === proyectoContexto ? -1 : 0))
+    : rows;
   return (
     <div className="flex flex-col gap-3">
-      {rows.map(r => (
-        <div key={r.key} className="card p-4 flex flex-col gap-2">
+      {ordenadas.map(r => (
+        <div
+          key={r.key}
+          className={`card p-4 flex flex-col gap-2 ${r.proyectoId === proyectoContexto ? 'ring-2 ring-brown/40' : ''}`}
+        >
           <div className="flex justify-between items-start gap-3">
             <div className="min-w-0">
               <div className="text-[11px] text-gray-400 uppercase tracking-wide truncate">{r.mandanteNombre}</div>
@@ -203,6 +215,7 @@ export default function ClienteDetailDrawer({
   GLOBAL_CONTRATISTAS,
   GLOBAL_PROYECTOS,
   GLOBAL_MANDANTES,
+  proyectoContexto,
   onVerAcreditacion,
   onIrARevision,
 }: {
@@ -213,6 +226,7 @@ export default function ClienteDetailDrawer({
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
   GLOBAL_MANDANTES: Mandante[];
+  proyectoContexto?: string | null;
   onVerAcreditacion: (contratista: Contratista, proyectoId: string, trabajador?: Trabajador) => void;
   onIrARevision: (docKey: string) => void;
 }) {
@@ -294,7 +308,7 @@ export default function ClienteDetailDrawer({
             <ResumenTab contratista={contratista} rows={rows} acreditadas={acreditadas} enProceso={enProceso} bloqueadas={bloqueadas} />
           )}
           {tabCliente === 'acreditaciones' && (
-            <AcreditacionesTab contratista={contratista} rows={rows} onVerAcreditacion={onVerAcreditacion} />
+            <AcreditacionesTab contratista={contratista} rows={rows} proyectoContexto={proyectoContexto} onVerAcreditacion={onVerAcreditacion} />
           )}
           {tabCliente === 'trabajadores' && (
             <TrabajadoresTab contratista={contratista} rows={rows} onVerAcreditacion={onVerAcreditacion} />

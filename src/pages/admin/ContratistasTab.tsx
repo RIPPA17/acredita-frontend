@@ -73,7 +73,7 @@ export default function ContratistasTab({
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
   GLOBAL_MANDANTES: Mandante[];
-  onVerContratista: (contratista: Contratista) => void;
+  onVerContratista: (contratista: Contratista, proyectoId?: string) => void;
   setShowInvitarContratistaModal: (v: boolean) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
@@ -261,7 +261,7 @@ export default function ContratistasTab({
                   return (
                     <tr
                       key={c.id}
-                      onClick={() => onVerContratista(c)}
+                      onClick={() => onVerContratista(c, proyectoFiltro || undefined)}
                       className="hover:bg-[#fbfaf6] cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-3">
@@ -325,7 +325,7 @@ export default function ContratistasTab({
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <button
                           title="Ver ficha"
-                          onClick={() => onVerContratista(c)}
+                          onClick={() => onVerContratista(c, proyectoFiltro || undefined)}
                           className="w-8 h-8 rounded-lg bg-gold-soft border border-gold-soft text-gold flex items-center justify-center cursor-pointer hover:bg-gold hover:text-white transition-all shrink-0 ml-auto"
                         >
                           <Eye size={14} />
