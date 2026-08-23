@@ -1520,7 +1520,7 @@ export function sembrarDocumentosEjemplo(): number {
       marcarRevision(doc, obj.motivo);
       yaSembrados.add(`${cObj.id}_${w!.rut}_${doc.id}`);
     } else {
-      const doc = cObj.documentos.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
+      const doc = cObj.documentos?.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
       if (!doc) return;
       marcarRevision(doc, obj.motivo);
       yaSembrados.add(`${cObj.id}_${doc.id}`);
