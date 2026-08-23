@@ -18,10 +18,10 @@ import {
   impactoLabel,
 } from './inicio/inicioUtils';
 
-// Clases y colores calcados del prototipo HTML aprobado (mp-*), no de los
-// tokens de Acredita. Solo la CLAVE (qué estado corresponde a cada
-// proyecto/documento/trabajador) sale de la lógica central; el color/label
-// es presentación.
+// Misma maqueta del prototipo HTML aprobado (mp-*), pero con los colores
+// reales de Acredita (ver .mp-page en index.css). Solo la CLAVE (qué
+// estado corresponde a cada proyecto/documento/trabajador) sale de la
+// lógica central; el color/label es presentación.
 const STATE_KEY: Record<EstadoUI, string> = {
   Bloqueado: 'bloqueado',
   'En proceso': 'proceso',
@@ -42,25 +42,28 @@ const ALERT_PREFIX: Record<EstadoUI, string> = {
   'En proceso': 'Prioridad:',
   Acreditado: 'Todo al día:',
 };
+// Acentos por estado (bordes/barras): mismos tonos que usa el borde
+// superior de la card (state-acreditado/proceso/bloqueado en index.css).
 const BAR_COLOR_EMPRESA: Record<EstadoUI, string> = {
-  Bloqueado: '#b22e2e',
-  'En proceso': '#c4924c',
-  Acreditado: '#1f7a43',
+  Bloqueado: '#c73b3b',
+  'En proceso': 'var(--brown)',
+  Acreditado: '#2a8040',
 };
 const BAR_COLOR_TRABAJADORES: Record<EstadoUI, string> = {
-  Bloqueado: '#b22e2e',
-  'En proceso': '#1f7a43',
-  Acreditado: '#1f7a43',
+  Bloqueado: '#c73b3b',
+  'En proceso': '#2a8040',
+  Acreditado: '#2a8040',
 };
 const ACCESO_LABEL_CORTO: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
   habilitado: 'Habilitado',
   parcial: 'Parcial',
   bloqueado: 'Bloqueado',
 };
+// Mismos tonos de texto que usan los badges (.mp-badge-green/yellow/red).
 const ACCESO_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
-  habilitado: '#1f7a43',
-  parcial: '#a87400',
-  bloqueado: '#b22e2e',
+  habilitado: '#1a6030',
+  parcial: '#7a5800',
+  bloqueado: '#9a2020',
 };
 const DOC_ESTADO_BADGE: Record<DocEstado, string> = {
   Aprobado: 'mp-badge-green',
@@ -185,7 +188,7 @@ function DetalleProyecto({
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Pago</div>
-                <div className="mp-mini-value" style={{ color: accesoPago.pagoBloqueado ? '#b22e2e' : '#1f7a43' }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
+                <div className="mp-mini-value" style={{ color: accesoPago.pagoBloqueado ? '#9a2020' : '#1a6030' }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Próximo vencimiento</div>
@@ -225,7 +228,7 @@ function DetalleProyecto({
           return (
             <div className="mp-detail-table-wrap" style={{ marginTop: 14 }}>
               {empresaItems.length === 0 ? (
-                <p style={{ color: '#7a8190', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto no tiene requisitos de empresa configurados.</p>
+                <p style={{ color: '#7a7a6a', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto no tiene requisitos de empresa configurados.</p>
               ) : (
                 <table className="mp-detail-table">
                   <thead>
@@ -234,9 +237,9 @@ function DetalleProyecto({
                   <tbody>
                     {empresaItems.map(item => (
                       <tr key={item.requisito.id}>
-                        <td>{item.requisito.nombre}{!item.requisito.obligatorio && <span style={{ color: '#8a92a1' }}> (opcional)</span>}</td>
+                        <td>{item.requisito.nombre}{!item.requisito.obligatorio && <span style={{ color: '#7a7a6a' }}> (opcional)</span>}</td>
                         <td><span className={`mp-badge ${DOC_ESTADO_BADGE[item.estado]}`}>{item.estado}</span></td>
-                        <td>{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}<div style={{ fontSize: 10.5, color: '#8a92a1' }}>{impactoLabel(item.requisito)}</div></td>
+                        <td>{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}<div style={{ fontSize: 10.5, color: '#7a7a6a' }}>{impactoLabel(item.requisito)}</div></td>
                         <td>
                           <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>
                             {accionEmpresaLabel(item.estado, !!item.doc)}
@@ -254,7 +257,7 @@ function DetalleProyecto({
         {detalleTab === 'trabajadores' && (
           <div className="mp-detail-table-wrap" style={{ marginTop: 14 }}>
             {trabajadoresAsignados.length === 0 ? (
-              <p style={{ color: '#7a8190', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto todavía no tiene trabajadores asignados.</p>
+              <p style={{ color: '#7a7a6a', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto todavía no tiene trabajadores asignados.</p>
             ) : (
               <table className="mp-detail-table">
                 <thead>
@@ -270,7 +273,7 @@ function DetalleProyecto({
                         <td>{w.nombre}</td>
                         <td>
                           <span className={`mp-badge ${TRABAJADOR_BADGE_CLASS[estado]}`}>{TRABAJADOR_LABEL[estado]}</span>
-                          {estado !== 'aprobado' && <div style={{ fontSize: 10.5, color: '#8a92a1', marginTop: 3 }}>{getMotivoBloqueoTrabajador(w, p.id)}</div>}
+                          {estado !== 'aprobado' && <div style={{ fontSize: 10.5, color: '#7a7a6a', marginTop: 3 }}>{getMotivoBloqueoTrabajador(w, p.id)}</div>}
                         </td>
                         <td>{ok} / {workerItems.length}</td>
                         <td>
@@ -435,7 +438,7 @@ export default function MisProyectosTab({
         <Hero />
         <div className="mp-floating">
           <div className="mp-empty">
-            <p style={{ fontWeight: 700, color: '#172033', marginBottom: 4 }}>Todavía no tienes proyectos asociados.</p>
+            <p style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>Todavía no tienes proyectos asociados.</p>
             <p>Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
           </div>
         </div>
@@ -519,7 +522,7 @@ export default function MisProyectosTab({
           <div className="mp-grid mp-grid-3">
             {proyectosFiltrados.map(info => {
               const { proyecto: p, mandante, estadoUI, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
-              const pagoColor = accesoPago.pagoBloqueado ? '#b22e2e' : '#1f7a43';
+              const pagoColor = accesoPago.pagoBloqueado ? '#9a2020' : '#1a6030';
 
               return (
                 <article key={p.id} className={`mp-project-card state-${STATE_KEY[estadoUI]}`}>
