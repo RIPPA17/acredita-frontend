@@ -68,7 +68,7 @@ interface MandanteView {
   acreditadas: number;
   enProceso: number;
   bloqueadas: number;
-  estado: EstadoUI | 'Sin proyectos';
+  estado: EstadoConNeutro;
 }
 
 export default function MandantesTab({
@@ -130,11 +130,16 @@ export default function MandantesTab({
       const acreditadas = todas.filter(a => a.estadoUILabel === 'Acreditado').length;
       const contratistasUnicos = new Set(todas.map(a => a.contratista.id)).size;
 
+      // El mandante hereda "Sin proyectos" solo cuando de verdad no tiene
+      // proyectos creados; si tiene proyectos pero ninguno tiene
+      // contratistas asignados (0 acreditaciones), es un caso distinto:
+      // "Sin contratistas". No confundir ambas ausencias.
       const estado: MandanteView['estado'] =
-        bloqueadas > 0 ? 'Bloqueado'
-          : enProceso > 0 ? 'En proceso'
-            : todas.length > 0 ? 'Acreditado'
-              : 'Sin proyectos';
+        proyectos.length === 0 ? 'Sin proyectos'
+          : todas.length === 0 ? 'Sin contratistas'
+            : bloqueadas > 0 ? 'Bloqueado'
+              : enProceso > 0 ? 'En proceso'
+                : 'Acreditado';
 
       return { mandante: m, key: m.id, proyectos, contratistasUnicos, acreditadas, enProceso, bloqueadas, estado };
     });
