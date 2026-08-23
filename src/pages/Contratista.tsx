@@ -462,8 +462,10 @@ export default function ContratistaPortal() {
             )}
           </div>
           <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
-            <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">SN</div>
-            <span className="text-[14.3px] text-cream hidden md:block">Servicios Norte Ltda.</span>
+            <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
+              {contratistaLogueado.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <span className="text-[14.3px] text-cream hidden md:block">{contratistaLogueado.nombre}</span>
           </div>
         </div>
       </div>
@@ -618,6 +620,7 @@ export default function ContratistaPortal() {
               setFichaTipo={setFichaTipo}
               setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
+              setSelectedWorkerForDocs={setSelectedWorkerForDocs}
             />
           )}
 
