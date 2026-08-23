@@ -182,7 +182,10 @@ export default function ColaRevisionTab({
 
   const cargarDocumentosEjemplo = () => {
     const sembrados = sembrarDocumentosEjemplo();
-    if (sembrados === 0) return;
+    if (sembrados === 0) {
+      showToast("No hay más documentos de ejemplo disponibles para cargar", "warning");
+      return;
+    }
     refreshAndAdvance();
     showToast(`${sembrados} documento${sembrados === 1 ? "" : "s"} de ejemplo cargados`);
   };
@@ -280,7 +283,18 @@ export default function ColaRevisionTab({
               <div className="text-[13px] font-extrabold text-navy">{TAB_META[tab].label}</div>
               <div className="text-[9.5px] text-gray-400 mt-0.5">{TAB_META[tab].sub}</div>
             </div>
-            <span className={`badge border font-semibold whitespace-nowrap ${BADGE.gray}`}>{filtered.length}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {tab === "pending" && (
+                <button
+                  onClick={cargarDocumentosEjemplo}
+                  title="Agregar documentos de ejemplo a la cola"
+                  className="text-[9.5px] font-bold text-brown hover:underline cursor-pointer border-none bg-transparent whitespace-nowrap"
+                >
+                  + Agregar ejemplos
+                </button>
+              )}
+              <span className={`badge border font-semibold whitespace-nowrap ${BADGE.gray}`}>{filtered.length}</span>
+            </div>
           </div>
           <div className="max-h-[640px] overflow-y-auto">
             {filtered.length > 0 ? filtered.map(d => (

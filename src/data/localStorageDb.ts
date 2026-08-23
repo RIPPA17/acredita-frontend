@@ -1497,37 +1497,61 @@ export function sembrarDocumentosEjemplo(): number {
   let sembrados = 0;
 
   // 1. Preferred picks: one of each document family, by name, for a curated
-  //    mix — works out of the box on a fresh/default dataset.
-  const objetivos: Array<{ contratistaId: string; nombreDoc: string; motivo: string }> = [
+  //    mix — works out of the box on a fresh/default dataset. Includes both
+  //    company-level documents and worker-level ones, so the queue shows
+  //    every DocumentPreview variant (liquidación, certificado, tributario,
+  //    contrato) with both an "Empresa" and a "Trabajador" origen.
+  const objetivos: Array<{ contratistaId: string; trabajadorNombre?: string; nombreDoc: string; motivo: string }> = [
     { contratistaId: 'tecnicosur', nombreDoc: 'Liquidación de sueldo (mes vigente)', motivo: 'Verificar descuentos legales y base imponible.' },
     { contratistaId: 'lagos-cia', nombreDoc: 'Registro Mutual ACHS', motivo: 'Confirmar vigencia de la póliza mutual.' },
     { contratistaId: 'electrica-sur', nombreDoc: 'F30 SII (mes vigente)', motivo: 'Validar el período tributario declarado.' },
     { contratistaId: 'constructora-velez', nombreDoc: 'Contrato de Trabajo', motivo: 'Revisar cláusulas de jornada y remuneración.' },
+    { contratistaId: 'tecnicosur', trabajadorNombre: 'Juan Pérez González', nombreDoc: 'Certificado de Antecedentes', motivo: 'Confirmar vigencia del certificado del trabajador.' },
+    { contratistaId: 'servicios-norte', trabajadorNombre: 'Jorge Morales', nombreDoc: 'Contrato de Trabajo', motivo: 'Revisar cláusulas de jornada y remuneración del trabajador.' },
   ];
+  const metaSembrados = objetivos.length;
   objetivos.forEach(obj => {
     const cObj = list.find(c => c.id === obj.contratistaId);
-    const doc = cObj?.documentos.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
-    if (!doc) return;
-    marcarRevision(doc, obj.motivo);
-    yaSembrados.add(`${cObj!.id}_${doc.id}`);
+    if (!cObj) return;
+    if (obj.trabajadorNombre) {
+      const w = cObj.trabajadores?.find(t => t.nombre === obj.trabajadorNombre);
+      const doc = w?.documentos?.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
+      if (!doc) return;
+      marcarRevision(doc, obj.motivo);
+      yaSembrados.add(`${cObj.id}_${w!.rut}_${doc.id}`);
+    } else {
+      const doc = cObj.documentos.find(d => d.nombre === obj.nombreDoc && d.estado !== 'revision');
+      if (!doc) return;
+      marcarRevision(doc, obj.motivo);
+      yaSembrados.add(`${cObj.id}_${doc.id}`);
+    }
     sembrados++;
   });
 
   // 2. Fallback: after months of manual testing, a live session's data can
   //    drift far enough from the seed (documents renamed, contratistas
   //    edited/removed) that none of the named picks above still exist. Rather
-  //    than silently seeding nothing, grab up to 4 more documents from
-  //    anywhere in the current dataset, still not already in revision.
-  if (sembrados < 4) {
-    for (const c of list) {
+  //    than silently seeding nothing, grab more documents from anywhere in
+  //    the current dataset (company or worker level), still not already in
+  //    revision, up to the same target count as the curated picks above.
+  if (sembrados < metaSembrados) {
+    outer: for (const c of list) {
       for (const doc of c.documentos || []) {
-        if (sembrados >= 4) break;
+        if (sembrados >= metaSembrados) break outer;
         if (doc.estado === 'revision' || yaSembrados.has(`${c.id}_${doc.id}`)) continue;
         marcarRevision(doc, 'Revisar documento cargado por el contratista.');
         yaSembrados.add(`${c.id}_${doc.id}`);
         sembrados++;
       }
-      if (sembrados >= 4) break;
+      for (const w of c.trabajadores || []) {
+        for (const doc of w.documentos || []) {
+          if (sembrados >= metaSembrados) break outer;
+          if (doc.estado === 'revision' || yaSembrados.has(`${c.id}_${w.rut}_${doc.id}`)) continue;
+          marcarRevision(doc, `Revisar documento cargado para el trabajador ${w.nombre}.`);
+          yaSembrados.add(`${c.id}_${w.rut}_${doc.id}`);
+          sembrados++;
+        }
+      }
     }
   }
 
