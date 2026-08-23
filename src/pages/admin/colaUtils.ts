@@ -1,4 +1,4 @@
-import { calcularPrioridadDocumento, getRequisitos, vigenciaRequeridaLabel, estadoVencimiento } from "../../data/localStorageDb";
+import { calcularPrioridadDocumento, getRequisitos, vigenciaRequeridaLabel, estadoVencimiento, parseVencimientoDate } from "../../data/localStorageDb";
 import { Contratista, Proyecto, Documento } from "../../types";
 
 // Texto de "qué se está verificando" para cada documento — no siempre coincide
@@ -27,13 +27,25 @@ function buildQueueItem(
   qId: number,
   worker?: { nombre: string; rut: string; cargo?: string }
 ) {
-  const pId = d.proyectoId || c.proyectos[0] || 'costanera';
-  const project = proyectos.find(p => p.id === pId);
+  // Nunca inventar un proyecto: usar el proyectoId real del documento, y solo
+  // recurrir al único proyecto del contratista si de verdad no hay ambigüedad
+  // posible (contratista con un solo proyecto asignado). Si el contratista
+  // tiene varios proyectos y el documento no trae proyectoId, no se adivina —
+  // se muestra "Proyecto no asignado" más abajo en vez de un proyecto/mandante
+  // arbitrario e incorrecto.
+  const pId = d.proyectoId || (c.proyectos.length === 1 ? c.proyectos[0] : undefined);
+  const project = pId ? proyectos.find(p => p.id === pId) : undefined;
   const prioVal = calcularPrioridadDocumento(d);
-  const requisitoMatch = getRequisitos().find(r =>
+  const destino = origen === 'Trabajador' ? 'trabajador' : 'empresa';
+  // El requisito real configurado para el proyecto es la fuente principal de
+  // "Requisito" y de la frecuencia de vigencia; requisitoDescripcion() solo
+  // entra como fallback visual cuando no hay coincidencia.
+  const requisitoMatch = pId ? getRequisitos().find(r =>
     r.proyectoId === pId &&
+    r.destino === destino &&
     (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-  );
+  ) : undefined;
+  const parsedSubido = d.subido ? parseVencimientoDate(d.subido) : null;
 
   return {
     id: qId,
@@ -51,10 +63,10 @@ function buildQueueItem(
     trabajadorCargo: worker?.cargo || (worker ? 'Operario' : undefined),
     emp: c.nombre,
     rut: c.rut,
-    proyecto: project ? project.nombre : 'Costanera Norte',
+    proyecto: project ? project.nombre : 'Proyecto no asignado',
     title: d.nombre,
     type: d.categoria === 'Laboral' ? 'Liquidación mensual' : d.categoria === 'Tributario' ? 'Declaración mensual SII' : 'Certificación prevención',
-    requisito: requisitoDescripcion(d.nombre),
+    requisito: requisitoMatch ? requisitoMatch.nombre : requisitoDescripcion(d.nombre),
     vigenciaLabel: vigenciaRequeridaLabel(d.nombre, requisitoMatch?.frecuencia),
     vencimiento: d.vencimiento,
     vencEstado: estadoVencimiento(d.vencimiento),
@@ -62,7 +74,12 @@ function buildQueueItem(
     prio: prioVal,
     tag: prioVal === 'Alta' ? 'urgente' : 'normal',
     time: d.subido || 'Reciente',
-    timeSort: d.subido && d.subido !== '—' && !d.subido.includes('hr') ? new Date(d.subido).getTime() : Date.now(),
+    // Antigüedad real: se reutiliza el mismo parser que el resto del
+    // frontend (parseVencimientoDate) para no dejar documentos "empatados"
+    // en Date.now() cuando el formato de `subido` no se reconoce — esos
+    // casos van al final de la cola (Number.MAX_SAFE_INTEGER) en vez de
+    // intercalarse al azar entre los documentos con fecha real.
+    timeSort: parsedSubido ? parsedSubido.getTime() : Number.MAX_SAFE_INTEGER,
     hint: d.motivo || (worker ? `Verificar documento cargado para el trabajador ${worker.nombre}.` : 'Verificar descuentos legales y base imponible del contratista.'),
     contratistaId: c.id,
     raw: d,
@@ -99,14 +116,17 @@ export function buildCorrectionDocs(contratistas: Contratista[], proyectos: Proy
     c.documentos.forEach(d => {
       if (d.estado === 'rechazado') {
         const item = buildQueueItem(d, 'Empresa', c, proyectos, qId++);
+        const rechazadoEl = d.fechaRevisado ? parseVencimientoDate(d.fechaRevisado) : null;
         list.push({
           ...item,
           prio: 'Alta',
           tag: 'urgente',
           time: d.fechaRevisado || d.subido || 'Reciente',
-          timeSort: Date.now(),
+          timeSort: rechazadoEl ? rechazadoEl.getTime() : item.timeSort,
           motivoRechazo: d.motivoRechazo || d.motivo || 'Rechazado',
           explicacionRechazo: d.explicacionRechazo || d.observacion || '',
+          revisor: d.revisor,
+          fechaRevisado: d.fechaRevisado,
         });
       }
     });
@@ -115,14 +135,17 @@ export function buildCorrectionDocs(contratistas: Contratista[], proyectos: Proy
       w.documentos?.forEach(wd => {
         if (wd.estado === 'rechazado') {
           const item = buildQueueItem(wd, 'Trabajador', c, proyectos, qId++, w);
+          const rechazadoEl = wd.fechaRevisado ? parseVencimientoDate(wd.fechaRevisado) : null;
           list.push({
             ...item,
             prio: 'Alta',
             tag: 'urgente',
             time: wd.fechaRevisado || wd.subido || 'Reciente',
-            timeSort: Date.now(),
+            timeSort: rechazadoEl ? rechazadoEl.getTime() : item.timeSort,
             motivoRechazo: wd.motivoRechazo || wd.motivo || 'Rechazado',
             explicacionRechazo: wd.explicacionRechazo || wd.observacion || '',
+            revisor: wd.revisor,
+            fechaRevisado: wd.fechaRevisado,
           });
         }
       });

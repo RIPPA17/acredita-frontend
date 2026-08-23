@@ -268,7 +268,7 @@ export function saveReglas(data: any[]) {
   }
 }
 
-export const DEMO_TODAY = new Date(2026, 4, 18); // 18 de Mayo, 2026
+export const DEMO_TODAY = new Date(2026, 7, 22); // 22 de Agosto, 2026
 
 export function parseVencimientoDate(vencimientoStr: string): Date | null {
   if (!vencimientoStr || vencimientoStr === '—') return null;
@@ -1332,7 +1332,7 @@ export function rechazarInvitacion(invitacionId: string, contratistaId: string):
 
 export function actualizarEstadoDocumento(
   contratistaId: string,
-  proyectoId: string,
+  proyectoId: string | undefined,
   docId: string,
   action: 'approve' | 'reject',
   options?: {

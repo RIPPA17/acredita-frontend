@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, Search, AlertTriangle, History, ArrowUpRight, X } from "lucide-react";
 import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, simularNuevaVersion, sembrarDocumentosEjemplo } from "../../data/localStorageDb";
 import { buildColaDocs, buildCorrectionDocs } from "./colaUtils";
@@ -63,8 +63,8 @@ function formatElapsed(fromMs: number): string {
 
 export default function ColaRevisionTab({
   onVerEmpresa,
-  selectedDocId,
-  setSelectedDocId,
+  selectedDocKey,
+  setSelectedDocKey,
   aprobadosHoy,
   setAprobadosHoy,
   rechazadosHoy,
@@ -72,8 +72,8 @@ export default function ColaRevisionTab({
   showToast,
 }: {
   onVerEmpresa?: (empresa: any) => void;
-  selectedDocId?: number | null;
-  setSelectedDocId?: (id: number | null) => void;
+  selectedDocKey?: string | null;
+  setSelectedDocKey?: (key: string | null) => void;
   aprobadosHoy: number;
   setAprobadosHoy: (updater: (n: number) => number) => void;
   rechazadosHoy: number;
@@ -84,9 +84,19 @@ export default function ColaRevisionTab({
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_CONTRATISTAS = getContratistas();
 
-  const [tab, setTab] = useState<Tab>("pending");
-  const [pendingDocs, setPendingDocs] = useState(() => buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS));
-  const [correctionDocs, setCorrectionDocs] = useState(() => buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS));
+  const initialPendingDocs = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
+  const initialCorrectionDocs = buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
+  // Navegación directa desde otras vistas (p. ej. "Revisar" en la ficha de
+  // acreditación): si llega un selectedDocKey válido, la cola se abre
+  // directamente en la subpestaña y el documento correctos usando el mismo
+  // `key` estable que usan claims/escalamientos — nunca un id secuencial que
+  // se reasigna en cada reconstrucción de la lista.
+  const navMatchPending = selectedDocKey ? initialPendingDocs.find(d => d.key === selectedDocKey) : undefined;
+  const navMatchCorrection = !navMatchPending && selectedDocKey ? initialCorrectionDocs.find(d => d.key === selectedDocKey) : undefined;
+
+  const [tab, setTab] = useState<Tab>(navMatchCorrection ? "correction" : "pending");
+  const [pendingDocs, setPendingDocs] = useState(initialPendingDocs);
+  const [correctionDocs, setCorrectionDocs] = useState(initialCorrectionDocs);
 
   // Únicamente documentos tomados por el verificador actual en esta sesión —
   // sin backend ni locking real, solo estado de React. Se usa el `key`
@@ -102,7 +112,7 @@ export default function ColaRevisionTab({
   const [project, setProject] = useState("");
   const [mandante, setMandante] = useState("");
 
-  const [selectedKey, setSelectedKeyLocal] = useState<string | null>(null);
+  const [selectedKey, setSelectedKeyLocal] = useState<string | null>(navMatchPending?.key || navMatchCorrection?.key || null);
   const [checks, setChecks] = useState({ legible: false, datos: false, vigencia: false });
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -111,7 +121,14 @@ export default function ColaRevisionTab({
   const [escalarOpen, setEscalarOpen] = useState(false);
   const [escalarMotivo, setEscalarMotivo] = useState("");
 
-  const mandanteDeProyecto = (proyectoId: string) => {
+  // Consumir la navegación una sola vez al montar: no debe volver a forzar
+  // la selección si el usuario cambia de documento o de subpestaña después.
+  useEffect(() => {
+    if (selectedDocKey && setSelectedDocKey) setSelectedDocKey(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const mandanteDeProyecto = (proyectoId: string | undefined) => {
     const p = GLOBAL_PROYECTOS.find(pr => pr.id === proyectoId);
     if (!p) return "—";
     const m = GLOBAL_MANDANTES.find(mm => mm.id === p.mandanteId);
@@ -160,7 +177,7 @@ export default function ColaRevisionTab({
   const selectDoc = (key: string) => {
     setSelectedKeyLocal(key);
     resetDecisionForm();
-    if (setSelectedDocId) setSelectedDocId(null);
+    if (setSelectedDocKey) setSelectedDocKey(null);
   };
 
   const cambiarTab = (t: Tab) => {
@@ -402,6 +419,7 @@ export default function ColaRevisionTab({
                     <span className={`badge border text-[8px] px-1.5 whitespace-nowrap ${d.origen === "Trabajador" ? BADGE.blue : BADGE.gray}`}>
                       {d.origen === "Trabajador" ? "TRABAJADOR" : "EMPRESA"}
                     </span>
+                    {tab === "correction" && <span className={`badge border text-[8px] px-1.5 whitespace-nowrap ${BADGE.red}`}>RECHAZADO</span>}
                     {escalation && <span className={`badge border text-[8px] px-1.5 whitespace-nowrap ${BADGE.red}`}>ESCALADO</span>}
                   </div>
                   <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
@@ -410,13 +428,18 @@ export default function ColaRevisionTab({
                     {d.origen === "Trabajador" && <div className="truncate">{d.trabajadorNombre} · {d.proyecto}</div>}
                     {d.origen === "Empresa" && <div className="truncate">{d.proyecto}</div>}
                   </div>
-                  <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-cream2 text-[9.5px] text-gray-400">
+                  <div className="flex justify-between items-start gap-2 mt-1.5 pt-1.5 border-t border-cream2 text-[9.5px]">
                     {tab === "review" && claim ? (
                       <span className="text-blue-700 font-semibold">{claim.verificador} · {formatElapsed(claim.claimedAt)}</span>
                     ) : tab === "correction" ? (
-                      <span className="truncate">{d.motivoRechazo}</span>
+                      <div className="min-w-0 text-gray-400 leading-snug">
+                        <div className="truncate text-red-700"><span className="font-semibold">Motivo:</span> {d.motivoRechazo}</div>
+                        <div className="truncate mt-0.5">
+                          Rechazado por {d.revisor || "Verificador no disponible"} · {d.fechaRevisado || "Fecha no disponible"} · v{d.version}
+                        </div>
+                      </div>
                     ) : (
-                      <span>{d.time}</span>
+                      <span className="text-gray-400">{d.time}</span>
                     )}
                     {tab === "correction" && (
                       <button

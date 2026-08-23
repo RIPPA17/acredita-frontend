@@ -19,14 +19,14 @@ export default function DashboardTab({
   setActiveTab,
   aprobadosHoy,
   rechazadosHoy,
-  setSelectedDocId,
+  setSelectedDocKey,
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
   setActiveTab: (v: string) => void;
   aprobadosHoy: number;
   rechazadosHoy: number;
-  setSelectedDocId: (id: number | null) => void;
+  setSelectedDocKey: (key: string | null) => void;
 }) {
   const dynamicCola = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
   const correctionDocs = buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
@@ -71,7 +71,7 @@ export default function DashboardTab({
 
   const irACola = () => {
     const first = dynamicCola[0];
-    if (first) setSelectedDocId(first.id);
+    if (first) setSelectedDocKey(first.key);
     setActiveTab('cola');
   };
 

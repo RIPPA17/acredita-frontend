@@ -45,7 +45,7 @@ import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMand
 import { Contratista, Proyecto } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
-import { buildColaDocs } from './admin/colaUtils';
+import { buildColaDocs, buildCorrectionDocs } from './admin/colaUtils';
 import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS, GLOBAL_PLANTILLA_DOCUMENTOS } from './admin/globalData';
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
 import MandantesTab from './admin/MandantesTab';
@@ -259,7 +259,7 @@ export default function AdminPortal() {
   };
   const [actividadSeleccionada, setActividadSeleccionada] = useState<typeof ACTIVIDAD_RECIENTE[0] | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
-  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [selectedDocKey, setSelectedDocKey] = useState<string | null>(null);
   const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
@@ -828,16 +828,16 @@ export default function AdminPortal() {
               setActiveTab={setActiveTab}
               aprobadosHoy={aprobadosHoy}
               rechazadosHoy={rechazadosHoy}
-              setSelectedDocId={setSelectedDocId}
+              setSelectedDocKey={setSelectedDocKey}
             />
           )}
 
           {/* COLA TAB */}
           {activeTab === "cola" && (
-            <ColaRevisionTab 
-              onVerEmpresa={setClienteSeleccionado} 
-              selectedDocId={selectedDocId}
-              setSelectedDocId={setSelectedDocId}
+            <ColaRevisionTab
+              onVerEmpresa={setClienteSeleccionado}
+              selectedDocKey={selectedDocKey}
+              setSelectedDocKey={setSelectedDocKey}
               aprobadosHoy={aprobadosHoy}
               setAprobadosHoy={setAprobadosHoy}
               rechazadosHoy={rechazadosHoy}
@@ -1117,10 +1117,16 @@ export default function AdminPortal() {
           onClose={() => setSelectedAcreditacionContratista(null)}
           rol="admin"
           onRevisarDocumento={(doc) => {
-            const dynamicCola = buildColaDocs(getContratistas(), getProyectos());
-            const queueItem = dynamicCola.find(item => item.docId === doc.id || item.title === doc.nombre);
+            const contratistasActuales = getContratistas();
+            const proyectosActuales = getProyectos();
+            const dynamicCola = buildColaDocs(contratistasActuales, proyectosActuales);
+            const dynamicCorreccion = buildCorrectionDocs(contratistasActuales, proyectosActuales);
+            const contratistaId = selectedAcreditacionContratista.id;
+            const queueItem =
+              dynamicCola.find(item => item.contratistaId === contratistaId && item.docId === doc.id) ||
+              dynamicCorreccion.find(item => item.contratistaId === contratistaId && item.docId === doc.id);
             if (queueItem) {
-              setSelectedDocId(queueItem.id);
+              setSelectedDocKey(queueItem.key);
               setActiveTab('cola');
             } else {
               showToast('El documento ya está aprobado o no se encuentra pendiente en la cola de revisión.', 'warning');
