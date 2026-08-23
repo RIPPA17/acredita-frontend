@@ -338,6 +338,7 @@ export default function AdminPortal() {
   const [formInvitacion, setFormInvitacion] = useState({
     nombre: "",
     empresa: "",
+    rut: "",
     correo: "",
     industria: "",
   });
@@ -377,54 +378,6 @@ export default function AdminPortal() {
       estado: "Activo"
     };
   });
-
-  const ARBOL_MANDANTES = GLOBAL_MANDANTES.map(m => {
-    const proyectos = GLOBAL_PROYECTOS.filter(p => p.mandanteId === m.id).map(p => {
-      const empresas = GLOBAL_CONTRATISTAS.filter(c => c.proyectos.includes(p.id)).map(c => {
-        let cumplimiento = "100% Aprobado";
-        const hasRechazados = c.documentos.some(d => d.estado === 'rechazado');
-        const hasPorVencer = c.documentos.some(d => d.estado === 'por_vencer');
-        if (hasRechazados) {
-          cumplimiento = "Con Docs. Rechazados";
-        } else if (hasPorVencer) {
-          cumplimiento = "Con Docs. por Vencer";
-        }
-        
-        return {
-          id: c.id,
-          empresa: c.nombre,
-          rut: c.rut,
-          rol: "Contratista",
-          cumplimiento,
-          iniciales: c.nombre.split(" ").map(n => n[0]).join("").substring(0, 2),
-          docsTotal: c.documentos.length,
-          docsAprobados: c.documentos.filter(d => d.estado === 'aprobado').length,
-        };
-      });
-
-      return {
-        id: p.id,
-        nombre: p.nombre,
-        pendientes: p.id === 'costanera' ? 3 : p.id === 'solar' ? 1 : 0,
-        urgentes: p.id === 'costanera' ? 3 : p.id === 'solar' ? 1 : 0,
-        badge: p.id === 'costanera' || p.id === 'solar' ? "b-red" : "b-green",
-        badgeLabel: p.id === 'costanera' ? "3 urgentes" : p.id === 'solar' ? "1 urgente" : "Al día",
-        empresas
-      };
-    });
-
-    return {
-      id: m.id,
-      empresa: m.nombre,
-      rut: m.rut,
-      iniciales: m.nombre.split(" ").map((n: string) => n[0]).join("").substring(0, 2),
-      proyectos
-    };
-  });
-
-  const mandantesConBloqueo = ARBOL_MANDANTES.filter(m =>
-    m.proyectos.some(p => p.urgentes > 0)
-  ).length;
 
   const contratistasConVencidos = EMPRESAS_CONTRATISTAS.filter(c =>
     c.cumplimiento?.includes("Vencido")
@@ -850,8 +803,12 @@ export default function AdminPortal() {
           {activeTab === "mandantes" && (
             <MandantesTab
               setShowInvitarModal={setShowInvitarModal}
-              ARBOL_MANDANTES={ARBOL_MANDANTES}
-              setClienteSeleccionado={setClienteSeleccionado}
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
+              GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+              onVerFicha={(contratista, proyectoId) =>
+                setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId })
+              }
             />
           )}
 
@@ -957,6 +914,7 @@ export default function AdminPortal() {
                       setFormInvitacion({
                         nombre: "",
                         empresa: "",
+                        rut: "",
                         correo: "",
                         industria: "",
                       });
@@ -970,12 +928,13 @@ export default function AdminPortal() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    const newId = 'm_' + Date.now();
+                    if (!formInvitacion.nombre.trim() || !formInvitacion.empresa.trim() || !formInvitacion.rut.trim() || !formInvitacion.correo.trim()) {
+                      return;
+                    }
                     const newMandante = {
-                      id: newId,
+                      id: `m_${Date.now()}`,
                       nombre: formInvitacion.empresa,
-                      rut: '76.321.456-K',
-                      plan: 'Pro',
+                      rut: formInvitacion.rut,
                       proyectos: []
                     };
                     const list = getMandantes();
@@ -987,7 +946,7 @@ export default function AdminPortal() {
                 >
                   <div>
                     <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Nombre completo
+                      Nombre del contacto
                     </label>
                     <input
                       type="text"
@@ -999,13 +958,13 @@ export default function AdminPortal() {
                         })
                       }
                       className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="Tu nombre"
+                      placeholder="Nombre y apellido"
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Empresa
+                      Empresa / Razón social
                     </label>
                     <input
                       type="text"
@@ -1018,6 +977,24 @@ export default function AdminPortal() {
                       }
                       className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
                       placeholder="Nombre de la empresa"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                      RUT
+                    </label>
+                    <input
+                      type="text"
+                      value={formInvitacion.rut}
+                      onChange={(e) =>
+                        setFormInvitacion({
+                          ...formInvitacion,
+                          rut: e.target.value,
+                        })
+                      }
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                      placeholder="76.999.999-9"
                       required
                     />
                   </div>
@@ -1041,7 +1018,7 @@ export default function AdminPortal() {
                   </div>
                   <div>
                     <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Industria
+                      Industria <span className="text-gray-400 font-normal">(opcional)</span>
                     </label>
                     <select
                       value={formInvitacion.industria}
@@ -1052,7 +1029,6 @@ export default function AdminPortal() {
                         })
                       }
                       className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      required
                     >
                       <option value="">Selecciona una industria...</option>
                       <option value="construccion">Construcción</option>

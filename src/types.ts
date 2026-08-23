@@ -15,7 +15,7 @@ export interface Mandante {
   id: string;
   nombre: string;
   rut: string;
-  plan: string;
+  plan?: string; // No forma parte del alta MVP de un mandante — solo la usan pantallas de facturación existentes
   proyectos: string[]; // IDs de proyectos asociados
 }
 

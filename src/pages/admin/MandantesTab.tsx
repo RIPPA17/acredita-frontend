@@ -1,120 +1,170 @@
 import { useMemo, useState } from 'react';
 import { Plus, ChevronRight, Search } from 'lucide-react';
-import SeverityBadge, {
-  Severidad,
-  SEVERIDAD_LABEL,
-  SEVERIDAD_ORDEN,
-  severidadDeCumplimiento,
-} from '../../components/SeverityBadge';
+import { Contratista, Proyecto, Mandante } from '../../types';
+import { buildAcreditacionRows, AcredRow, Estado } from './acreditacionUtils';
 
-const CHIPS: Array<{ sev: Severidad; label: string; punto: string }> = [
-  { sev: 'critico', label: 'Críticos', punto: 'bg-[#a32d2d]' },
-  { sev: 'atencion', label: 'En atención', punto: 'bg-[#b58600]' },
-  { sev: 'normal', label: 'Al día', punto: 'bg-[#1e7a3c]' },
-];
+// Mandantes habla el mismo idioma de estados que Acreditaciones e Inicio —
+// sin una segunda taxonomía de severidad (Crítico/Atención/Al día).
+type EstadoUI = 'Acreditado' | 'En proceso' | 'Bloqueado';
+type EstadoConNeutro = EstadoUI | 'Sin proyectos' | 'Sin contratistas';
 
-const COLOR_SEV: Record<Severidad, string> = {
-  critico: '#a32d2d',
-  atencion: '#b58600',
-  normal: '#1e7a3c',
+const estadoUI = (estado: Estado): EstadoUI =>
+  estado === 'Aprobado' ? 'Acreditado' : estado === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
+
+const RANK: Record<EstadoConNeutro, number> = {
+  Bloqueado: 0,
+  'En proceso': 1,
+  Acreditado: 2,
+  'Sin contratistas': 3,
+  'Sin proyectos': 3,
 };
 
-/** A project inherits the worst severity of its companies; a mandante, that of its projects. */
-const peorSeveridad = (sevs: Severidad[]): Severidad =>
-  sevs.includes('critico') ? 'critico' : sevs.includes('atencion') ? 'atencion' : 'normal';
+const CLASE_ESTADO: Record<EstadoConNeutro, string> = {
+  Bloqueado: 'sev-critico',
+  'En proceso': 'sev-atencion',
+  Acreditado: 'sev-ok',
+  'Sin contratistas': 'sev-normal',
+  'Sin proyectos': 'sev-normal',
+};
 
-const incluye = (valor: unknown, termino: string) =>
-  String(valor ?? '').toLowerCase().includes(termino);
+function EstadoBadge({ estado }: { estado: EstadoConNeutro }) {
+  return (
+    <span className={`sev ${CLASE_ESTADO[estado]} inline-flex items-center gap-1.5 shrink-0`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+      {estado}
+    </span>
+  );
+}
+
+const CHIPS: Array<{ estado: EstadoUI; label: string; punto: string }> = [
+  { estado: 'Bloqueado', label: 'Bloqueados', punto: 'bg-[#a32d2d]' },
+  { estado: 'En proceso', label: 'En proceso', punto: 'bg-[#b58600]' },
+  { estado: 'Acreditado', label: 'Acreditados', punto: 'bg-[#1e7a3c]' },
+];
+
+const incluye = (valor: unknown, termino: string) => String(valor ?? '').toLowerCase().includes(termino);
 
 const plural = (n: number, singular: string, prefijo = '') =>
   `${n} ${prefijo}${singular}${n === 1 ? '' : 's'}`;
 
+const iniciales = (nombre: string) =>
+  nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+interface ProyectoView {
+  proyecto: Proyecto;
+  key: string;
+  acreditaciones: Array<AcredRow & { estadoUILabel: EstadoUI }>;
+  acreditadas: number;
+  enProceso: number;
+  bloqueadas: number;
+  estado: EstadoUI | 'Sin contratistas';
+}
+
+interface MandanteView {
+  mandante: Mandante;
+  key: string;
+  proyectos: ProyectoView[];
+  contratistasUnicos: number;
+  acreditadas: number;
+  enProceso: number;
+  bloqueadas: number;
+  estado: EstadoUI | 'Sin proyectos';
+}
+
 export default function MandantesTab({
   setShowInvitarModal,
-  ARBOL_MANDANTES,
-  setClienteSeleccionado,
+  GLOBAL_CONTRATISTAS,
+  GLOBAL_PROYECTOS,
+  GLOBAL_MANDANTES,
+  onVerFicha,
 }: {
   setShowInvitarModal: (v: boolean) => void;
-  ARBOL_MANDANTES: any[];
-  setClienteSeleccionado: (v: any) => void;
+  GLOBAL_CONTRATISTAS: Contratista[];
+  GLOBAL_PROYECTOS: Proyecto[];
+  GLOBAL_MANDANTES: Mandante[];
+  onVerFicha: (contratista: Contratista, proyectoId: string) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
-  const [sevFiltro, setSevFiltro] = useState<Severidad | null>(null);
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoUI | null>(null);
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
 
   const termino = busqueda.trim().toLowerCase();
 
-  const mandantes = useMemo(
-    () =>
-      ARBOL_MANDANTES.map((m, i) => {
-        const proyectos = (m.proyectos || []).map((p: any, j: number) => {
-          const empresas = (p.empresas || [])
-            .map((e: any) => ({ ...e, sev: severidadDeCumplimiento(e.cumplimiento) }))
-            .sort(
-              (a: any, b: any) =>
-                SEVERIDAD_ORDEN[a.sev as Severidad] - SEVERIDAD_ORDEN[b.sev as Severidad] ||
-                String(a.empresa).localeCompare(String(b.empresa))
-            );
-          return {
-            ...p,
-            key: String(p.id ?? `${i}-${j}`),
-            empresas,
-            sev: peorSeveridad(empresas.map((e: any) => e.sev)),
-          };
-        });
-
-        // The same contractor can be assigned to several projects of one
-        // mandante, so count each company (and its documents) only once.
-        const unicas = new Map<string, any>();
-        proyectos.forEach((p: any) =>
-          p.empresas.forEach((e: any) => {
-            if (!unicas.has(e.rut)) unicas.set(e.rut, e);
-          })
-        );
-        const empresas = Array.from(unicas.values());
-
-        return {
-          ...m,
-          key: String(m.id ?? m.rut ?? i),
-          proyectos,
-          nEmpresas: empresas.length,
-          docsTotal: empresas.reduce((n, e) => n + (e.docsTotal ?? 0), 0),
-          docsAprobados: empresas.reduce((n, e) => n + (e.docsAprobados ?? 0), 0),
-          sev: peorSeveridad(proyectos.map((p: any) => p.sev)),
-        };
-      }),
-    [ARBOL_MANDANTES]
+  // Misma fuente de verdad que Acreditaciones e Inicio: una fila por
+  // (contratista, proyecto asignado), con su estado real de acreditación.
+  const rows = useMemo(
+    () => buildAcreditacionRows(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES),
+    [GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES]
   );
 
-  const conteo: Record<Severidad, number> = {
-    critico: mandantes.filter(m => m.sev === 'critico').length,
-    atencion: mandantes.filter(m => m.sev === 'atencion').length,
-    normal: mandantes.filter(m => m.sev === 'normal').length,
+  const mandantes: MandanteView[] = useMemo(() => {
+    return GLOBAL_MANDANTES.map(m => {
+      const proyectos: ProyectoView[] = GLOBAL_PROYECTOS
+        .filter(p => p.mandanteId === m.id)
+        .map(p => {
+          const acreditaciones = rows
+            .filter(r => r.proyectoId === p.id)
+            .map(r => ({ ...r, estadoUILabel: estadoUI(r.estado) }))
+            .sort((a, b) => RANK[a.estadoUILabel] - RANK[b.estadoUILabel] || a.entity.localeCompare(b.entity));
+
+          const bloqueadas = acreditaciones.filter(a => a.estadoUILabel === 'Bloqueado').length;
+          const enProceso = acreditaciones.filter(a => a.estadoUILabel === 'En proceso').length;
+          const acreditadas = acreditaciones.filter(a => a.estadoUILabel === 'Acreditado').length;
+
+          const estado: ProyectoView['estado'] =
+            acreditaciones.length === 0 ? 'Sin contratistas'
+              : bloqueadas > 0 ? 'Bloqueado'
+                : enProceso > 0 ? 'En proceso'
+                  : 'Acreditado';
+
+          return { proyecto: p, key: p.id, acreditaciones, acreditadas, enProceso, bloqueadas, estado };
+        })
+        .sort((a, b) => RANK[a.estado] - RANK[b.estado] || a.proyecto.nombre.localeCompare(b.proyecto.nombre));
+
+      // El mismo contratista puede tener acreditaciones en varios proyectos
+      // de este mandante: se cuenta una sola vez como contratista, pero cada
+      // acreditación (una por proyecto) sigue sumando por separado.
+      const todas = proyectos.flatMap(p => p.acreditaciones);
+      const bloqueadas = todas.filter(a => a.estadoUILabel === 'Bloqueado').length;
+      const enProceso = todas.filter(a => a.estadoUILabel === 'En proceso').length;
+      const acreditadas = todas.filter(a => a.estadoUILabel === 'Acreditado').length;
+      const contratistasUnicos = new Set(todas.map(a => a.contratista.id)).size;
+
+      const estado: MandanteView['estado'] =
+        bloqueadas > 0 ? 'Bloqueado'
+          : enProceso > 0 ? 'En proceso'
+            : todas.length > 0 ? 'Acreditado'
+              : 'Sin proyectos';
+
+      return { mandante: m, key: m.id, proyectos, contratistasUnicos, acreditadas, enProceso, bloqueadas, estado };
+    });
+  }, [GLOBAL_MANDANTES, GLOBAL_PROYECTOS, rows]);
+
+  const conteo: Record<EstadoUI, number> = {
+    Bloqueado: mandantes.filter(m => m.estado === 'Bloqueado').length,
+    'En proceso': mandantes.filter(m => m.estado === 'En proceso').length,
+    Acreditado: mandantes.filter(m => m.estado === 'Acreditado').length,
   };
 
   /** True when the search term matches a project or company inside the mandante. */
-  const coincideInterno = (m: any) =>
+  const coincideInterno = (m: MandanteView) =>
     termino !== '' &&
     m.proyectos.some(
-      (p: any) =>
-        incluye(p.nombre, termino) ||
-        p.empresas.some((e: any) => incluye(e.empresa, termino) || incluye(e.rut, termino))
+      p =>
+        incluye(p.proyecto.nombre, termino) ||
+        p.acreditaciones.some(a => incluye(a.entity, termino) || incluye(a.rut, termino))
     );
 
-  const coincideBusqueda = (m: any) =>
-    termino === '' || incluye(m.empresa, termino) || incluye(m.rut, termino) || coincideInterno(m);
+  const coincideBusqueda = (m: MandanteView) =>
+    termino === '' || incluye(m.mandante.nombre, termino) || incluye(m.mandante.rut, termino) || coincideInterno(m);
 
   const visibles = mandantes
-    .filter(m => (!sevFiltro || m.sev === sevFiltro) && coincideBusqueda(m))
-    .sort(
-      (a, b) =>
-        SEVERIDAD_ORDEN[a.sev as Severidad] - SEVERIDAD_ORDEN[b.sev as Severidad] ||
-        String(a.empresa).localeCompare(String(b.empresa))
-    );
+    .filter(m => (!estadoFiltro || m.estado === estadoFiltro) && coincideBusqueda(m))
+    .sort((a, b) => RANK[a.estado] - RANK[b.estado] || a.mandante.nombre.localeCompare(b.mandante.nombre));
 
   // A mandante opens on click, and also on its own when the search matched
   // something inside it — otherwise the result would stay hidden.
-  const estaAbierto = (m: any) => abiertos.has(m.key) || coincideInterno(m);
+  const estaAbierto = (m: MandanteView) => abiertos.has(m.key) || coincideInterno(m);
 
   const todosAbiertos = visibles.length > 0 && visibles.every(m => abiertos.has(m.key));
 
@@ -129,11 +179,11 @@ export default function MandantesTab({
   const alternarTodos = () =>
     setAbiertos(todosAbiertos ? new Set() : new Set(visibles.map(m => m.key)));
 
-  const hayFiltros = termino !== '' || sevFiltro !== null;
+  const hayFiltros = termino !== '' || estadoFiltro !== null;
 
   const limpiarFiltros = () => {
     setBusqueda('');
-    setSevFiltro(null);
+    setEstadoFiltro(null);
   };
 
   return (
@@ -174,28 +224,28 @@ export default function MandantesTab({
             {/* Segmented Control */}
             <div className="flex bg-[#f1efe6] border border-cream3 rounded-xl p-1 gap-1">
               <button
-                onClick={() => setSevFiltro(null)}
+                onClick={() => setEstadoFiltro(null)}
                 className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1 ${
-                  sevFiltro === null
+                  estadoFiltro === null
                     ? 'bg-white text-navy shadow-sm'
                     : 'text-gray-500 hover:text-navy hover:bg-white/40'
                 }`}
               >
                 Todos <span className="opacity-60 text-xs ml-0.5">{mandantes.length}</span>
               </button>
-              {CHIPS.map(({ sev, label, punto }) => (
+              {CHIPS.map(({ estado, label, punto }) => (
                 <button
-                  key={sev}
-                  onClick={() => setSevFiltro(sevFiltro === sev ? null : sev)}
-                  aria-pressed={sevFiltro === sev}
+                  key={estado}
+                  onClick={() => setEstadoFiltro(estadoFiltro === estado ? null : estado)}
+                  aria-pressed={estadoFiltro === estado}
                   className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
-                    sevFiltro === sev
+                    estadoFiltro === estado
                       ? 'bg-white text-navy shadow-sm'
                       : 'text-gray-500 hover:text-navy hover:bg-white/40'
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${punto}`} />
-                  {label} <span className="opacity-60 text-xs">{conteo[sev]}</span>
+                  {label} <span className="opacity-60 text-xs">{conteo[estado]}</span>
                 </button>
               ))}
             </div>
@@ -225,7 +275,6 @@ export default function MandantesTab({
         <div className="flex flex-col gap-2.5">
         {visibles.map(m => {
           const abierto = estaAbierto(m);
-          const pct = m.docsTotal > 0 ? Math.round((m.docsAprobados / m.docsTotal) * 100) : 0;
 
           return (
             <div key={m.key} className="acc-card">
@@ -235,30 +284,22 @@ export default function MandantesTab({
                 className="acc-head"
               >
                 <ChevronRight size={16} className={`acc-chev ${abierto ? 'open' : ''}`} />
-                <span className="acc-avatar">{m.iniciales || m.empresa?.substring(0, 2)}</span>
+                <span className="acc-avatar">{iniciales(m.mandante.nombre)}</span>
 
                 <span className="flex-1 min-w-0">
-                  <span className="acc-name block truncate">{m.empresa}</span>
-                  <span className="acc-rut block">{m.rut}</span>
+                  <span className="acc-name block truncate">{m.mandante.nombre}</span>
+                  <span className="acc-rut block">{m.mandante.rut}</span>
                 </span>
 
                 <span className="hidden sm:flex items-center gap-4 shrink-0">
                   <span className="acc-meta text-right">
-                    {plural(m.proyectos.length, 'proyecto')} · {plural(m.nEmpresas, 'empresa')}
+                    {plural(m.proyectos.length, 'proyecto')} · {plural(m.contratistasUnicos, 'contratista')}
                     <br />
-                    <b>
-                      {m.docsAprobados}/{m.docsTotal} documentos aprobados
-                    </b>
-                  </span>
-                  <span className="prog-wrap w-[70px]" title={`${pct}% de documentos aprobados`}>
-                    <span
-                      className="prog-fill block"
-                      style={{ width: `${pct}%`, backgroundColor: COLOR_SEV[m.sev as Severidad] }}
-                    />
+                    <b>{plural(m.acreditadas, 'acreditado')} · {m.enProceso} en proceso · {plural(m.bloqueadas, 'bloqueado')}</b>
                   </span>
                 </span>
 
-                <SeverityBadge severidad={m.sev as Severidad} formato="corto" />
+                <EstadoBadge estado={m.estado} />
               </button>
 
               {abierto && (
@@ -269,74 +310,60 @@ export default function MandantesTab({
                     </p>
                   )}
 
-                  {m.proyectos.map((p: any) => (
+                  {m.proyectos.map(p => (
                     <div key={p.key} className="mt-3.5">
-                      <div className="flex items-center gap-2 mb-1.5 px-0.5">
-                        <span className="acc-pname">{p.nombre}</span>
+                      <div className="flex items-center gap-2 mb-1.5 px-0.5 flex-wrap">
+                        <span className="acc-pname">{p.proyecto.nombre}</span>
                         <span className="acc-pcount">
-                          · {plural(p.empresas.length, 'empresa')}
+                          · {plural(p.acreditaciones.length, 'contratista')}
                         </span>
-                        <SeverityBadge severidad={p.sev as Severidad} formato="corto" />
+                        {p.acreditaciones.length > 0 && (
+                          <span className="acc-pcount">
+                            · {plural(p.acreditadas, 'acreditado')} · {p.enProceso} en proceso · {plural(p.bloqueadas, 'bloqueado')}
+                          </span>
+                        )}
+                        <EstadoBadge estado={p.estado} />
                       </div>
 
-                      {p.empresas.length === 0 && (
+                      {p.acreditaciones.length === 0 && (
                         <p className="text-[12.5px] text-gray-400 px-0.5">
                           Sin empresas asignadas.
                         </p>
                       )}
 
                       <div className="flex flex-col gap-1.5">
-                        {p.empresas.map((e: any) => {
-                          const total = e.docsTotal ?? 0;
-                          const aprobados = e.docsAprobados ?? 0;
-                          const epct = total > 0 ? Math.round((aprobados / total) * 100) : 0;
-
-                          return (
-                            <div
-                              key={`${p.key}-${e.rut}`}
-                              onClick={() => setClienteSeleccionado(e)}
-                              className="acc-erow"
-                            >
-                              <div className="acc-eavatar">{e.iniciales}</div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[13px] font-semibold text-navy truncate">
-                                  {e.empresa}
-                                </div>
-                                <div className="text-[11px] text-gray-400">{e.rut}</div>
+                        {p.acreditaciones.map(a => (
+                          <div
+                            key={`${p.key}-${a.rut}`}
+                            onClick={() => onVerFicha(a.contratista, p.proyecto.id)}
+                            className="acc-erow"
+                          >
+                            <div className="acc-eavatar">{iniciales(a.entity)}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-semibold text-navy truncate">
+                                {a.entity}
                               </div>
-
-                              <div className="hidden sm:flex items-center gap-2 shrink-0">
-                                <span className="text-[12px] text-gray-500 font-medium whitespace-nowrap">
-                                  {aprobados}/{total}
-                                </span>
-                                <div
-                                  className="prog-wrap w-[60px]"
-                                  title={`${epct}% de documentos aprobados`}
-                                >
-                                  <div
-                                    className="prog-fill"
-                                    style={{
-                                      width: `${epct}%`,
-                                      backgroundColor: COLOR_SEV[e.sev as Severidad],
-                                    }}
-                                  />
-                                </div>
-                              </div>
-
-                              <SeverityBadge severidad={e.sev as Severidad} formato="corto" />
-
-                              <button
-                                onClick={ev => {
-                                  ev.stopPropagation();
-                                  setClienteSeleccionado(e);
-                                }}
-                                className="btn btn-ghost btn-sm bg-white whitespace-nowrap"
-                              >
-                                Ver ficha
-                              </button>
+                              <div className="text-[11px] text-gray-400">{a.rut}</div>
                             </div>
-                          );
-                        })}
+
+                            <div className="hidden sm:flex items-center gap-3 shrink-0 text-[11.5px] text-gray-500 font-medium whitespace-nowrap">
+                              <span>Empresa {a.company.ok}/{a.company.total}</span>
+                              <span>Trabajadores {a.workers.ok}/{a.workers.total}</span>
+                            </div>
+
+                            <EstadoBadge estado={a.estadoUILabel} />
+
+                            <button
+                              onClick={ev => {
+                                ev.stopPropagation();
+                                onVerFicha(a.contratista, p.proyecto.id);
+                              }}
+                              className="btn btn-ghost btn-sm bg-white whitespace-nowrap"
+                            >
+                              Ver ficha
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -365,7 +392,7 @@ export default function MandantesTab({
 
       <p className="text-[12px] text-gray-400 mt-2.5">
         Mostrando {visibles.length} de {mandantes.length} mandantes
-        {sevFiltro && ` · filtrando por ${SEVERIDAD_LABEL[sevFiltro]}`}
+        {estadoFiltro && ` · filtrando por ${estadoFiltro}`}
       </p>
       </div>
     </div>
