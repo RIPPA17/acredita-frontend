@@ -231,8 +231,8 @@ export default function MisProyectosTab({
         </div>
       </div>
 
-      {/* Resumen general */}
-      <div className="card-grid">
+      {/* Resumen general: siempre 4 en una sola línea, sin envolver */}
+      <div className="grid grid-cols-4 gap-[10px] mb-4">
         <div className="card p-4">
           <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Proyectos activos</p>
           <p className="text-[22px] font-bold text-navy">{misProyectos.length}</p>
