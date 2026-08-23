@@ -22,7 +22,6 @@ import {
   Upload,
   Sparkles,
   Plus,
-  Download,
   Edit2,
   Trash2,
   Mail,
@@ -263,10 +262,7 @@ export default function AdminPortal() {
   const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
-  const [tabCliente, setTabCliente] = useState("documentos");
-  const [busquedaDoc, setBusquedaDoc] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [ordenDoc, setOrdenDoc] = useState("vencimiento");
+  const [tabCliente, setTabCliente] = useState("resumen");
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
@@ -343,45 +339,57 @@ export default function AdminPortal() {
     industria: "",
   });
 
+  const [showInvitarContratistaModal, setShowInvitarContratistaModal] = useState(false);
+  const [resultadoInvitarContratista, setResultadoInvitarContratista] = useState<null | 'nuevo' | 'agregado' | 'ya_asignado'>(null);
+  const [formInvitarContratista, setFormInvitarContratista] = useState({
+    empresa: "",
+    rut: "",
+    correo: "",
+    proyectoId: "",
+  });
+
+  const resetFormInvitarContratista = () => {
+    setShowInvitarContratistaModal(false);
+    setResultadoInvitarContratista(null);
+    setFormInvitarContratista({ empresa: "", rut: "", correo: "", proyectoId: "" });
+  };
+
+  const handleInvitarContratista = (e: React.FormEvent) => {
+    e.preventDefault();
+    const { empresa, rut, correo, proyectoId } = formInvitarContratista;
+    if (!empresa.trim() || !rut.trim() || !correo.trim() || !proyectoId) return;
+
+    const list = getContratistas();
+    const rutNormalizado = rut.trim().toLowerCase();
+    const existente = list.find(c => c.rut.trim().toLowerCase() === rutNormalizado);
+
+    if (existente) {
+      if (existente.proyectos.includes(proyectoId)) {
+        setResultadoInvitarContratista('ya_asignado');
+        return;
+      }
+      existente.proyectos.push(proyectoId);
+      saveContratistas(list);
+      setResultadoInvitarContratista('agregado');
+    } else {
+      const nuevo: Contratista = {
+        id: `c_${Date.now()}`,
+        nombre: empresa,
+        rut,
+        proyectos: [proyectoId],
+        documentos: [],
+        trabajadores: [],
+        isNew: true,
+      };
+      list.push(nuevo);
+      saveContratistas(list);
+      setResultadoInvitarContratista('nuevo');
+    }
+  };
+
   const handleSelectDoc = (doc: any) => {
     setSelectedDoc(doc);
   };
-
-  const EMPRESAS_MANDANTES = GLOBAL_MANDANTES.map(m => ({
-    empresa: m.nombre,
-    rut: m.rut,
-    rol: "Mandante",
-    cumplimiento: "N/A",
-    iniciales: m.nombre.split(" ").map(n => n[0]).join("").substring(0, 2),
-    estado: "Activo"
-  }));
-
-  const EMPRESAS_CONTRATISTAS = GLOBAL_CONTRATISTAS.map(c => {
-    let cumplimiento = "100% Aprobado";
-    const hasRechazados = c.documentos.some(d => d.estado === 'rechazado');
-    const hasPorVencer = c.documentos.some(d => d.estado === 'por_vencer');
-    if (hasRechazados) {
-      cumplimiento = "Con Docs. Rechazados";
-    } else if (hasPorVencer) {
-      cumplimiento = "Con Docs. por Vencer";
-    }
-
-    return {
-      empresa: c.nombre,
-      rut: c.rut,
-      rol: c.isNew ? "Contratista (Nuevo)" : "Contratista",
-      cumplimiento,
-      iniciales: c.nombre.split(" ").map(n => n[0]).join("").substring(0, 2),
-      proyectos: c.proyectos.map(pId => GLOBAL_PROYECTOS.find(p => p.id === pId)?.nombre || pId),
-      docsTotal: c.documentos.length,
-      docsAprobados: c.documentos.filter(d => d.estado === 'aprobado').length,
-      estado: "Activo"
-    };
-  });
-
-  const contratistasConVencidos = EMPRESAS_CONTRATISTAS.filter(c =>
-    c.cumplimiento?.includes("Vencido")
-  ).length;
 
   const hayAccesosFallidos = auditoriaLogs.some((log: any) =>
     log.accion?.toLowerCase().includes("fallido") || log.accion?.toLowerCase().includes("error")
@@ -416,8 +424,8 @@ export default function AdminPortal() {
   });
 
   const indiceBusqueda = [
-    ...EMPRESAS_MANDANTES.map(e => ({ tipo: "empresa", label: e.empresa, sub: e.rol, data: e })),
-    ...EMPRESAS_CONTRATISTAS.map(e => ({ tipo: "empresa", label: e.empresa, sub: e.rol, data: e })),
+    ...GLOBAL_MANDANTES.map(m => ({ tipo: "empresa", label: m.nombre, sub: "Mandante", data: m, esMandante: true })),
+    ...GLOBAL_CONTRATISTAS.map(c => ({ tipo: "empresa", label: c.nombre, sub: c.isNew ? "Contratista (Nuevo)" : "Contratista", data: c, esMandante: false })),
     ...ACTIVIDAD_RECIENTE.map(a => ({ tipo: "documento", label: a.documento, sub: `${a.empresa} · ${a.estado}`, data: a })),
     ...PROYECTOS_BUSQUEDA.map(p => ({ tipo: "proyecto", label: p.nombre, sub: p.mandante, data: p })),
     ...REVISORES.map(r => ({ tipo: "revisor", label: r.nombre, sub: r.estado, data: r })),
@@ -487,7 +495,15 @@ export default function AdminPortal() {
                       {resultadosPorTipo.empresa.map((r, i) => (
                         <div
                           key={i}
-                          onClick={() => { setClienteSeleccionado(r.data); setBusquedaAbierta(false); setBusquedaGlobal(""); }}
+                          onClick={() => {
+                            if ((r as any).esMandante) {
+                              setActiveTab('mandantes');
+                            } else {
+                              setClienteSeleccionado(r.data);
+                            }
+                            setBusquedaAbierta(false);
+                            setBusquedaGlobal("");
+                          }}
                           className="flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-cream cursor-pointer"
                         >
                           <span className="text-[13px] text-navy">{r.label}</span>
@@ -814,9 +830,11 @@ export default function AdminPortal() {
 
           {activeTab === "contratistas" && (
             <ContratistasTab
-              EMPRESAS_CONTRATISTAS={EMPRESAS_CONTRATISTAS}
-              setClienteSeleccionado={setClienteSeleccionado}
+              GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
               GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+              onVerContratista={(contratista) => setClienteSeleccionado(contratista)}
+              setShowInvitarContratistaModal={setShowInvitarContratistaModal}
             />
           )}
           {activeTab === "plantillas" && (
@@ -1063,6 +1081,152 @@ export default function AdminPortal() {
         </div>
       )}
 
+      {showInvitarContratistaModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b border-cream">
+              <h3 className="font-medium text-navy text-[17.6px]">
+                Invitar Contratista
+              </h3>
+              <button
+                onClick={resetFormInvitarContratista}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {resultadoInvitarContratista === 'ya_asignado' ? (
+                <div className="text-center py-4">
+                  <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle size={32} className="text-amber-600" />
+                  </div>
+                  <h4 className="text-lg font-medium text-navy mb-2">
+                    Ya está asignado
+                  </h4>
+                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
+                    Este contratista ya está asignado a este proyecto.
+                  </p>
+                  <button
+                    onClick={resetFormInvitarContratista}
+                    className="btn btn-primary w-full justify-center"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              ) : resultadoInvitarContratista ? (
+                <div className="text-center py-4">
+                  <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Mail size={32} className="text-green-600" />
+                  </div>
+                  <h4 className="text-lg font-medium text-navy mb-2">
+                    {resultadoInvitarContratista === 'nuevo' ? 'Contratista agregado' : 'Proyecto agregado'}
+                  </h4>
+                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
+                    {resultadoInvitarContratista === 'nuevo' ? (
+                      <><span className="font-medium">{formInvitarContratista.empresa}</span> fue agregado correctamente.</>
+                    ) : (
+                      <>Se agregó el proyecto seleccionado a <span className="font-medium">{formInvitarContratista.empresa}</span>.</>
+                    )}
+                  </p>
+                  <button
+                    onClick={resetFormInvitarContratista}
+                    className="btn btn-primary w-full justify-center"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleInvitarContratista} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                      Razón social
+                    </label>
+                    <input
+                      type="text"
+                      value={formInvitarContratista.empresa}
+                      onChange={(e) =>
+                        setFormInvitarContratista({ ...formInvitarContratista, empresa: e.target.value })
+                      }
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                      placeholder="Nombre de la empresa"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                      RUT
+                    </label>
+                    <input
+                      type="text"
+                      value={formInvitarContratista.rut}
+                      onChange={(e) =>
+                        setFormInvitarContratista({ ...formInvitarContratista, rut: e.target.value })
+                      }
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                      placeholder="76.999.999-9"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                      Correo de contacto
+                    </label>
+                    <input
+                      type="email"
+                      value={formInvitarContratista.correo}
+                      onChange={(e) =>
+                        setFormInvitarContratista({ ...formInvitarContratista, correo: e.target.value })
+                      }
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                      placeholder="documentos@empresa.cl"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
+                      Proyecto
+                    </label>
+                    <select
+                      value={formInvitarContratista.proyectoId}
+                      onChange={(e) =>
+                        setFormInvitarContratista({ ...formInvitarContratista, proyectoId: e.target.value })
+                      }
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                      required
+                    >
+                      <option value="">Selecciona un proyecto...</option>
+                      {GLOBAL_PROYECTOS.map(p => {
+                        const mandante = GLOBAL_MANDANTES.find(m => m.id === p.mandanteId);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {mandante ? `${mandante.nombre} · ` : ''}{p.nombre}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-cream">
+                    <button
+                      type="button"
+                      onClick={resetFormInvitarContratista}
+                      className="btn btn-ghost font-medium"
+                    >
+                      Cancelar
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Agregar contratista
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drawer Cliente Seleccionado */}
       {clienteSeleccionado && (
         <ClienteDetailDrawer
@@ -1070,17 +1234,17 @@ export default function AdminPortal() {
           setClienteSeleccionado={setClienteSeleccionado}
           tabCliente={tabCliente}
           setTabCliente={setTabCliente}
-          busquedaDoc={busquedaDoc}
-          setBusquedaDoc={setBusquedaDoc}
-          filtroEstado={filtroEstado}
-          setFiltroEstado={setFiltroEstado}
-          ordenDoc={ordenDoc}
-          setOrdenDoc={setOrdenDoc}
-          showToast={showToast}
-          setActividadSeleccionada={setActividadSeleccionada}
           GLOBAL_CONTRATISTAS={GLOBAL_CONTRATISTAS}
           GLOBAL_PROYECTOS={GLOBAL_PROYECTOS}
           GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+          onVerAcreditacion={(contratista, proyectoId, trabajador) => {
+            setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId, _fichaTrabajador: trabajador });
+          }}
+          onIrARevision={(docKey) => {
+            setSelectedDocKey(docKey);
+            setActiveTab('cola');
+            setClienteSeleccionado(null);
+          }}
         />
       )}
 

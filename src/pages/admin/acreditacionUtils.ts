@@ -59,7 +59,7 @@ const matchDoc = (docs: Documento[] | undefined, proyectoId: string, reqNombre: 
     (d.nombre.toLowerCase().includes(reqNombre.toLowerCase()) || reqNombre.toLowerCase().includes(d.nombre.toLowerCase()))
   );
 
-const docEstadoLabel = (doc: Documento | undefined): DocEstado => {
+export const docEstadoLabel = (doc: Documento | undefined): DocEstado => {
   if (!doc) return 'Pendiente';
   if (doc.estado === 'pendiente') return 'Pendiente';
   if (doc.estado === 'revision') return 'En revisión';
@@ -79,6 +79,13 @@ const docKeyIfRevisable = (doc: Documento | undefined, contratistaId: string, tr
   if (doc.estado !== 'revision' && doc.estado !== 'rechazado') return undefined;
   return buildDocumentoQueueKey(contratistaId, doc.id, trabajadorRut);
 };
+
+// Toda la aplicación habla el mismo idioma de estados visibles
+// (Acreditado / En proceso / Bloqueado), sea cual sea la pantalla.
+export type EstadoUI = 'Acreditado' | 'En proceso' | 'Bloqueado';
+
+export const estadoUILabel = (estado: Estado): EstadoUI =>
+  estado === 'Aprobado' ? 'Acreditado' : estado === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 
 export const badgeClass = (s: string) => {
   if (s === 'Aprobado') return 'green';

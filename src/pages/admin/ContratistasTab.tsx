@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
-import {
-  Search,
-  Download,
-  UserPlus,
-  MessageSquare,
-  Eye,
-} from 'lucide-react';
-import { Proyecto } from '../../types';
-import SeverityBadge, {
-  Severidad,
-  SEVERIDAD_LABEL,
-  SEVERIDAD_ORDEN,
-  severidadDeCumplimiento,
-} from '../../components/SeverityBadge';
-import { getContratistas } from '../../data/localStorageDb';
+import { useMemo, useState } from 'react';
+import { Search, UserPlus, Eye } from 'lucide-react';
+import { Contratista, Proyecto, Mandante } from '../../types';
+import { parseVencimientoDate } from '../../data/localStorageDb';
+import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
+
+type Filtro = 'todos' | 'bloqueados' | 'proceso' | 'acreditados';
+
+const CHIPS: Array<{ filtro: Filtro; label: string; punto: string }> = [
+  { filtro: 'bloqueados', label: 'Con bloqueos', punto: 'bg-[#a32d2d]' },
+  { filtro: 'proceso', label: 'En proceso', punto: 'bg-[#b58600]' },
+  { filtro: 'acreditados', label: 'Acreditados', punto: 'bg-[#1e7a3c]' },
+];
+
+const BADGE_CLASS: Record<string, string> = {
+  green: 'b-green bg-green-100 text-green-800',
+  amber: 'bg-yellow-100 text-yellow-800',
+  red: 'b-red bg-red-100 text-red-800',
+  gray: 'b-gray bg-gray-100 text-gray-500',
+};
 
 function getAvatarBgColor(name: string): string {
   let hash = 0;
@@ -34,130 +38,97 @@ function getAvatarBgColor(name: string): string {
   return colors[idx];
 }
 
-function getUltimaActividad(rut: string, originalList: any[]): string {
-  const dbC = originalList.find(c => c.rut === rut);
-  if (!dbC || !dbC.documentos || dbC.documentos.length === 0) return '—';
-  
-  const validDocs = dbC.documentos.filter((d: any) => d.subido && d.subido !== '—');
-  if (validDocs.length === 0) return '—';
-  
-  const parseDate = (dStr?: string) => {
-    if (!dStr) return 0;
-    const parts = dStr.split(' ');
-    if (parts.length < 3) return 0;
-    const day = parseInt(parts[0], 10);
-    const year = parseInt(parts[2], 10);
-    const months: Record<string, number> = {
-      'Ene': 0, 'Jan': 0,
-      'Feb': 1,
-      'Mar': 2,
-      'Abr': 3, 'Apr': 3,
-      'May': 4,
-      'Jun': 5,
-      'Jul': 6,
-      'Ago': 7, 'Aug': 7,
-      'Sep': 8,
-      'Oct': 9,
-      'Nov': 10,
-      'Dic': 11, 'Dec': 11
-    };
-    const month = months[parts[1]] || 0;
-    return new Date(year, month, day).getTime();
-  };
+const iniciales = (nombre: string) =>
+  nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
-  const sorted = [...validDocs].sort((a: any, b: any) => parseDate(b.subido) - parseDate(a.subido));
-  return sorted[0].subido || '—';
+// Última actividad de la empresa: el documento propio (no de trabajadores)
+// con la fecha de carga más reciente, reutilizando el mismo parser de
+// fechas que el resto del frontend en vez de uno propio. Sin fecha real
+// no se inventa una — se muestra "—".
+function ultimaActividad(contratista: Contratista): string {
+  const fechas = (contratista.documentos || [])
+    .map(d => ({ raw: d.subido, parsed: d.subido ? parseVencimientoDate(d.subido) : null }))
+    .filter((x): x is { raw: string; parsed: Date } => x.parsed !== null);
+  if (fechas.length === 0) return '—';
+  fechas.sort((a, b) => b.parsed.getTime() - a.parsed.getTime());
+  return fechas[0].raw || '—';
+}
+
+interface ContratistaView {
+  contratista: Contratista;
+  rows: AcredRow[];
+  acreditadas: number;
+  enProceso: number;
+  bloqueadas: number;
+  rank: number;
 }
 
 export default function ContratistasTab({
-  EMPRESAS_CONTRATISTAS,
-  setClienteSeleccionado,
-  GLOBAL_PROYECTOS = [],
+  GLOBAL_CONTRATISTAS,
+  GLOBAL_PROYECTOS,
+  GLOBAL_MANDANTES,
+  onVerContratista,
+  setShowInvitarContratistaModal,
 }: {
-  EMPRESAS_CONTRATISTAS: any[];
-  setClienteSeleccionado: (v: any) => void;
-  GLOBAL_PROYECTOS?: Proyecto[];
+  GLOBAL_CONTRATISTAS: Contratista[];
+  GLOBAL_PROYECTOS: Proyecto[];
+  GLOBAL_MANDANTES: Mandante[];
+  onVerContratista: (contratista: Contratista) => void;
+  setShowInvitarContratistaModal: (v: boolean) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
-  const [proyectoFiltro, setProyectoFiltro] = useState('todos');
-  const [sevFiltro, setSevFiltro] = useState<Severidad | null>(null);
+  const [proyectoFiltro, setProyectoFiltro] = useState('');
+  const [filtro, setFiltro] = useState<Filtro>('todos');
 
-  const dbContratistas = getContratistas();
+  // Misma fuente de verdad que Acreditaciones y Mandantes: una fila por
+  // (contratista, proyecto asignado), con su estado real de acreditación.
+  const acreditacionRows = useMemo(
+    () => buildAcreditacionRows(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES),
+    [GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES]
+  );
 
-  const conSeveridad = EMPRESAS_CONTRATISTAS.map(c => ({
-    ...c,
-    sev: severidadDeCumplimiento(c.cumplimiento),
-  }));
+  const contratistas: ContratistaView[] = useMemo(() => {
+    return GLOBAL_CONTRATISTAS.map(c => {
+      const rows = acreditacionRows.filter(r => r.contratista.id === c.id);
+      const bloqueadas = rows.filter(r => r.estado === 'Vencido/Bloqueado').length;
+      const enProceso = rows.filter(r => r.estado === 'En proceso').length;
+      const acreditadas = rows.filter(r => r.estado === 'Aprobado').length;
+      const rank = bloqueadas > 0 ? 0 : enProceso > 0 ? 1 : acreditadas > 0 ? 2 : 3;
+      return { contratista: c, rows, acreditadas, enProceso, bloqueadas, rank };
+    });
+  }, [GLOBAL_CONTRATISTAS, acreditacionRows]);
 
-  const conteo: Record<Severidad, number> = {
-    critico: conSeveridad.filter(c => c.sev === 'critico').length,
-    atencion: conSeveridad.filter(c => c.sev === 'atencion').length,
-    normal: conSeveridad.filter(c => c.sev === 'normal').length,
+  const conteo: Record<Filtro, number> = {
+    todos: contratistas.length,
+    bloqueados: contratistas.filter(c => c.bloqueadas > 0).length,
+    proceso: contratistas.filter(c => c.bloqueadas === 0 && c.enProceso > 0).length,
+    acreditados: contratistas.filter(c => c.rows.length > 0 && c.bloqueadas === 0 && c.enProceso === 0).length,
   };
 
   const termino = busqueda.trim().toLowerCase();
-  const visibles = conSeveridad
+
+  const visibles = contratistas
     .filter(c => {
       const coincideBusqueda =
         !termino ||
-        c.empresa?.toLowerCase().includes(termino) ||
-        c.rut?.toLowerCase().includes(termino);
-      const coincideProyecto =
-        proyectoFiltro === 'todos' || (c.proyectos || []).includes(proyectoFiltro);
-      const coincideSev = !sevFiltro || c.sev === sevFiltro;
-      return coincideBusqueda && coincideProyecto && coincideSev;
+        c.contratista.nombre.toLowerCase().includes(termino) ||
+        c.contratista.rut.toLowerCase().includes(termino);
+      const coincideProyecto = !proyectoFiltro || c.contratista.proyectos.includes(proyectoFiltro);
+      const coincideFiltro =
+        filtro === 'todos' ? true
+          : filtro === 'bloqueados' ? c.bloqueadas > 0
+            : filtro === 'proceso' ? (c.bloqueadas === 0 && c.enProceso > 0)
+              : (c.rows.length > 0 && c.bloqueadas === 0 && c.enProceso === 0);
+      return coincideBusqueda && coincideProyecto && coincideFiltro;
     })
-    .sort(
-      (a, b) =>
-        SEVERIDAD_ORDEN[a.sev as Severidad] - SEVERIDAD_ORDEN[b.sev as Severidad] ||
-        String(a.empresa).localeCompare(String(b.empresa))
-    );
+    .sort((a, b) => a.rank - b.rank || a.contratista.nombre.localeCompare(b.contratista.nombre));
 
-  const hayFiltros = termino !== '' || proyectoFiltro !== 'todos' || sevFiltro !== null;
+  const hayFiltros = termino !== '' || proyectoFiltro !== '' || filtro !== 'todos';
 
   const limpiarFiltros = () => {
     setBusqueda('');
-    setProyectoFiltro('todos');
-    setSevFiltro(null);
-  };
-
-  const renderProgressRing = (pct: number, sev: Severidad) => {
-    const size = 32;
-    const stroke = 3;
-    const r = (size - stroke) / 2;
-    const strokeLength = 2 * Math.PI * r;
-    const strokeOffset = strokeLength - (pct / 100) * strokeLength;
-    
-    const strokeColor =
-      sev === 'critico'
-        ? 'stroke-[#a32d2d]'
-        : sev === 'atencion'
-        ? 'stroke-[#b58600]'
-        : 'stroke-[#1e7a3c]';
-
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg] shrink-0">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          className="stroke-gray-100"
-          strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          className={`${strokeColor} transition-all duration-300`}
-          strokeWidth={stroke}
-          strokeDasharray={strokeLength}
-          strokeDashoffset={strokeOffset}
-          strokeLinecap="round"
-        />
-      </svg>
-    );
+    setProyectoFiltro('');
+    setFiltro('todos');
   };
 
   return (
@@ -165,7 +136,7 @@ export default function ContratistasTab({
       {/* Premium Dark Brand Band Header */}
       <div className="relative overflow-hidden bg-gradient-to-br from-navy to-navy-2 px-8 py-4 pb-12 -mx-8 -mt-6">
         <div className="absolute top-[-30%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[radial-gradient(circle,rgba(154,105,78,0.15),transparent_70%)] pointer-events-none" />
-        
+
         <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
           <div>
             <span className="text-[11px] tracking-[2px] uppercase font-semibold text-gold-hover">
@@ -173,16 +144,15 @@ export default function ContratistasTab({
             </span>
             <h2 className="text-2xl font-semibold text-white mt-1">Contratistas</h2>
             <p className="text-[13.5px] text-gray-300 mt-1.5 max-w-[550px]">
-              Empresas contratistas y subcontratistas asignadas a proyectos, con su estado de acreditación en tiempo real.
+              Empresas contratistas asignadas a proyectos, con el estado de sus acreditaciones.
             </p>
           </div>
-          
+
           <div className="flex gap-2.5 shrink-0">
-            <button className="px-4.5 py-2.5 rounded-xl border border-white/20 bg-white/5 text-gray-100 hover:bg-white/10 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all">
-              <Download size={15} />
-              Exportar
-            </button>
-            <button className="px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-hover to-gold text-white hover:brightness-105 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_6px_16px_rgba(179,137,63,0.35)] border-none">
+            <button
+              onClick={() => setShowInvitarContratistaModal(true)}
+              className="px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-hover to-gold text-white hover:brightness-105 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_6px_16px_rgba(179,137,63,0.35)] border-none"
+            >
               <UserPlus size={15} />
               Invitar contratista
             </button>
@@ -192,60 +162,42 @@ export default function ContratistasTab({
 
       {/* Main Content Area (floated up) */}
       <div className="relative z-20 -mt-8 max-w-[1200px] mx-auto px-1 flex flex-col gap-5">
-        
+
         {/* Toolbar & Table Panel */}
         <div className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden flex flex-col">
-          
+
           {/* Toolbar */}
           <div className="p-4 border-b border-cream3 flex flex-wrap items-center justify-between gap-3">
-            
+
             {/* Segmented Control */}
             <div className="flex bg-[#f1efe6] border border-cream3 rounded-xl p-1 gap-1">
               <button
-                onClick={() => setSevFiltro(null)}
+                onClick={() => setFiltro('todos')}
                 className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1 ${
-                  sevFiltro === null
+                  filtro === 'todos'
                     ? 'bg-white text-navy shadow-sm'
                     : 'text-gray-500 hover:text-navy hover:bg-white/40'
                 }`}
               >
-                Todos <span className="opacity-60 text-xs ml-0.5">{EMPRESAS_CONTRATISTAS.length}</span>
+                Todos <span className="opacity-60 text-xs ml-0.5">{conteo.todos}</span>
               </button>
-              <button
-                onClick={() => setSevFiltro('critico')}
-                className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
-                  sevFiltro === 'critico'
-                    ? 'bg-white text-navy shadow-sm'
-                    : 'text-gray-500 hover:text-navy hover:bg-white/40'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#a32d2d]" />
-                Críticos <span className="opacity-60 text-xs">{conteo.critico}</span>
-              </button>
-              <button
-                onClick={() => setSevFiltro('atencion')}
-                className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
-                  sevFiltro === 'atencion'
-                    ? 'bg-white text-navy shadow-sm'
-                    : 'text-gray-500 hover:text-navy hover:bg-white/40'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#b58600]" />
-                Atención <span className="opacity-60 text-xs">{conteo.atencion}</span>
-              </button>
-              <button
-                onClick={() => setSevFiltro('normal')}
-                className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
-                  sevFiltro === 'normal'
-                    ? 'bg-white text-navy shadow-sm'
-                    : 'text-gray-500 hover:text-navy hover:bg-white/40'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#1e7a3c]" />
-                Al día <span className="opacity-60 text-xs">{conteo.normal}</span>
-              </button>
+              {CHIPS.map(({ filtro: f, label, punto }) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltro(filtro === f ? 'todos' : f)}
+                  aria-pressed={filtro === f}
+                  className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
+                    filtro === f
+                      ? 'bg-white text-navy shadow-sm'
+                      : 'text-gray-500 hover:text-navy hover:bg-white/40'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${punto}`} />
+                  {label} <span className="opacity-60 text-xs">{conteo[f]}</span>
+                </button>
+              ))}
             </div>
-            
+
             {/* Search & Project Filter */}
             <div className="flex items-center gap-2 flex-wrap flex-1 justify-end max-w-full">
               <div className="relative min-w-[200px] flex-1 max-w-[320px]">
@@ -261,19 +213,19 @@ export default function ContratistasTab({
                   className="form-input w-full pl-9 py-2 text-[13px] bg-[#f1efe6] border-cream3 focus:bg-white transition-all rounded-xl"
                 />
               </div>
-              
+
               <select
                 value={proyectoFiltro}
                 onChange={e => setProyectoFiltro(e.target.value)}
                 className="form-input py-2 text-[13px] min-w-[180px] bg-[#f1efe6] border-cream3 rounded-xl cursor-pointer"
               >
-                <option value="todos">Todos los proyectos</option>
+                <option value="">Todos los proyectos</option>
                 {GLOBAL_PROYECTOS.map(p => (
-                  <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
                 ))}
               </select>
             </div>
-            
+
           </div>
 
           {/* Table */}
@@ -282,87 +234,102 @@ export default function ContratistasTab({
               <thead>
                 <tr className="border-b border-cream3">
                   <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Empresa</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Proyectos</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Documentación</th>
-                  <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
+                  {proyectoFiltro ? (
+                    <>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Requisitos empresa</th>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Trabajadores</th>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Estado</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Proyectos</th>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Trabajadores</th>
+                      <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Acreditaciones</th>
+                    </>
+                  )}
                   <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2">Última actividad</th>
                   <th className="px-4 py-3.5 text-[10.5px] uppercase font-bold tracking-wider text-gray-500 bg-cream2 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {visibles.map((c, i) => {
-                  const total = c.docsTotal ?? 0;
-                  const aprobados = c.docsAprobados ?? 0;
-                  const pct = total > 0 ? Math.round((aprobados / total) * 100) : 0;
-                  const sev = c.sev as Severidad;
-                  const avatarBg = getAvatarBgColor(c.empresa || '');
-                  const ultimaActividad = getUltimaActividad(c.rut, dbContratistas);
+                {visibles.map(cv => {
+                  const c = cv.contratista;
+                  const avatarBg = getAvatarBgColor(c.nombre);
+                  const trabajadoresCount = (c.trabajadores || []).length;
+                  const rowFiltrada = proyectoFiltro ? cv.rows.find(r => r.proyectoId === proyectoFiltro) : undefined;
 
                   return (
                     <tr
-                      key={`${c.rut}-${i}`}
-                      onClick={() => setClienteSeleccionado(c)}
+                      key={c.id}
+                      onClick={() => onVerContratista(c)}
                       className="hover:bg-[#fbfaf6] cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-xl ${avatarBg} text-white flex items-center justify-center font-bold text-[13px] tracking-wide shrink-0 shadow-sm`}>
-                            {c.iniciales}
+                            {iniciales(c.nombre)}
                           </div>
                           <div>
-                            <div className="text-[14px] font-semibold text-navy tracking-tight">{c.empresa}</div>
+                            <div className="text-[14px] font-semibold text-navy tracking-tight">{c.nombre}</div>
                             <div className="text-[11.5px] text-gray-400 font-medium mt-0.5">{c.rut}</div>
                           </div>
                         </div>
                       </td>
-                      
+
+                      {proyectoFiltro ? (
+                        rowFiltrada ? (
+                          <>
+                            <td className="px-4 py-3">
+                              <div className="text-[13px] font-bold text-navy">{rowFiltrada.company.ok}/{rowFiltrada.company.total}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-[13px] font-bold text-navy">{rowFiltrada.workers.ok}/{rowFiltrada.workers.total}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`badge text-[11px] ${BADGE_CLASS[badgeClass(rowFiltrada.estado)]}`}>
+                                {estadoUILabel(rowFiltrada.estado)}
+                              </span>
+                            </td>
+                          </>
+                        ) : (
+                          <td className="px-4 py-3 text-[12px] text-gray-400" colSpan={3}>No asignado a este proyecto</td>
+                        )
+                      ) : (
+                        <>
+                          <td className="px-4 py-3">
+                            <span className="text-[13px] font-semibold text-navy">{c.proyectos.length}</span>
+                            <span className="text-[11.5px] text-gray-400"> proyecto{c.proyectos.length === 1 ? '' : 's'}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-[13px] font-semibold text-navy">{trabajadoresCount}</span>
+                            <span className="text-[11.5px] text-gray-400"> trabajador{trabajadoresCount === 1 ? '' : 'es'}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {cv.rows.length === 0 ? (
+                              <span className="text-[12px] text-gray-400">Sin proyectos</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11.5px] font-medium">
+                                {cv.acreditadas > 0 && <span className="text-emerald-700">{cv.acreditadas} acreditada{cv.acreditadas === 1 ? '' : 's'}</span>}
+                                {cv.enProceso > 0 && <span className="text-amber-700">{cv.enProceso} en proceso</span>}
+                                {cv.bloqueadas > 0 && <span className="text-red-700">{cv.bloqueadas} bloqueada{cv.bloqueadas === 1 ? '' : 's'}</span>}
+                              </div>
+                            )}
+                          </td>
+                        </>
+                      )}
+
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1 max-w-[220px]">
-                          {(c.proyectos || []).map((p: string, j: number) => (
-                            <span
-                              key={j}
-                              className="text-[10.5px] bg-cream2 text-navy border border-cream3 rounded-md px-2 py-0.5 font-medium"
-                            >
-                              {p}
-                            </span>
-                          ))}
-                        </div>
+                        <span className="text-[12px] text-gray-500 font-medium">{ultimaActividad(c)}</span>
                       </td>
-                      
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3 min-w-[140px]">
-                          {renderProgressRing(pct, sev)}
-                          <div>
-                            <div className="text-[13px] font-bold text-navy">{aprobados}/{total}</div>
-                            <div className="text-[11px] text-gray-500 font-medium">{pct}% completo</div>
-                          </div>
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-3">
-                        <SeverityBadge severidad={sev} formato="corto" />
-                      </td>
-                      
-                      <td className="px-4 py-3">
-                        <span className="text-[12px] text-gray-500 font-medium">{ultimaActividad}</span>
-                      </td>
-                      
+
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            title="Enviar mensaje"
-                            className="w-8 h-8 rounded-lg border border-cream3 bg-white text-navy flex items-center justify-center cursor-pointer hover:bg-navy hover:text-white transition-all shrink-0"
-                          >
-                            <MessageSquare size={14} />
-                          </button>
-                          <button
-                            title="Ver ficha"
-                            onClick={() => setClienteSeleccionado(c)}
-                            className="w-8 h-8 rounded-lg bg-gold-soft border border-gold-soft text-gold flex items-center justify-center cursor-pointer hover:bg-gold hover:text-white transition-all shrink-0"
-                          >
-                            <Eye size={14} />
-                          </button>
-                        </div>
+                        <button
+                          title="Ver ficha"
+                          onClick={() => onVerContratista(c)}
+                          className="w-8 h-8 rounded-lg bg-gold-soft border border-gold-soft text-gold flex items-center justify-center cursor-pointer hover:bg-gold hover:text-white transition-all shrink-0 ml-auto"
+                        >
+                          <Eye size={14} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -385,8 +352,7 @@ export default function ContratistasTab({
           )}
 
           <div className="text-[12px] text-gray-400 px-4 py-3.5 border-t border-cream2 font-medium">
-            Mostrando {visibles.length} de {EMPRESAS_CONTRATISTAS.length} contratistas
-            {sevFiltro && ` · filtrando por ${SEVERIDAD_LABEL[sevFiltro]}`}
+            Mostrando {visibles.length} de {contratistas.length} contratistas
           </div>
 
         </div>

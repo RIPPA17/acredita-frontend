@@ -1,15 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Plus, ChevronRight, Search } from 'lucide-react';
 import { Contratista, Proyecto, Mandante } from '../../types';
-import { buildAcreditacionRows, AcredRow, Estado } from './acreditacionUtils';
+import { buildAcreditacionRows, AcredRow, EstadoUI, estadoUILabel } from './acreditacionUtils';
 
 // Mandantes habla el mismo idioma de estados que Acreditaciones e Inicio —
 // sin una segunda taxonomía de severidad (Crítico/Atención/Al día).
-type EstadoUI = 'Acreditado' | 'En proceso' | 'Bloqueado';
 type EstadoConNeutro = EstadoUI | 'Sin proyectos' | 'Sin contratistas';
-
-const estadoUI = (estado: Estado): EstadoUI =>
-  estado === 'Aprobado' ? 'Acreditado' : estado === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 
 const RANK: Record<EstadoConNeutro, number> = {
   Bloqueado: 0,
@@ -104,7 +100,7 @@ export default function MandantesTab({
         .map(p => {
           const acreditaciones = rows
             .filter(r => r.proyectoId === p.id)
-            .map(r => ({ ...r, estadoUILabel: estadoUI(r.estado) }))
+            .map(r => ({ ...r, estadoUILabel: estadoUILabel(r.estado) }))
             .sort((a, b) => RANK[a.estadoUILabel] - RANK[b.estadoUILabel] || a.entity.localeCompare(b.entity));
 
           const bloqueadas = acreditaciones.filter(a => a.estadoUILabel === 'Bloqueado').length;
