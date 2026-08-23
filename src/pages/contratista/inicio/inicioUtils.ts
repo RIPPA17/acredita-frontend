@@ -13,27 +13,9 @@ import {
   calcularEstadoTrabajador,
 } from '../../../data/localStorageDb';
 import { docEstadoLabel, DocEstado } from '../../admin/acreditacionUtils';
+import { matchDocumentoRequisito } from '../documentosUtils';
 
-export function normalizarNombreDocumento(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
-export function matchDocumentoRequisito(
-  docs: Documento[] | undefined,
-  proyectoId: string,
-  reqNombre: string
-): Documento | undefined {
-  return (docs || []).find(
-    d =>
-      d.proyectoId === proyectoId &&
-      normalizarNombreDocumento(d.nombre) === normalizarNombreDocumento(reqNombre)
-  );
-}
+export { matchDocumentoRequisito, normalizarNombreDocumento } from '../documentosUtils';
 
 export interface RequisitoConDoc {
   requisito: Requisito;

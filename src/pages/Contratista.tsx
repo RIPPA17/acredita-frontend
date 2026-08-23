@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, getMotivoBloqueoTrabajador, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import DocumentDetailPanel from './contratista/DocumentDetailPanel';
@@ -18,6 +18,7 @@ import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
 import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
+import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -55,7 +56,6 @@ export default function ContratistaPortal() {
     nombre: '',
     rut: '',
     cargo: '',
-    faena: ''
   });
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
@@ -94,9 +94,7 @@ export default function ContratistaPortal() {
       const filteredDocs = cObj.documentos.filter(d => d.proyectoId === selectedProyectoId);
       setDocumentosData(filteredDocs);
       
-      const projectWorkers = cObj.trabajadores?.filter(w => 
-        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
-      ) || [];
+      const projectWorkers = cObj.trabajadores?.filter(w => esTrabajadorAsignado(w, selectedProyectoId, misProyectos)) || [];
       setTrabajadoresData(projectWorkers);
     }
   }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
@@ -226,65 +224,52 @@ export default function ContratistaPortal() {
       return;
     }
 
-    // Get requirements for the active project
     const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
-    const workerDocs = projectReqs.map((r, idx) => ({
-      id: `wdoc_${Date.now()}_${idx}`,
-      nombre: r.nombre,
-      categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
-      estado: 'pendiente' as const,
-      vencimiento: '—',
-      proyectoId: selectedProyectoId
-    }));
-
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
-    if (currentIdx !== -1) {
-      const existingWorkerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === newWorkerForm.rut);
-      if (existingWorkerIdx !== undefined && existingWorkerIdx !== -1) {
-        const existingWorker = list[currentIdx].trabajadores![existingWorkerIdx];
-        const otherProjId = existingWorker.documentos?.[0]?.proyectoId || selectedProyectoId;
-        const globalState = calcularEstadoTrabajador(existingWorker, otherProjId);
-        if (globalState !== 'aprobado') {
-          const motivo = getMotivoBloqueoTrabajador(existingWorker, otherProjId);
-          showToast(`No se puede asignar: El trabajador ${existingWorker.nombre} está ${globalState === 'rechazado' ? 'Bloqueado' : 'En proceso'} (${motivo}).`, 'error');
-          return;
-        }
-
-        if (!existingWorker.documentos) existingWorker.documentos = [];
-        const alreadyHasDocs = existingWorker.documentos.some(d => d.proyectoId === selectedProyectoId);
-        if (!alreadyHasDocs) {
-          existingWorker.documentos = [...existingWorker.documentos, ...workerDocs];
-        }
-        existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
-      } else {
-        const newWorker = {
-          nombre: newWorkerForm.nombre,
-          rut: newWorkerForm.rut,
-          estado: 'pendiente' as const,
-          cargo: newWorkerForm.cargo || 'Operario',
-          faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || 'Planta Norte',
-          cumplimiento: 0,
-          documentos: workerDocs
-        };
-        if (!list[currentIdx].trabajadores) {
-          list[currentIdx].trabajadores = [];
-        }
-        list[currentIdx].trabajadores!.push(newWorker);
-      }
-      saveContratistas(list);
-
-      const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
-        w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
-      ) || [];
-      setTrabajadoresData(projectWorkers);
+    if (currentIdx === -1) {
+      showToast('No fue posible encontrar al contratista.', 'error');
+      return;
     }
+
+    const contratista = list[currentIdx];
+    contratista.trabajadores ||= [];
+    const existingWorker = contratista.trabajadores.find(w => w.rut === newWorkerForm.rut);
+    if (existingWorker && esTrabajadorAsignado(existingWorker, selectedProyectoId, misProyectos)) {
+      showToast('Este trabajador ya está asignado a este proyecto.', 'warning');
+      return;
+    }
+
+    const workerDocs = crearDocumentosPendientesProyecto(
+      projectReqs,
+      contratista.id,
+      selectedProyectoId,
+      newWorkerForm.rut,
+    );
+
+    if (existingWorker) {
+      existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
+      existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
+    } else {
+      contratista.trabajadores.push({
+        nombre: newWorkerForm.nombre,
+        rut: newWorkerForm.rut,
+        estado: 'pendiente',
+        cargo: newWorkerForm.cargo || 'Operario',
+        faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
+        cumplimiento: 0,
+        documentos: workerDocs,
+      });
+    }
+
+    saveContratistas(list);
+    setTrabajadoresData(contratista.trabajadores.filter(w => esTrabajadorAsignado(w, selectedProyectoId, misProyectos)));
+    setDataRevision(value => value + 1);
 
     setNewWorkerForm({
       nombre: '',
       rut: '',
       cargo: '',
-      faena: ''
     });
     setShowAddWorkerModal(false);
     showToast('Trabajador agregado con éxito');
@@ -659,10 +644,11 @@ export default function ContratistaPortal() {
               setFichaTipo={setFichaTipo}
               setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
-              setSelectedDocumentForPanel={setSelectedDocumentForPanel}
               misProyectos={misProyectos}
-              trabajadoresData={trabajadoresData}
+              allMandantes={allMandantes}
               setShowAddWorkerModal={setShowAddWorkerModal}
+              onDataChanged={() => setDataRevision(value => value + 1)}
+              showToast={showToast}
             />
           )}
 
@@ -728,7 +714,7 @@ export default function ContratistaPortal() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-semibold text-navy text-[17.6px] flex items-center gap-2">
-                <UserPlus size={18} className="text-brown" /> Agregar trabajador
+                <UserPlus size={18} className="text-brown" /> Agregar trabajador al proyecto
               </h3>
               <button 
                 onClick={() => setShowAddWorkerModal(false)}
@@ -739,98 +725,14 @@ export default function ContratistaPortal() {
             </div>
             
             <form onSubmit={handleAddWorkerSubmit} className="p-6 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
-              {(() => {
-                const list = getContratistas();
-                const currentC = list.find(c => c.id === contratistaLogueado.id);
-                const existingWorkers = currentC?.trabajadores || [];
-                const unassignedWorkers = existingWorkers.filter(w => !w.documentos?.some(d => d.proyectoId === selectedProyectoId));
-
-                if (unassignedWorkers.length === 0) return null;
-
-                return (
-                  <div className="border-b border-cream3 pb-4 mb-2">
-                    <label className="block text-[13px] font-bold text-navy mb-2">Asignar de la plantilla de la empresa</label>
-                    <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
-                      {unassignedWorkers.map(w => {
-                        const globalProjId = w.documentos?.[0]?.proyectoId || selectedProyectoId;
-                        const globalState = calcularEstadoTrabajador(w, globalProjId);
-                        const isAprobado = globalState === 'aprobado';
-                        
-                        const stateBadge = globalState === 'aprobado' ? 'b-green' : globalState === 'rechazado' ? 'b-red' : 'b-yellow';
-                        const statusLabel = globalState === 'aprobado' ? 'Aprobado' : globalState === 'rechazado' ? 'Bloqueado' : 'En proceso';
-                        const motivo = globalState !== 'aprobado' ? getMotivoBloqueoTrabajador(w, globalProjId) : '';
-
-                        return (
-                          <div key={w.rut} className="flex justify-between items-center p-2.5 bg-cream/30 border border-cream3 rounded-lg text-[12.5px] font-sans">
-                            <div className="flex-1 min-w-0 mr-2">
-                              <div className="font-semibold text-navy truncate">{w.nombre}</div>
-                              <div className="text-[11px] text-gray-500 font-mono">{w.rut}</div>
-                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                <span className={`badge ${stateBadge} text-[9px] py-0 px-1`}>{statusLabel}</span>
-                                {motivo && <span className="text-[10px] text-red-600 font-semibold truncate max-w-[130px]" title={motivo}>{motivo}</span>}
-                              </div>
-                            </div>
-                            {isAprobado ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
-                                  const workerDocs = projectReqs.map((r, idx) => ({
-                                    id: `wdoc_${Date.now()}_${idx}`,
-                                    nombre: r.nombre,
-                                    categoria: r.categoria as 'Laboral' | 'Prevención' | 'Tributario',
-                                    estado: 'pendiente' as const,
-                                    vencimiento: '—',
-                                    proyectoId: selectedProyectoId
-                                  }));
-
-                                  const listData = getContratistas();
-                                  const currentIdx = listData.findIndex(c => c.id === contratistaLogueado.id);
-                                  if (currentIdx !== -1) {
-                                    const workerIdx = listData[currentIdx].trabajadores?.findIndex(tw => tw.rut === w.rut);
-                                    if (workerIdx !== undefined && workerIdx !== -1) {
-                                      const wk = listData[currentIdx].trabajadores![workerIdx];
-                                      if (!wk.documentos) wk.documentos = [];
-                                      wk.documentos = [...wk.documentos, ...workerDocs];
-                                      wk.estado = calcularEstadoTrabajador(wk, selectedProyectoId);
-                                      saveContratistas(listData);
-
-                                      const updatedWorkers = listData[currentIdx].trabajadores?.filter(tw => 
-                                        tw.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
-                                      ) || [];
-                                      setTrabajadoresData(updatedWorkers);
-                                      showToast(`Trabajador ${w.nombre} asignado con éxito`);
-                                      setShowAddWorkerModal(false);
-                                    }
-                                  }
-                                }}
-                                className="btn btn-primary btn-sm py-1 px-2.5 text-[11px] shrink-0 font-medium"
-                              >
-                                Asignar
-                              </button>
-                            ) : (
-                              <span className="badge b-gray py-1 px-2 text-[10.5px] text-gray-500 font-semibold cursor-not-allowed shrink-0">
-                                [No habilitado]
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="text-[13px] font-bold text-navy border-t border-cream pt-2 mt-1">Registrar nuevo trabajador</div>
-
               <div>
-                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Nombre Completo</label>
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Nombre completo</label>
                 <input 
                   type="text" 
                   value={newWorkerForm.nombre}
                   onChange={(e) => setNewWorkerForm({...newWorkerForm, nombre: e.target.value})}
                   className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm" 
-                  placeholder="Juan Pérez" 
+                  placeholder="Ej. María González"
                   required 
                 />
               </div>
@@ -848,29 +750,19 @@ export default function ContratistaPortal() {
               </div>
 
               <div>
-                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Cargo / Función</label>
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Cargo</label>
                 <input 
                   type="text" 
                   value={newWorkerForm.cargo}
                   onChange={(e) => setNewWorkerForm({...newWorkerForm, cargo: e.target.value})}
                   className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm" 
-                  placeholder="Operador de Maquinaria, Jornalero, Eléctrico..." 
+                  placeholder="Ej. Operador"
                   required 
                 />
               </div>
 
-              <div>
-                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Asignar a Faena / Proyecto</label>
-                <select 
-                  value={newWorkerForm.faena}
-                  onChange={(e) => setNewWorkerForm({...newWorkerForm, faena: e.target.value})}
-                  className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm bg-white"
-                  required
-                >
-                  {misProyectos.map(p => (
-                    <option key={p.id} value={p.nombre}>{p.nombre}</option>
-                  ))}
-                </select>
+              <div className="text-[11px] leading-relaxed bg-cream2 p-3 rounded-lg text-gray-600">
+                La asignación es propia de este proyecto. Si el trabajador ya existe en otro proyecto, puede incorporarse aquí igualmente y se generará su checklist documental para este proyecto.
               </div>
 
               <div className="flex gap-3 mt-4">
@@ -885,7 +777,7 @@ export default function ContratistaPortal() {
                   type="submit"
                   className="flex-1 btn btn-primary py-2.5 font-medium rounded-lg text-sm"
                 >
-                  Guardar
+                  Agregar trabajador
                 </button>
               </div>
             </form>

@@ -1,25 +1,19 @@
 import { useState } from 'react';
 import {
-  calcularEstadoTrabajador,
-  DEMO_TODAY,
-  esPorVencerPorFecha,
   esTrabajadorAsignado,
-  esVencidoPorFecha,
-  getContratistas,
   getRequisitos,
   obtenerDiasRestantes,
-  saveContratistas,
 } from '../../data/localStorageDb';
-import { Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
+import { Contratista, Mandante, Proyecto } from '../../types';
 import { DocEstado } from '../admin/acreditacionUtils';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
   impactoLabel,
-  matchDocumentoRequisito,
   normalizarNombreDocumento,
   RequisitoConDoc,
 } from './inicio/inicioUtils';
+import { getEstadoDocumentoEfectivo, subirDocumentoRequisito } from './documentosUtils';
 
 // Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
 // reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
@@ -49,37 +43,6 @@ interface Row extends RequisitoConDoc {
   key: string;
   scope: 'empresa' | 'trabajadores';
   ownerNombre: string;
-}
-
-function estadoEfectivo(doc: Documento | undefined, requisito: Requisito): DocEstado {
-  if (!doc || doc.estado === 'pendiente') return 'Pendiente';
-  if (doc.estado === 'rechazado') return 'Rechazado';
-  if (doc.estado === 'revision') return 'En revisión';
-  if (doc.estado === 'por_vencer') return 'Por vencer';
-  if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
-  if (esPorVencerPorFecha(doc.vencimiento, requisito.alertaDias)) return 'Por vencer';
-  return 'Aprobado';
-}
-
-function fechaCargaDemo(): string {
-  return new Intl.DateTimeFormat('es-CL', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(DEMO_TODAY);
-}
-
-function idDocumento(item: Row, contratistaId: string, proyectoId: string): string {
-  const owner = item.worker?.rut || 'empresa';
-  return `doc_${contratistaId}_${proyectoId}_${item.requisito.id}_${owner}`
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '_');
-}
-
-function archivoDocumento(item: Row, version: number): string {
-  const nombre = normalizarNombreDocumento(item.requisito.nombre).replace(/\s+/g, '-');
-  return `${nombre}-v${version}.pdf`;
 }
 
 function accionDoc(item: Row): { label: string; cls: string } {
@@ -169,7 +132,7 @@ export default function SubirTab({
     ? [
         ...buildRequisitosEmpresa(contratistaLogueado, proyectoActual.id, requisitosAll).map(item => ({
           ...item,
-          estado: estadoEfectivo(item.doc, item.requisito),
+          estado: getEstadoDocumentoEfectivo(item.doc, item.requisito),
           key: item.requisito.id,
           scope: 'empresa' as const,
           ownerNombre: contratistaLogueado.nombre,
@@ -177,7 +140,7 @@ export default function SubirTab({
         ...trabajadoresAsignados.flatMap(w =>
           buildRequisitosTrabajador(w, proyectoActual.id, requisitosAll).map(item => ({
             ...item,
-            estado: estadoEfectivo(item.doc, item.requisito),
+            estado: getEstadoDocumentoEfectivo(item.doc, item.requisito),
             key: `${item.requisito.id}::${w.rut}`,
             scope: 'trabajadores' as const,
             ownerNombre: w.nombre,
@@ -227,79 +190,16 @@ export default function SubirTab({
   const subirDocumento = (item: Row) => {
     if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado)) return;
 
-    const contratistas = getContratistas();
-    const contratistaIndex = contratistas.findIndex(c => c.id === contratistaLogueado.id);
-    if (contratistaIndex === -1) {
-      showToast('No fue posible encontrar al contratista.', 'error');
+    const result = subirDocumentoRequisito({
+      contratistaId: contratistaLogueado.id,
+      proyectoId: selectedProyectoId,
+      requisito: item.requisito,
+      trabajadorRut: item.worker?.rut,
+    });
+    if (!result.success) {
+      showToast(result.error || 'No fue posible actualizar el documento.', 'error');
       return;
     }
-
-    const contratista = contratistas[contratistaIndex];
-    let documentos: Documento[];
-    let trabajador: Trabajador | undefined;
-
-    if (item.scope === 'trabajadores') {
-      trabajador = contratista.trabajadores?.find(w => w.rut === item.worker?.rut);
-      if (!trabajador) {
-        showToast('No fue posible encontrar al trabajador del requisito.', 'error');
-        return;
-      }
-      trabajador.documentos ||= [];
-      documentos = trabajador.documentos;
-    } else {
-      documentos = contratista.documentos;
-    }
-
-    let documento = matchDocumentoRequisito(documentos, selectedProyectoId, item.requisito.nombre);
-    const fecha = fechaCargaDemo();
-
-    if (!documento) {
-      documento = {
-        id: idDocumento(item, contratista.id, selectedProyectoId),
-        nombre: item.requisito.nombre,
-        categoria: item.requisito.categoria,
-        estado: 'revision',
-        vencimiento: '—',
-        proyectoId: selectedProyectoId,
-        subido: fecha,
-        version: 1,
-        archivoReferencia: archivoDocumento(item, 1),
-        historial: [],
-      };
-      documentos.push(documento);
-    } else {
-      const versionAnterior = documento.version || 1;
-      const tieneVersionAnterior = Boolean(documento.archivoReferencia || documento.subido || documento.estado !== 'pendiente');
-      if (tieneVersionAnterior) {
-        documento.historial = [
-          ...(documento.historial || []),
-          {
-            version: versionAnterior,
-            estado: documento.estado,
-            fecha: documento.fechaRevisado || documento.subido || '—',
-            motivoRechazo: documento.motivoRechazo || documento.motivo,
-            explicacionRechazo: documento.explicacionRechazo || documento.observacion,
-            verificador: documento.revisor,
-          },
-        ];
-        documento.version = versionAnterior + 1;
-      } else {
-        documento.version = versionAnterior;
-      }
-      documento.estado = 'revision';
-      documento.subido = fecha;
-      documento.archivoReferencia = archivoDocumento(item, documento.version || 1);
-      documento.motivoRechazo = undefined;
-      documento.explicacionRechazo = undefined;
-      documento.solucionRechazo = undefined;
-      documento.motivo = undefined;
-      documento.observacion = undefined;
-      documento.revisor = undefined;
-      documento.fechaRevisado = undefined;
-    }
-
-    if (trabajador) trabajador.estado = calcularEstadoTrabajador(trabajador, selectedProyectoId);
-    saveContratistas(contratistas);
     onDataChanged();
     showToast('Documento enviado a revisión por Acredita.', 'success');
   };
