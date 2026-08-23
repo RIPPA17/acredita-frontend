@@ -638,7 +638,18 @@ export default function ContratistaPortal() {
           )}
 
           {activeTab === 'proyectos' && (
-            <MisProyectosTab setActiveTab={setActiveTab} />
+            <MisProyectosTab
+              contratistaLogueado={contratistaLogueado}
+              misProyectos={misProyectos}
+              allMandantes={allMandantes}
+              setActiveTab={setActiveTab}
+              setSelectedProyectoId={setSelectedProyectoId}
+              setSelectedDocumentForPanel={setSelectedDocumentForPanel}
+              setSelectedWorkerForDocs={setSelectedWorkerForDocs}
+              setFichaTipo={setFichaTipo}
+              setFichaTrabajador={setFichaTrabajador}
+              setShowFichaAcreditacion={setShowFichaAcreditacion}
+            />
           )}
 
           {activeTab === 'biblioteca' && (
