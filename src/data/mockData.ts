@@ -205,102 +205,130 @@ export const CONTRATISTAS: Contratista[] = [
     nombre: 'Servicios Norte',
     rut: '76.111.222-3',
     proyectos: ['costanera', 'hospital', 'bodega'],
+    // Dataset demo enriquecido para el Inicio del portal Contratista: cada
+    // documento (de empresa y de cada trabajador) trae su propio proyectoId,
+    // así los tres proyectos quedan completamente independientes entre sí —
+    // el mismo trabajador puede estar "aprobado" en un proyecto y "pendiente"
+    // en otro sin duplicar a la persona. Los tres escenarios objetivo:
+    //   costanera → En proceso (empresa en revisión + pendiente, pago
+    //               retenido, acceso parcial, próximo vencimiento visible)
+    //   hospital  → Acreditado (todo aprobado y vigente)
+    //   bodega    → Bloqueado (empresa y un trabajador rechazados)
+    // Todos derivados de la lógica central (calcularEstadoAcreditacion /
+    // calcularAccesoPago / calcularEstadoTrabajador), nunca forzados.
     trabajadores: [
-      { 
-        nombre: 'Jorge Morales', 
-        rut: '12.345.678-9', 
+      {
+        nombre: 'Jorge Morales',
+        rut: '12.345.678-9',
         estado: 'aprobado',
         documentos: [
-          { id: 'ws1_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
-          { id: 'ws1_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws1_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws1_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' }
+          // Costanera — todos los obligatorios vigentes: acreditado.
+          { id: 'costanera_jm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'costanera' },
+          { id: 'costanera_jm_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'costanera' },
+          { id: 'costanera_jm_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'costanera' },
+          // Hospital — todos los obligatorios vigentes: acreditado.
+          { id: 'hospital_jm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'hospital' },
+          { id: 'hospital_jm_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          { id: 'hospital_jm_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          // Bodega — todos los obligatorios vigentes: el único acreditado del proyecto.
+          { id: 'bodega_jm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'bodega' },
+          { id: 'bodega_jm_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'bodega' },
+          { id: 'bodega_jm_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'bodega' },
         ]
       },
-      { 
-        nombre: 'Pedro Soto', 
-        rut: '13.456.789-0', 
+      {
+        nombre: 'Pedro Soto',
+        rut: '13.456.789-0',
         estado: 'por_vencer',
         documentos: [
-          { id: 'ws2_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
-          { id: 'ws2_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws2_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws2_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'por_vencer', vencimiento: '24 May 2026', subido: '24 May 2025' }
+          // Costanera — ODI vigente pero a 5 días de vencer: por_vencer (es el "próximo vencimiento" del proyecto).
+          { id: 'costanera_ps_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'costanera' },
+          { id: 'costanera_ps_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'costanera' },
+          { id: 'costanera_ps_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'por_vencer', vencimiento: '27 Ago 2026', subido: '27 Ago 2025', proyectoId: 'costanera' },
+          // Hospital — todos los obligatorios vigentes: acreditado.
+          { id: 'hospital_ps_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'hospital' },
+          { id: 'hospital_ps_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          { id: 'hospital_ps_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          // Bodega — ODI nunca se cargó: pendiente (documento no cargado).
+          { id: 'bodega_ps_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'bodega' },
+          { id: 'bodega_ps_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'bodega' },
         ]
       },
-      { 
-        nombre: 'Luis Vera', 
-        rut: '14.567.890-1', 
+      {
+        nombre: 'Luis Vera',
+        rut: '14.567.890-1',
         estado: 'rechazado',
         documentos: [
-          { id: 'ws3_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
-          { id: 'ws3_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws3_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws3_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'rechazado', vencimiento: '—', subido: '11 May 2026', motivo: 'Examen de altura vencido', observacion: 'Examen de altura vencido' }
+          // Costanera — Contrato nunca se cargó: pendiente (sin bloquear el proyecto por rechazo).
+          { id: 'costanera_lv_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'costanera' },
+          { id: 'costanera_lv_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'costanera' },
+          // Hospital — todos los obligatorios vigentes: acreditado.
+          { id: 'hospital_lv_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'hospital' },
+          { id: 'hospital_lv_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          { id: 'hospital_lv_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          // Bodega — ODI rechazado: el trabajador bloqueado del proyecto.
+          { id: 'bodega_lv_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'bodega' },
+          { id: 'bodega_lv_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'bodega' },
+          {
+            id: 'bodega_lv_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'rechazado', vencimiento: '—', subido: '13 Ago 2026', proyectoId: 'bodega',
+            motivo: 'Examen de altura vencido; debe renovar la certificación de trabajo en altura antes de reingresar a faena.',
+            observacion: 'Examen de altura vencido; debe renovar la certificación de trabajo en altura antes de reingresar a faena.',
+          },
         ]
       },
-      { 
-        nombre: 'Carlos Muñoz', 
-        rut: '15.678.901-2', 
+      {
+        nombre: 'Carlos Muñoz',
+        rut: '15.678.901-2',
         estado: 'pendiente',
         documentos: [
-          { id: 'ws4_d1', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2026', subido: '05 May 2026' },
-          { id: 'ws4_d2', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws4_d3', nombre: 'Certificado de Antecedentes', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2026', subido: '10 Ene 2026' },
-          { id: 'ws4_d4', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'pendiente', vencimiento: '—' }
+          // Costanera — ODI nunca se cargó: pendiente (documento no cargado).
+          { id: 'costanera_cm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'costanera' },
+          { id: 'costanera_cm_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'costanera' },
+          // Hospital — todos los obligatorios vigentes: acreditado.
+          { id: 'hospital_cm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'hospital' },
+          { id: 'hospital_cm_con', nombre: 'Contrato de Trabajo', categoria: 'Laboral', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          { id: 'hospital_cm_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'hospital' },
+          // Bodega — Contrato nunca se cargó: pendiente.
+          { id: 'bodega_cm_liq', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', estado: 'aprobado', vencimiento: '30 Jun 2027', subido: '05 Ago 2026', proyectoId: 'bodega' },
+          { id: 'bodega_cm_odi', nombre: 'ODI 2026', categoria: 'Prevención', estado: 'aprobado', vencimiento: '31 Dic 2027', subido: '10 Ene 2026', proyectoId: 'bodega' },
         ]
       },
     ],
     documentos: [
+      // Costanera — F30 en revisión (pago retenido, sin pedir "corregir") +
+      // Mutual aprobado (mantiene el acceso solo "parcial", gobernado por
+      // los trabajadores, no totalmente bloqueado por la empresa).
       {
-        id: 'd1',
-        nombre: 'Liquidación Mayo 2026',
-        categoria: 'Laboral',
-        estado: 'revision',
-        vencimiento: '31 May 2026',
-        subido: '05 May 2026',
-        motivo: 'Verificar descuentos legales y base imponible del trabajador indicado.',
-        observacion: 'Verificar descuentos legales y base imponible del trabajador indicado.',
+        id: 'costanera_f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', estado: 'revision',
+        vencimiento: '30 Sep 2026', subido: '18 Ago 2026', proyectoId: 'costanera',
+        motivo: 'Verificar periodo tributario declarado y monto de IVA informado.',
+        observacion: 'Verificar periodo tributario declarado y monto de IVA informado.',
       },
       {
-        id: 'd2',
-        nombre: 'F30 SII (mes vigente)',
-        categoria: 'Tributario',
-        estado: 'aprobado',
-        vencimiento: '30 Jun 2026',
-        subido: '02 May 2026',
+        id: 'costanera_mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', estado: 'aprobado',
+        vencimiento: '31 Dic 2027', subido: '15 Jun 2026', proyectoId: 'costanera',
+      },
+      // Hospital — ambos aprobados y vigentes: proyecto acreditado.
+      {
+        id: 'hospital_f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', estado: 'aprobado',
+        vencimiento: '30 Jun 2027', subido: '02 Ago 2026', proyectoId: 'hospital',
       },
       {
-        id: 'd3',
-        nombre: 'Contrato de Trabajo',
-        categoria: 'Laboral',
-        estado: 'aprobado',
-        vencimiento: '31 Dic 2026',
-        subido: '10 Ene 2026',
+        id: 'hospital_mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', estado: 'aprobado',
+        vencimiento: '31 Dic 2027', subido: '15 Jun 2026', proyectoId: 'hospital',
+      },
+      // Bodega — ambos rechazados: acceso bloqueado y pago retenido.
+      {
+        id: 'bodega_f30', nombre: 'F30 SII (mes vigente)', categoria: 'Tributario', estado: 'rechazado',
+        vencimiento: '—', subido: '12 Ago 2026', proyectoId: 'bodega',
+        motivo: 'Periodo tributario incorrecto: el F30 presentado corresponde a un mes anterior al vigente.',
+        observacion: 'Periodo tributario incorrecto: el F30 presentado corresponde a un mes anterior al vigente.',
       },
       {
-        id: 'd4',
-        nombre: 'Registro Mutual ACHS',
-        categoria: 'Prevención',
-        estado: 'aprobado',
-        vencimiento: '30 Jun 2026',
-        subido: '15 Jun 2025',
-      },
-      {
-        id: 'd5',
-        nombre: 'Certificado de Antecedentes',
-        categoria: 'Laboral',
-        estado: 'aprobado',
-        vencimiento: '31 Dic 2026',
-        subido: '10 Ene 2026',
-      },
-      {
-        id: 'd6',
-        nombre: 'ODI 2026',
-        categoria: 'Prevención',
-        estado: 'aprobado',
-        vencimiento: '31 Dic 2026',
-        subido: '10 Ene 2026',
+        id: 'bodega_mutual', nombre: 'Registro Mutual ACHS', categoria: 'Prevención', estado: 'rechazado',
+        vencimiento: '—', subido: '14 Ago 2026', proyectoId: 'bodega',
+        motivo: 'Certificado vencido o documento no vigente para la faena.',
+        observacion: 'Certificado vencido o documento no vigente para la faena.',
       },
     ],
   },

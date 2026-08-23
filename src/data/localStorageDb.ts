@@ -68,35 +68,33 @@ function seedIfNeeded() {
     });
     localStorage.setItem('acredita_requisitos', JSON.stringify(defaultRequisitos));
 
-    // 2. Expand mock contractors to assign project-specific documents and workers
-    const expandedContratistas = CONTRATISTAS.map(c => {
-      const docsWithProject: Documento[] = [];
-      c.proyectos.forEach(pId => {
-        c.documentos.forEach(d => {
-          docsWithProject.push({
-            ...d,
-            id: `${pId}_${d.id}`,
-            proyectoId: pId
-          });
+    // 2. Expand mock contractors to assign project-specific documents and workers.
+    // Un documento de mockData puede venir SIN proyectoId (el caso de siempre:
+    // se replica tal cual, con el mismo estado, en cada proyecto del
+    // contratista) o ya con su proyectoId propio (dataset demo enriquecido:
+    // ese documento pertenece únicamente a ese proyecto, con su propio id y
+    // estado — no se duplica en los demás).
+    const expandDocsPorProyecto = (docs: Documento[], proyectoIds: string[]): Documento[] => {
+      const result: Documento[] = [];
+      proyectoIds.forEach(pId => {
+        docs.forEach(d => {
+          if (d.proyectoId) {
+            if (d.proyectoId === pId) result.push({ ...d });
+            return;
+          }
+          result.push({ ...d, id: `${pId}_${d.id}`, proyectoId: pId });
         });
       });
+      return result;
+    };
 
-      const workersWithProject = c.trabajadores?.map(w => {
-        const wDocsWithProject: Documento[] = [];
-        c.proyectos.forEach(pId => {
-          w.documentos?.forEach(wd => {
-            wDocsWithProject.push({
-              ...wd,
-              id: `${pId}_${wd.id}`,
-              proyectoId: pId
-            });
-          });
-        });
-        return {
-          ...w,
-          documentos: wDocsWithProject
-        };
-      });
+    const expandedContratistas = CONTRATISTAS.map(c => {
+      const docsWithProject = expandDocsPorProyecto(c.documentos, c.proyectos);
+
+      const workersWithProject = c.trabajadores?.map(w => ({
+        ...w,
+        documentos: expandDocsPorProyecto(w.documentos || [], c.proyectos)
+      }));
 
       return {
         ...c,
