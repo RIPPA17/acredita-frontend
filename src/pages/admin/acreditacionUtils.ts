@@ -88,9 +88,9 @@ export const estadoUILabel = (estado: Estado): EstadoUI =>
   estado === 'Aprobado' ? 'Acreditado' : estado === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 
 export const badgeClass = (s: string) => {
-  if (s === 'Aprobado') return 'green';
+  if (s === 'Aprobado' || s === 'Acreditado') return 'green';
   if (s === 'En proceso' || s === 'Pendiente' || s === 'Por vencer' || s === 'En revisión') return 'amber';
-  if (s === 'Vencido/Bloqueado' || s === 'Vencido' || s === 'Rechazado') return 'red';
+  if (s === 'Vencido/Bloqueado' || s === 'Bloqueado' || s === 'Vencido' || s === 'Rechazado') return 'red';
   return 'gray';
 };
 
