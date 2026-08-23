@@ -170,8 +170,12 @@ export default function ColaRevisionTab({
     });
 
   const current = filtered.find(d => d.key === selectedKey) ?? filtered[0];
-  const isTaken = !!current && claimedKeys.has(current.key);
   const currentClaim = current ? claimsRevision.find(c => c.documentoKey === current.key) : undefined;
+  const isTaken = !!currentClaim;
+  // Un documento tomado por otro verificador se puede ver, pero solo su
+  // dueño (mientras el claim exista) puede aprobar, rechazar o escalarlo.
+  const isTakenByCurrent = !!currentClaim && !!currentVerificador && currentClaim.verificadorId === currentVerificador.id;
+  const isTakenByOther = !!currentClaim && !!currentVerificador && currentClaim.verificadorId !== currentVerificador.id;
   const currentEscalation = current ? escalations[current.key] : undefined;
 
   const revisadosHoy = aprobadosHoy + rechazadosHoy;
@@ -216,6 +220,10 @@ export default function ColaRevisionTab({
 
   const tomarRevision = () => {
     if (!current || !currentVerificador) return;
+    // No sobrescribir un claim existente (propio o ajeno): si ya hay uno
+    // para este documento, la UI normalmente ya oculta "Tomar revisión",
+    // pero se valida igual aquí como defensa en la función.
+    if (claimsRevision.some(c => c.documentoKey === current.key)) return;
     setClaimsRevision([...claimsRevision, { documentoKey: current.key, verificadorId: currentVerificador.id, claimedAt: Date.now() }]);
     setTab("review");
     setSelectedKeyLocal(current.key);
@@ -224,30 +232,35 @@ export default function ColaRevisionTab({
   };
 
   const aprobar = () => {
-    if (!current || !isTaken) return;
+    // Un documento tomado por otro verificador nunca puede aprobarse desde
+    // aquí, sin importar el estado de los botones en la UI — la validación
+    // de propiedad vive también dentro de la función, no solo en `disabled`.
+    if (!current || !currentClaim || !currentVerificador || currentClaim.verificadorId !== currentVerificador.id) return;
     if (!(checks.legible && checks.datos && checks.vigencia)) {
       showToast("Para aprobar, completa el chequeo mínimo", "warning");
       return;
     }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
-    const verificadorId = currentClaim?.verificadorId || currentVerificador?.id;
+    const verificadorId = currentVerificador.id;
     if (cObj) {
       actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve", { verificador: nombreVerificador(verificadorId) });
       setAprobadosHoy(a => a + 1);
-      if (verificadorId) registrarActividadVerificador(verificadorId, current.key, "aprobado");
+      registrarActividadVerificador(verificadorId, current.key, "aprobado");
     }
     showToast(`Documento aprobado: ${current.title}`);
     refreshAndAdvance("pending");
   };
 
   const rechazar = () => {
-    if (!current || !isTaken) return;
+    // Misma protección de propiedad que aprobar(): nunca confiar solo en
+    // que el botón esté habilitado.
+    if (!current || !currentClaim || !currentVerificador || currentClaim.verificadorId !== currentVerificador.id) return;
     if (!reason) { showToast("Selecciona un motivo de rechazo", "warning"); return; }
     if (!note.trim()) { showToast("Indica brevemente qué debe corregir el contratista", "warning"); return; }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
-    const verificadorId = currentClaim?.verificadorId || currentVerificador?.id;
+    const verificadorId = currentVerificador.id;
     if (cObj) {
       actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "reject", {
         motivoRechazo: reason,
@@ -255,7 +268,7 @@ export default function ColaRevisionTab({
         verificador: nombreVerificador(verificadorId),
       });
       setRechazadosHoy(r => r + 1);
-      if (verificadorId) registrarActividadVerificador(verificadorId, current.key, "rechazado");
+      registrarActividadVerificador(verificadorId, current.key, "rechazado");
     }
     showToast(`Documento rechazado: ${current.title}`, "warning");
     refreshAndAdvance("pending");
@@ -273,7 +286,9 @@ export default function ColaRevisionTab({
   };
 
   const enviarEscalamiento = () => {
-    if (!current || !supervisor) return;
+    // Solo el dueño del claim puede escalar: es quien tiene la
+    // responsabilidad de la revisión.
+    if (!current || !supervisor || !isTakenByCurrent) return;
     if (!escalarMotivo.trim()) { showToast("Indica el motivo del escalamiento", "warning"); return; }
     setEscalations(prev => ({ ...prev, [current.key]: { supervisorId: supervisor.id, motivo: escalarMotivo } }));
     setEscalarOpen(false);
@@ -640,6 +655,12 @@ export default function ColaRevisionTab({
                 {`Documento tomado por ${nombreVerificador(currentClaim?.verificadorId)}${currentClaim ? " · " + formatElapsed(currentClaim.claimedAt) : ""}.`}
               </div>
 
+              {isTakenByOther && (
+                <div className="mb-3.5 text-[11px] font-medium px-2.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                  Este documento está siendo revisado por {nombreVerificador(currentClaim?.verificadorId)}.
+                </div>
+              )}
+
               <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Chequeo mínimo</div>
               <div className="flex flex-col gap-2 mb-3.5">
                 {[
@@ -652,6 +673,7 @@ export default function ColaRevisionTab({
                       type="checkbox"
                       className="mt-0.5"
                       checked={(checks as any)[key]}
+                      disabled={isTakenByOther}
                       onChange={e => setChecks(prev => ({ ...prev, [key]: e.target.checked }))}
                     />
                     <div>
@@ -663,22 +685,33 @@ export default function ColaRevisionTab({
               </div>
 
               <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Si rechazas</div>
-              <select value={reason} onChange={e => setReason(e.target.value)} className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full mb-2">
+              <select value={reason} onChange={e => setReason(e.target.value)} disabled={isTakenByOther} className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full mb-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 <option value="">Seleccionar motivo...</option>
                 {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <textarea
                 value={note}
                 onChange={e => setNote(e.target.value)}
+                disabled={isTakenByOther}
                 placeholder="Indica brevemente qué debe corregir el contratista..."
-                className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full min-h-[70px] resize-y"
+                className="form-input !rounded-lg text-[10.5px] py-2 px-2.5 w-full min-h-[70px] resize-y disabled:opacity-50 disabled:cursor-not-allowed"
               />
 
               <div className="grid grid-cols-2 gap-2 mt-3">
-                <button onClick={aprobar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-emerald-700 text-white hover:bg-emerald-800 transition-colors cursor-pointer">
+                <button
+                  onClick={aprobar}
+                  disabled={!isTakenByCurrent}
+                  title={isTakenByOther ? `Este documento está siendo revisado por ${nombreVerificador(currentClaim?.verificadorId)}.` : undefined}
+                  className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-emerald-700 text-white hover:bg-emerald-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-700"
+                >
                   <CheckCircle size={14} /> Aprobar
                 </button>
-                <button onClick={rechazar} className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-red-700 text-white hover:bg-red-800 transition-colors cursor-pointer">
+                <button
+                  onClick={rechazar}
+                  disabled={!isTakenByCurrent}
+                  title={isTakenByOther ? `Este documento está siendo revisado por ${nombreVerificador(currentClaim?.verificadorId)}.` : undefined}
+                  className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold py-2 rounded-lg border-none bg-red-700 text-white hover:bg-red-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-700"
+                >
                   <XCircle size={14} /> Rechazar
                 </button>
                 <button onClick={siguienteDocumento} className="col-span-2 text-[11px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer">
@@ -694,7 +727,8 @@ export default function ColaRevisionTab({
               ) : (
                 <button
                   onClick={() => setEscalarOpen(true)}
-                  disabled={!supervisor}
+                  disabled={!supervisor || !isTakenByCurrent}
+                  title={isTakenByOther ? `Este documento está siendo revisado por ${nombreVerificador(currentClaim?.verificadorId)}.` : undefined}
                   className="w-full mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ArrowUpRight size={13} /> {supervisor ? `Escalar a ${supervisor.nombre}` : "Supervisor no disponible"}
