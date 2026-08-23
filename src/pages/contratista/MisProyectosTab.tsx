@@ -1,18 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, RefObject } from 'react';
 import { Search } from 'lucide-react';
-import { calcularAccesoPago, esTrabajadorAsignado, getRequisitos } from '../../data/localStorageDb';
-import { Contratista, Proyecto, Mandante, Trabajador } from '../../types';
-import { buildAcreditacionRows, estadoUILabel, EstadoUI } from '../admin/acreditacionUtils';
 import {
+  calcularAccesoPago,
+  calcularEstadoTrabajador,
+  esTrabajadorAsignado,
+  getMotivoBloqueoTrabajador,
+  getRequisitos,
+} from '../../data/localStorageDb';
+import { Contratista, Proyecto, Mandante, Requisito, Trabajador } from '../../types';
+import { buildAcreditacionRows, estadoUILabel, DocEstado, EstadoUI } from '../admin/acreditacionUtils';
+import {
+  accionEmpresaLabel,
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
   encontrarProximoVencimiento,
   getEstadoAccesoProyecto,
+  impactoLabel,
 } from './inicio/inicioUtils';
 
 // Clases y colores calcados del prototipo HTML aprobado (mp-*), no de los
 // tokens de Acredita. Solo la CLAVE (qué estado corresponde a cada
-// proyecto) sale de la lógica central; el color/label es presentación.
+// proyecto/documento/trabajador) sale de la lógica central; el color/label
+// es presentación.
 const STATE_KEY: Record<EstadoUI, string> = {
   Bloqueado: 'bloqueado',
   'En proceso': 'proceso',
@@ -53,6 +62,42 @@ const ACCESO_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
   parcial: '#a87400',
   bloqueado: '#b22e2e',
 };
+const DOC_ESTADO_BADGE: Record<DocEstado, string> = {
+  Aprobado: 'mp-badge-green',
+  Rechazado: 'mp-badge-red',
+  Vencido: 'mp-badge-red',
+  'En revisión': 'mp-badge-blue',
+  'Por vencer': 'mp-badge-yellow',
+  Pendiente: 'mp-badge-gray',
+};
+const TRABAJADOR_LABEL: Record<'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente', string> = {
+  aprobado: 'Acreditado',
+  por_vencer: 'Por vencer',
+  rechazado: 'Bloqueado',
+  pendiente: 'Pendiente',
+};
+const TRABAJADOR_BADGE_CLASS: Record<'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente', string> = {
+  aprobado: 'mp-badge-green',
+  por_vencer: 'mp-badge-yellow',
+  rechazado: 'mp-badge-red',
+  pendiente: 'mp-badge-gray',
+};
+
+interface ProyectoInfo {
+  proyecto: Proyecto;
+  mandante?: Mandante;
+  estadoUI: EstadoUI;
+  accesoPago: ReturnType<typeof calcularAccesoPago>;
+  estadoAcceso: ReturnType<typeof getEstadoAccesoProyecto>;
+  proximoVenc: ReturnType<typeof encontrarProximoVencimiento>;
+  problemaPrincipal: string;
+  empresaOk: number;
+  empresaTotal: number;
+  trabajadoresOk: number;
+  trabajadoresTotal: number;
+  empresaPct: number;
+  trabajadoresPct: number;
+}
 
 function Hero() {
   return (
@@ -66,12 +111,194 @@ function Hero() {
   );
 }
 
+function DetalleProyecto({
+  info,
+  contratistaLogueado,
+  misProyectos,
+  requisitosAll,
+  detalleTab,
+  setDetalleTab,
+  onClose,
+  onIrADocumentos,
+  onIrATrabajadores,
+  onVerFicha,
+  detalleRef,
+}: {
+  info: ProyectoInfo;
+  contratistaLogueado: Contratista;
+  misProyectos: Proyecto[];
+  requisitosAll: Requisito[];
+  detalleTab: 'resumen' | 'empresa' | 'trabajadores';
+  setDetalleTab: (t: 'resumen' | 'empresa' | 'trabajadores') => void;
+  onClose: () => void;
+  onIrADocumentos: (proyectoId: string) => void;
+  onIrATrabajadores: (proyectoId: string, worker?: Trabajador) => void;
+  onVerFicha?: (proyectoId: string) => void;
+  detalleRef: RefObject<HTMLDivElement>;
+}) {
+  const { proyecto: p, mandante, estadoUI, accesoPago, estadoAcceso, proximoVenc, problemaPrincipal, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct } = info;
+
+  const trabajadoresAsignados = (contratistaLogueado.trabajadores || []).filter(w =>
+    esTrabajadorAsignado(w, p.id, misProyectos)
+  );
+
+  return (
+    <div className="mp-detail" ref={detalleRef}>
+      <div className="mp-detail-card">
+        <div className="mp-detail-head">
+          <div>
+            <div className="mp-metric-title">Detalle del proyecto</div>
+            <div className="mp-detail-title">{p.nombre}</div>
+            <div className="mp-detail-sub">Mandante: {mandante?.nombre || 'Mandante no disponible'}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span className={`mp-badge ${MP_BADGE_CLASS[estadoUI]}`}>
+              <span className="mp-badge-dot" />
+              {estadoUI}
+            </span>
+            <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={onClose}>Cerrar detalle</button>
+          </div>
+        </div>
+
+        <div className="mp-detail-tabs">
+          {(['resumen', 'empresa', 'trabajadores'] as const).map(t => (
+            <button
+              key={t}
+              className={`mp-detail-tab ${detalleTab === t ? 'active' : ''}`}
+              onClick={() => setDetalleTab(t)}
+            >
+              {t === 'resumen' ? 'Resumen' : t === 'empresa' ? 'Empresa' : 'Trabajadores'}
+            </button>
+          ))}
+        </div>
+
+        {detalleTab === 'resumen' && (
+          <>
+            <div className="mp-grid mp-grid-4" style={{ marginBottom: 14 }}>
+              <div className="mp-mini">
+                <div className="mp-mini-label">Acreditación</div>
+                <div className="mp-mini-value">{estadoUI}</div>
+              </div>
+              <div className="mp-mini">
+                <div className="mp-mini-label">Acceso</div>
+                <div className="mp-mini-value" style={{ color: ACCESO_COLOR[estadoAcceso.estado] }}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</div>
+              </div>
+              <div className="mp-mini">
+                <div className="mp-mini-label">Pago</div>
+                <div className="mp-mini-value" style={{ color: accesoPago.pagoBloqueado ? '#b22e2e' : '#1f7a43' }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
+              </div>
+              <div className="mp-mini">
+                <div className="mp-mini-label">Próximo vencimiento</div>
+                <div className="mp-mini-value">{proximoVenc ? `${proximoVenc.dias} día${proximoVenc.dias === 1 ? '' : 's'}` : 'Sin alertas'}</div>
+              </div>
+            </div>
+
+            <div className="mp-grid mp-grid-2">
+              <div>
+                <div className="mp-detail-section-title">Qué requiere atención</div>
+                <div className={`mp-alert ${MP_ALERT_CLASS[estadoUI]}`} style={{ marginTop: 10 }}>{problemaPrincipal}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <button className="mp-btn mp-btn-primary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>Ir a documentos</button>
+                  <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id)}>Ver trabajadores</button>
+                  {onVerFicha && (
+                    <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onVerFicha(p.id)}>Ver ficha de acreditación</button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="mp-detail-section-title">Avance</div>
+                <div style={{ marginTop: 10 }}>
+                  <div className="mp-line-row"><strong>Empresa</strong><span>{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal}` : 'Sin requisitos obligatorios'}</span></div>
+                  <div className="mp-progress"><div className="mp-progress-fill" style={{ width: `${empresaPct}%`, background: BAR_COLOR_EMPRESA[estadoUI] }} /></div>
+                </div>
+                <div style={{ marginTop: 13 }}>
+                  <div className="mp-line-row"><strong>Trabajadores</strong><span>{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal}` : 'Sin trabajadores agregados'}</span></div>
+                  <div className="mp-progress"><div className="mp-progress-fill" style={{ width: `${trabajadoresPct}%`, background: BAR_COLOR_TRABAJADORES[estadoUI] }} /></div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {detalleTab === 'empresa' && (() => {
+          const empresaItems = buildRequisitosEmpresa(contratistaLogueado, p.id, requisitosAll);
+          return (
+            <div className="mp-detail-table-wrap" style={{ marginTop: 14 }}>
+              {empresaItems.length === 0 ? (
+                <p style={{ color: '#7a8190', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto no tiene requisitos de empresa configurados.</p>
+              ) : (
+                <table className="mp-detail-table">
+                  <thead>
+                    <tr><th>Requisito</th><th>Estado</th><th>Vencimiento</th><th>Acción</th></tr>
+                  </thead>
+                  <tbody>
+                    {empresaItems.map(item => (
+                      <tr key={item.requisito.id}>
+                        <td>{item.requisito.nombre}{!item.requisito.obligatorio && <span style={{ color: '#8a92a1' }}> (opcional)</span>}</td>
+                        <td><span className={`mp-badge ${DOC_ESTADO_BADGE[item.estado]}`}>{item.estado}</span></td>
+                        <td>{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}<div style={{ fontSize: 10.5, color: '#8a92a1' }}>{impactoLabel(item.requisito)}</div></td>
+                        <td>
+                          <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>
+                            {accionEmpresaLabel(item.estado, !!item.doc)}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })()}
+
+        {detalleTab === 'trabajadores' && (
+          <div className="mp-detail-table-wrap" style={{ marginTop: 14 }}>
+            {trabajadoresAsignados.length === 0 ? (
+              <p style={{ color: '#7a8190', fontSize: 12.5, textAlign: 'center', padding: 20 }}>Este proyecto todavía no tiene trabajadores asignados.</p>
+            ) : (
+              <table className="mp-detail-table">
+                <thead>
+                  <tr><th>Trabajador</th><th>Estado</th><th>Documentos obligatorios</th><th>Acción</th></tr>
+                </thead>
+                <tbody>
+                  {trabajadoresAsignados.map(w => {
+                    const estado = calcularEstadoTrabajador(w, p.id);
+                    const workerItems = buildRequisitosTrabajador(w, p.id, requisitosAll).filter(i => i.requisito.obligatorio);
+                    const ok = workerItems.filter(i => i.cumplido).length;
+                    return (
+                      <tr key={w.rut}>
+                        <td>{w.nombre}</td>
+                        <td>
+                          <span className={`mp-badge ${TRABAJADOR_BADGE_CLASS[estado]}`}>{TRABAJADOR_LABEL[estado]}</span>
+                          {estado !== 'aprobado' && <div style={{ fontSize: 10.5, color: '#8a92a1', marginTop: 3 }}>{getMotivoBloqueoTrabajador(w, p.id)}</div>}
+                        </td>
+                        <td>{ok} / {workerItems.length}</td>
+                        <td>
+                          <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id, w)}>Ver trabajador</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MisProyectosTab({
   contratistaLogueado,
   misProyectos,
   allMandantes,
   setSelectedProyectoId,
   setActiveTab,
+  setSelectedWorkerForDocs,
+  setFichaTipo,
+  setFichaTrabajador,
+  setShowFichaAcreditacion,
 }: {
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
@@ -79,23 +306,16 @@ export default function MisProyectosTab({
   selectedProyectoId: string;
   setSelectedProyectoId: (id: string) => void;
   setActiveTab: (v: string) => void;
+  setSelectedWorkerForDocs?: (v: Trabajador | null) => void;
+  setFichaTipo?: (v: 'empresa' | 'trabajador') => void;
+  setFichaTrabajador?: (v: Trabajador | null) => void;
+  setShowFichaAcreditacion?: (v: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'Todos' | EstadoUI>('Todos');
-
-  if (misProyectos.length === 0) {
-    return (
-      <div className="mp-page">
-        <Hero />
-        <div className="mp-floating">
-          <div className="mp-empty">
-            <p style={{ fontWeight: 700, color: '#172033', marginBottom: 4 }}>Todavía no tienes proyectos asociados.</p>
-            <p>Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const [detalleProyectoId, setDetalleProyectoId] = useState<string | null>(null);
+  const [detalleTab, setDetalleTab] = useState<'resumen' | 'empresa' | 'trabajadores'>('resumen');
+  const detalleRef = useRef<HTMLDivElement>(null);
 
   // --- Única fuente de verdad de acreditación: la misma que usa Inicio ---
   const rows = buildAcreditacionRows([contratistaLogueado], misProyectos, allMandantes);
@@ -103,7 +323,7 @@ export default function MisProyectosTab({
   const requisitosAll = getRequisitos();
 
   // Orden natural: el mismo de misProyectos, sin reordenar por criticidad.
-  const proyectosInfo = misProyectos.map(p => {
+  const proyectosInfo: ProyectoInfo[] = misProyectos.map(p => {
     const row = rowsByProyecto.get(p.id);
     const mandante = allMandantes.find(m => m.id === p.mandanteId);
     const estadoUI: EstadoUI = row ? estadoUILabel(row.estado) : 'En proceso';
@@ -169,11 +389,59 @@ export default function MisProyectosTab({
     return okFilter && okSearch;
   });
 
+  // Si el proyecto detallado deja de estar entre los filtrados (cambió el
+  // filtro o la búsqueda), cerrar el detalle en vez de dejarlo mostrando un
+  // proyecto que ya no aparece en el grid.
+  useEffect(() => {
+    if (detalleProyectoId && !proyectosFiltrados.some(i => i.proyecto.id === detalleProyectoId)) {
+      setDetalleProyectoId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filter]);
+
   const hayFiltrosActivos = search.trim() !== '' || filter !== 'Todos';
   const limpiarFiltros = () => { setSearch(''); setFilter('Todos'); };
 
-  const irAInicio = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('dashboard'); };
+  const abrirDetalleProyecto = (proyectoId: string) => {
+    setSelectedProyectoId(proyectoId);
+    if (detalleProyectoId !== proyectoId) setDetalleTab('resumen');
+    setDetalleProyectoId(proyectoId);
+    requestAnimationFrame(() => {
+      detalleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+  const cerrarDetalle = () => setDetalleProyectoId(null);
+
   const irADocumentos = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('subir'); };
+  const irATrabajadores = (proyectoId: string, worker?: Trabajador) => {
+    setSelectedProyectoId(proyectoId);
+    setActiveTab('trabajadores');
+    if (worker && setSelectedWorkerForDocs) setSelectedWorkerForDocs(worker);
+  };
+  const verFicha = (setFichaTipo && setFichaTrabajador && setShowFichaAcreditacion)
+    ? (proyectoId: string) => {
+        setSelectedProyectoId(proyectoId);
+        setFichaTipo('empresa');
+        setFichaTrabajador(null);
+        setShowFichaAcreditacion(true);
+      }
+    : undefined;
+
+  const detalleInfo = detalleProyectoId ? proyectosInfo.find(i => i.proyecto.id === detalleProyectoId) : undefined;
+
+  if (misProyectos.length === 0) {
+    return (
+      <div className="mp-page">
+        <Hero />
+        <div className="mp-floating">
+          <div className="mp-empty">
+            <p style={{ fontWeight: 700, color: '#172033', marginBottom: 4 }}>Todavía no tienes proyectos asociados.</p>
+            <p>Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mp-page">
@@ -244,7 +512,7 @@ export default function MisProyectosTab({
           <div className="mp-empty">
             <p>No hay proyectos que coincidan con la búsqueda o filtro.</p>
             {hayFiltrosActivos && (
-              <button className="mp-btn mp-btn-secondary" style={{ marginTop: 10 }} onClick={limpiarFiltros}>Limpiar filtros</button>
+              <button className="mp-btn mp-btn-secondary mp-btn-inline" style={{ marginTop: 10 }} onClick={limpiarFiltros}>Limpiar filtros</button>
             )}
           </div>
         ) : (
@@ -303,7 +571,7 @@ export default function MisProyectosTab({
                   <div className="mp-project-foot">
                     <button
                       className={`mp-btn ${estadoUI === 'Bloqueado' ? 'mp-btn-danger' : 'mp-btn-primary'}`}
-                      onClick={() => irAInicio(p.id)}
+                      onClick={() => abrirDetalleProyecto(p.id)}
                     >
                       {estadoUI === 'Bloqueado' ? 'Resolver bloqueos' : 'Ver proyecto'}
                     </button>
@@ -313,6 +581,22 @@ export default function MisProyectosTab({
               );
             })}
           </div>
+        )}
+
+        {detalleInfo && (
+          <DetalleProyecto
+            info={detalleInfo}
+            contratistaLogueado={contratistaLogueado}
+            misProyectos={misProyectos}
+            requisitosAll={requisitosAll}
+            detalleTab={detalleTab}
+            setDetalleTab={setDetalleTab}
+            onClose={cerrarDetalle}
+            onIrADocumentos={irADocumentos}
+            onIrATrabajadores={irATrabajadores}
+            onVerFicha={verFicha}
+            detalleRef={detalleRef}
+          />
         )}
       </section>
     </div>
