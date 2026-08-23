@@ -358,7 +358,7 @@ export default function ColaRevisionTab({
       </div>
 
       {/* Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-[310px_1fr] xl:grid-cols-[310px_1fr_300px] gap-3.5 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr_290px] gap-3.5 items-start">
         {/* Queue list */}
         <section className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden flex flex-col">
           <div className="p-3.5 border-b border-cream3 flex justify-between items-center gap-3">
@@ -551,7 +551,7 @@ export default function ColaRevisionTab({
         </section>
 
         {/* Decision panel */}
-        <section className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden lg:col-span-2 xl:col-span-1">
+        <section className="bg-white rounded-2xl border border-cream3 shadow-sm overflow-hidden md:col-span-2 lg:col-span-1">
           <div className="p-3.5 border-b border-cream3">
             <div className="text-[14px] font-extrabold text-navy">Decisión</div>
             <div className="text-[10px] text-gray-500 mt-0.5">Revisión rápida del documento</div>
