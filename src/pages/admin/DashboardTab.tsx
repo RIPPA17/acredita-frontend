@@ -142,8 +142,8 @@ export default function DashboardTab({
         .dashv2 .quick-card span{display:block;font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;}
         .dashv2 .quick-card .go{margin-top:10px;font-size:9px;font-weight:850;color:var(--brown);}
 
-        @media(max-width:1150px){.dashv2 .layout{grid-template-columns:1fr;}}
         @media(max-width:1050px){.dashv2 .quick-grid{grid-template-columns:1fr 1fr;}}
+        @media(max-width:900px){.dashv2 .layout{grid-template-columns:1fr;}}
         @media(max-width:680px){.dashv2 .kpis{grid-template-columns:1fr 1fr;}}
         @media(max-width:650px){.dashv2 .quick-grid{grid-template-columns:1fr;}.dashv2 .attention-item{grid-template-columns:1fr;}}
       `}</style>
