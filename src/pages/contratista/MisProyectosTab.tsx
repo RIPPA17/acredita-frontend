@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Search, Building2, Lock, Wallet, AlertCircle, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { calcularAccesoPago, esTrabajadorAsignado, getRequisitos } from '../../data/localStorageDb';
 import { Contratista, Proyecto, Mandante, Trabajador } from '../../types';
-import { buildAcreditacionRows, estadoUILabel, badgeClass as acredBadgeClass, EstadoUI } from '../admin/acreditacionUtils';
+import { buildAcreditacionRows, estadoUILabel, EstadoUI } from '../admin/acreditacionUtils';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
@@ -10,46 +10,59 @@ import {
   getEstadoAccesoProyecto,
 } from './inicio/inicioUtils';
 
-// Mismo mapeo de colores centrales usado en el resto del portal Contratista.
-const BADGE: Record<string, string> = { green: 'b-green', amber: 'b-yellow', red: 'b-red', gray: 'b-gray' };
-// Sufijo de clase CSS (contractor-projects-*) por estado de acreditación.
+// Clases y colores calcados del prototipo HTML aprobado (mp-*), no de los
+// tokens de Acredita. Solo la CLAVE (qué estado corresponde a cada
+// proyecto) sale de la lógica central; el color/label es presentación.
 const STATE_KEY: Record<EstadoUI, string> = {
   Bloqueado: 'bloqueado',
   'En proceso': 'proceso',
   Acreditado: 'acreditado',
 };
-const STATE_ICON: Record<EstadoUI, typeof CheckCircle> = {
-  Acreditado: CheckCircle,
-  'En proceso': AlertTriangle,
-  Bloqueado: AlertCircle,
+const MP_BADGE_CLASS: Record<EstadoUI, string> = {
+  Acreditado: 'mp-badge-green',
+  'En proceso': 'mp-badge-yellow',
+  Bloqueado: 'mp-badge-red',
+};
+const MP_ALERT_CLASS: Record<EstadoUI, string> = {
+  Acreditado: 'mp-alert-green',
+  'En proceso': 'mp-alert-yellow',
+  Bloqueado: 'mp-alert-red',
 };
 const ALERT_PREFIX: Record<EstadoUI, string> = {
   Bloqueado: 'Bloqueos:',
   'En proceso': 'Prioridad:',
   Acreditado: 'Todo al día:',
 };
+const BAR_COLOR_EMPRESA: Record<EstadoUI, string> = {
+  Bloqueado: '#b22e2e',
+  'En proceso': '#c4924c',
+  Acreditado: '#1f7a43',
+};
+const BAR_COLOR_TRABAJADORES: Record<EstadoUI, string> = {
+  Bloqueado: '#b22e2e',
+  'En proceso': '#1f7a43',
+  Acreditado: '#1f7a43',
+};
 const ACCESO_LABEL_CORTO: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
   habilitado: 'Habilitado',
   parcial: 'Parcial',
   bloqueado: 'Bloqueado',
 };
-const ACCESO_TEXT_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
-  habilitado: 'text-[#1a6030]',
-  parcial: 'text-[#a87400]',
-  bloqueado: 'text-[#9a2020]',
+const ACCESO_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
+  habilitado: '#1f7a43',
+  parcial: '#a87400',
+  bloqueado: '#b22e2e',
 };
-// Orden recomendado: lo que requiere atención primero.
-const PRIORIDAD_ESTADO: Record<EstadoUI, number> = { Bloqueado: 0, 'En proceso': 1, Acreditado: 2 };
 
 function Hero() {
   return (
-    <div className="contractor-projects-hero">
-      <p className="contractor-projects-hero-eyebrow">Portal contratista</p>
-      <h2 className="contractor-projects-hero-title">Mis proyectos</h2>
-      <p className="contractor-projects-hero-sub">
+    <section className="mp-hero">
+      <div className="mp-eyebrow">Portal contratista</div>
+      <h1 className="mp-h1">Mis proyectos</h1>
+      <div className="mp-subtitle">
         Revisa tu acreditación en cada obra o faena, el estado de acceso y pago, el avance de empresa y trabajadores y las acciones que requieren atención.
-      </p>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -57,7 +70,6 @@ export default function MisProyectosTab({
   contratistaLogueado,
   misProyectos,
   allMandantes,
-  selectedProyectoId,
   setSelectedProyectoId,
   setActiveTab,
 }: {
@@ -73,13 +85,12 @@ export default function MisProyectosTab({
 
   if (misProyectos.length === 0) {
     return (
-      <div className="fade-in flex flex-col">
+      <div className="mp-page">
         <Hero />
-        <div className="contractor-projects-floating">
-          <div className="card py-14 flex flex-col items-center justify-center text-center">
-            <FileText size={38} className="text-gray-300 mb-3" />
-            <p className="font-semibold text-navy text-[15.4px]">Todavía no tienes proyectos asociados.</p>
-            <p className="text-sm text-gray-500 mt-1 max-w-md">Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
+        <div className="mp-floating">
+          <div className="mp-empty">
+            <p style={{ fontWeight: 700, color: '#172033', marginBottom: 4 }}>Todavía no tienes proyectos asociados.</p>
+            <p>Cuando un mandante te asigne o invite a una obra o faena, aparecerá aquí.</p>
           </div>
         </div>
       </div>
@@ -91,11 +102,11 @@ export default function MisProyectosTab({
   const rowsByProyecto = new Map(rows.map(r => [r.proyectoId, r]));
   const requisitosAll = getRequisitos();
 
+  // Orden natural: el mismo de misProyectos, sin reordenar por criticidad.
   const proyectosInfo = misProyectos.map(p => {
     const row = rowsByProyecto.get(p.id);
     const mandante = allMandantes.find(m => m.id === p.mandanteId);
     const estadoUI: EstadoUI = row ? estadoUILabel(row.estado) : 'En proceso';
-    const badge = row ? BADGE[acredBadgeClass(row.estado)] : 'b-yellow';
 
     const trabajadoresProyecto = (contratistaLogueado.trabajadores || []).filter(w =>
       esTrabajadorAsignado(w, p.id, misProyectos)
@@ -130,7 +141,6 @@ export default function MisProyectosTab({
       proyecto: p,
       mandante,
       estadoUI,
-      badge,
       accesoPago,
       estadoAcceso,
       proximoVenc,
@@ -152,14 +162,8 @@ export default function MisProyectosTab({
   // 'Activo'. Sin fallback — si no hay ninguno, el KPI debe mostrar 0.
   const totalProyectosActivos = misProyectos.filter(p => String(p.estado).toLowerCase() === 'activo').length;
 
-  // Orden: Bloqueado primero, luego En proceso, luego Acreditado; después por nombre.
-  const proyectosOrdenados = [...proyectosInfo].sort((a, b) => {
-    const diff = PRIORIDAD_ESTADO[a.estadoUI] - PRIORIDAD_ESTADO[b.estadoUI];
-    return diff !== 0 ? diff : a.proyecto.nombre.localeCompare(b.proyecto.nombre);
-  });
-
   const q = search.toLowerCase().trim();
-  const proyectosFiltrados = proyectosOrdenados.filter(i => {
+  const proyectosFiltrados = proyectosInfo.filter(i => {
     const okFilter = filter === 'Todos' || i.estadoUI === filter;
     const okSearch = !q || i.proyecto.nombre.toLowerCase().includes(q) || (i.mandante?.nombre || '').toLowerCase().includes(q);
     return okFilter && okSearch;
@@ -170,166 +174,147 @@ export default function MisProyectosTab({
 
   const irAInicio = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('dashboard'); };
   const irADocumentos = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('subir'); };
-  const irATrabajadores = (proyectoId: string) => { setSelectedProyectoId(proyectoId); setActiveTab('trabajadores'); };
 
   return (
-    <div className="fade-in flex flex-col">
+    <div className="mp-page">
       <Hero />
 
-      <div className="contractor-projects-floating flex flex-col gap-5">
-        {/* Identidad del contratista + buscador: superficie blanca propia
-            para que el solape sobre el hero nunca deje texto oscuro sin
-            soporte visual encima del fondo navy. */}
-        <div className="contractor-projects-identity flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <section className="mp-floating">
+        <div className="mp-toolbar">
           <div>
-            <p className="text-[20px] font-bold text-navy leading-tight">{contratistaLogueado.nombre}</p>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">RUT {contratistaLogueado.rut} · {totalProyectosActivos} proyecto{totalProyectosActivos === 1 ? '' : 's'} activo{totalProyectosActivos === 1 ? '' : 's'}</p>
+            <div className="mp-toolbar-name">{contratistaLogueado.nombre}</div>
+            <div className="mp-toolbar-sub">RUT {contratistaLogueado.rut} · {totalProyectosActivos} proyecto{totalProyectosActivos === 1 ? '' : 's'} activo{totalProyectosActivos === 1 ? '' : 's'}</div>
           </div>
-          <div className="relative w-full md:w-auto">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <div className="mp-search-wrap">
+            <Search size={14} className="mp-search-icon" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="form-input pl-9 w-full md:w-[280px]"
+              className="mp-search"
               placeholder="Buscar proyecto o mandante..."
               aria-label="Buscar proyecto o mandante"
             />
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="contractor-projects-kpi">
-            <p className="contractor-projects-kpi-title">Proyectos activos</p>
-            <p className="contractor-projects-kpi-value text-navy">{totalProyectosActivos}</p>
-            <p className="contractor-projects-kpi-foot">Obras y faenas asignadas</p>
+        <div className="mp-grid mp-grid-4" style={{ marginBottom: 14 }}>
+          <div className="mp-kpi">
+            <div className="mp-metric-title">Proyectos activos</div>
+            <div className="mp-metric-value">{totalProyectosActivos}</div>
+            <div className="mp-metric-foot">Obras y faenas asignadas</div>
           </div>
-          <div className="contractor-projects-kpi">
-            <p className="contractor-projects-kpi-title">Acreditados</p>
-            <p className="contractor-projects-kpi-value text-[#1a6030]">{totalAcreditados}</p>
-            <p className="contractor-projects-kpi-foot">Sin acciones pendientes</p>
+          <div className="mp-kpi">
+            <div className="mp-metric-title">Acreditados</div>
+            <div className="mp-metric-value">{totalAcreditados}</div>
+            <div className="mp-metric-foot">Sin acciones pendientes</div>
           </div>
-          <div className="contractor-projects-kpi">
-            <p className="contractor-projects-kpi-title">En proceso</p>
-            <p className="contractor-projects-kpi-value text-[#a87400]">{totalEnProceso}</p>
-            <p className="contractor-projects-kpi-foot">Requieren seguimiento</p>
+          <div className="mp-kpi">
+            <div className="mp-metric-title">En proceso</div>
+            <div className="mp-metric-value">{totalEnProceso}</div>
+            <div className="mp-metric-foot">Requiere seguimiento</div>
           </div>
-          <div className="contractor-projects-kpi">
-            <p className="contractor-projects-kpi-title">Bloqueados</p>
-            <p className="contractor-projects-kpi-value text-[#9a2020]">{totalBloqueados}</p>
-            <p className="contractor-projects-kpi-foot">Requieren acción prioritaria</p>
+          <div className="mp-kpi">
+            <div className="mp-metric-title">Bloqueados</div>
+            <div className="mp-metric-value">{totalBloqueados}</div>
+            <div className="mp-metric-foot">Requiere acción prioritaria</div>
           </div>
         </div>
 
-        {/* Filtros */}
-        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filtrar proyectos por estado">
+        <div className="mp-filters" role="group" aria-label="Filtrar proyectos por estado">
           {([
-            ['Todos', misProyectos.length],
-            ['Acreditado', totalAcreditados],
-            ['En proceso', totalEnProceso],
-            ['Bloqueado', totalBloqueados],
-          ] as Array<[typeof filter, number]>).map(([f, count]) => (
+            ['Todos', 'Todos', misProyectos.length],
+            ['Acreditado', 'Acreditados', totalAcreditados],
+            ['En proceso', 'En proceso', totalEnProceso],
+            ['Bloqueado', 'Bloqueados', totalBloqueados],
+          ] as Array<[typeof filter, string, number]>).map(([value, label, count]) => (
             <button
-              key={f}
+              key={value}
               type="button"
-              aria-pressed={filter === f}
-              className={`contractor-projects-filter ${filter === f ? 'contractor-projects-filter-active' : ''}`}
-              onClick={() => setFilter(f)}
+              aria-pressed={filter === value}
+              className={`mp-filter ${filter === value ? 'active' : ''}`}
+              onClick={() => setFilter(value)}
             >
-              {f} <span className="contractor-projects-filter-count">{count}</span>
+              {label} · {count}
             </button>
           ))}
         </div>
 
-        {/* Grid de proyectos */}
         {proyectosFiltrados.length === 0 ? (
-          <div className="card py-10 flex flex-col items-center justify-center text-center text-gray-500 gap-3">
-            <Search size={28} className="text-gray-300" />
-            <p>No encontramos proyectos con esos filtros.</p>
+          <div className="mp-empty">
+            <p>No hay proyectos que coincidan con la búsqueda o filtro.</p>
             {hayFiltrosActivos && (
-              <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>Limpiar filtros</button>
+              <button className="mp-btn mp-btn-secondary" style={{ marginTop: 10 }} onClick={limpiarFiltros}>Limpiar filtros</button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="mp-grid mp-grid-3">
             {proyectosFiltrados.map(info => {
-              const { proyecto: p, mandante, estadoUI, badge, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
-              const StatusIcon = STATE_ICON[estadoUI];
-              const esSeleccionado = p.id === selectedProyectoId;
+              const { proyecto: p, mandante, estadoUI, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
+              const pagoColor = accesoPago.pagoBloqueado ? '#b22e2e' : '#1f7a43';
 
               return (
-                <div
-                  key={p.id}
-                  className={`contractor-projects-card state-${STATE_KEY[estadoUI]} ${esSeleccionado ? 'selected' : ''}`}
-                >
-                  <div className="p-4 border-b border-cream">
-                    <div className="flex justify-between items-start gap-2">
+                <article key={p.id} className={`mp-project-card state-${STATE_KEY[estadoUI]}`}>
+                  <div className="mp-project-head">
+                    <div className="mp-status-row">
                       <div>
-                        <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
-                          <Building2 size={13} /> {mandante?.nombre || 'Mandante no disponible'}
-                        </div>
-                        <h3 className="text-[17.5px] font-bold text-navy mt-1">{p.nombre}</h3>
+                        <div className="mp-project-title">{p.nombre}</div>
+                        <div className="mp-project-sub">Mandante: {mandante?.nombre || 'Mandante no disponible'}</div>
                       </div>
-                      <span className={`badge contractor-projects-status-badge ${badge} shrink-0`}>{estadoUI}</span>
+                      <span className={`mp-badge ${MP_BADGE_CLASS[estadoUI]}`}>
+                        <span className="mp-badge-dot" />
+                        {estadoUI}
+                      </span>
                     </div>
-                    {esSeleccionado && <p className="text-[10.5px] text-brown font-semibold mt-1.5">Proyecto seleccionado</p>}
                   </div>
 
-                  <div className="p-4 flex-1 flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="contractor-projects-mini">
-                        <p className="contractor-projects-mini-label">Acceso</p>
-                        <p className={`contractor-projects-mini-value ${ACCESO_TEXT_COLOR[estadoAcceso.estado]}`}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</p>
+                  <div className="mp-project-body">
+                    <div className="mp-split">
+                      <div className="mp-mini">
+                        <div className="mp-mini-label">Acceso</div>
+                        <div className="mp-mini-value" style={{ color: ACCESO_COLOR[estadoAcceso.estado] }}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</div>
                       </div>
-                      <div className="contractor-projects-mini">
-                        <p className="contractor-projects-mini-label">Pago</p>
-                        <p className={`contractor-projects-mini-value ${accesoPago.pagoBloqueado ? 'text-[#9a2020]' : 'text-[#1a6030]'}`}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</p>
+                      <div className="mp-mini">
+                        <div className="mp-mini-label">Pago</div>
+                        <div className="mp-mini-value" style={{ color: pagoColor }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
                       </div>
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1.5">
-                        <span>Empresa</span>
-                        <span className="text-gray-500 font-medium">{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal} obligatorios` : 'Sin requisitos obligatorios'}</span>
-                      </div>
-                      <div className="prog-wrap"><div className="prog-fill" style={{ width: `${empresaPct}%` }}></div></div>
+                      <div className="mp-line-row"><strong>Empresa</strong><span>{empresaTotal > 0 ? `${empresaOk} / ${empresaTotal} obligatorios` : 'Sin requisitos obligatorios'}</span></div>
+                      <div className="mp-progress"><div className="mp-progress-fill" style={{ width: `${empresaPct}%`, background: BAR_COLOR_EMPRESA[estadoUI] }} /></div>
                     </div>
                     <div>
-                      <div className="flex justify-between text-[12.5px] font-semibold text-navy mb-1.5">
-                        <span>Trabajadores</span>
-                        <span className="text-gray-500 font-medium">{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores agregados'}</span>
-                      </div>
-                      <div className="prog-wrap"><div className="prog-fill" style={{ width: `${trabajadoresPct}%`, backgroundColor: '#2a6a3a' }}></div></div>
+                      <div className="mp-line-row"><strong>Trabajadores</strong><span>{trabajadoresTotal > 0 ? `${trabajadoresOk} / ${trabajadoresTotal} acreditados` : 'Sin trabajadores agregados'}</span></div>
+                      <div className="mp-progress"><div className="mp-progress-fill" style={{ width: `${trabajadoresPct}%`, background: BAR_COLOR_TRABAJADORES[estadoUI] }} /></div>
                     </div>
 
-                    <div className={`contractor-projects-alert state-${STATE_KEY[estadoUI]}`}>
-                      <StatusIcon size={15} className="shrink-0 mt-0.5" />
-                      <span><strong>{ALERT_PREFIX[estadoUI]}</strong> {problemaPrincipal}</span>
+                    <div className={`mp-alert ${MP_ALERT_CLASS[estadoUI]}`}>
+                      <strong>{ALERT_PREFIX[estadoUI]}</strong> {problemaPrincipal}
                     </div>
 
-                    <p className="text-[11.5px] text-gray-500">
+                    <div className="mp-expiry">
                       {proximoVenc
-                        ? <>Próximo vencimiento: <strong className="text-navy font-semibold">{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
+                        ? <>Próximo vencimiento: <strong>{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
                         : 'Sin vencimientos próximos'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 pt-3 mt-auto border-t border-cream flex flex-col gap-2">
-                    <button className="contractor-projects-btn-primary" onClick={() => irAInicio(p.id)}>
-                      Ver proyecto
-                    </button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button className="btn contractor-projects-btn-ghost btn-sm" onClick={() => irADocumentos(p.id)}>Documentos</button>
-                      <button className="btn contractor-projects-btn-ghost btn-sm" onClick={() => irATrabajadores(p.id)}>Trabajadores</button>
                     </div>
                   </div>
-                </div>
+
+                  <div className="mp-project-foot">
+                    <button
+                      className={`mp-btn ${estadoUI === 'Bloqueado' ? 'mp-btn-danger' : 'mp-btn-primary'}`}
+                      onClick={() => irAInicio(p.id)}
+                    >
+                      {estadoUI === 'Bloqueado' ? 'Resolver bloqueos' : 'Ver proyecto'}
+                    </button>
+                    <button className="mp-btn mp-btn-secondary" onClick={() => irADocumentos(p.id)}>Documentos</button>
+                  </div>
+                </article>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

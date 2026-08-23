@@ -298,62 +298,113 @@
   .acc-erow:hover { border-color: var(--cream3); }
   .acc-eavatar { width: 30px; height: 30px; border-radius: 50%; background: var(--navy2); color: var(--cream); display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; flex-shrink: 0; }
 
-  /* ---- Contratista > Mis proyectos (hero + cards fieles al prototipo) ----
-     Clases con prefijo contractor-projects- para no tocar .card/.btn/.badge/
-     .page-header globales, que Admin/Inicio/Mandante siguen usando tal cual. */
-  .contractor-projects-hero {
-    background: linear-gradient(135deg, var(--navy), var(--navy2));
+  /* ---- Contratista > Mis proyectos ----
+     Reproducción fiel del prototipo HTML aprobado. Todo bajo el prefijo
+     mp- y las variables locales de .mp-page: no toca .card/.btn/.badge/
+     .alert/.prog-wrap/.page-header globales (Admin/Inicio/Mandante siguen
+     usando esas clases tal cual). Paleta y tipografía son las del
+     prototipo, no los tokens de Acredita. */
+  .mp-page {
+    --mp-navy: #111827;
+    --mp-navy2: #1f2937;
+    --mp-cream: #f6f1e8;
+    --mp-line: #e8e0d3;
+    --mp-brown: #8c5a2b;
+    --mp-gold: #c4924c;
+    --mp-green: #1f7a43;
+    --mp-green-bg: #eaf6ee;
+    --mp-yellow: #a87400;
+    --mp-yellow-bg: #fff7da;
+    --mp-red: #b22e2e;
+    --mp-red-bg: #fdecec;
+    --mp-blue: #355f94;
+    --mp-blue-bg: #eaf1fb;
+    --mp-gray: #6b7280;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--mp-cream);
+    color: #172033;
     margin: -0.75rem -0.75rem 0;
-    padding: 22px 20px 52px;
-    border-radius: 0 0 18px 18px;
+    padding: 26px 32px;
   }
-  @media (min-width: 1280px) {
-    .contractor-projects-hero { margin: -1rem -1rem 0; padding: 26px 28px 56px; }
+  @media (min-width: 1280px) { .mp-page { margin: -1rem -1rem 0; } }
+  @media (max-width: 900px) { .mp-page { padding: 20px; } }
+
+  .mp-hero { background: linear-gradient(135deg, var(--mp-navy), var(--mp-navy2)); color: white; border-radius: 0 0 18px 18px; margin: -26px -32px 0; padding: 26px 32px 56px; }
+  @media (max-width: 900px) { .mp-hero { margin: -20px -20px 0; padding: 22px 20px 50px; } }
+  .mp-eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #d8b27a; font-weight: 700; }
+  .mp-h1 { margin: 4px 0 6px; font-size: 28px; font-weight: 700; color: white; }
+  .mp-subtitle { font-size: 13px; color: #d2d7df; max-width: 780px; line-height: 1.45; }
+
+  .mp-floating { margin-top: -30px; position: relative; z-index: 2; }
+
+  .mp-toolbar { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .mp-toolbar-name { font-size: 21px; font-weight: 800; }
+  .mp-toolbar-sub { font-size: 11.5px; color: #8a92a1; margin-top: 3px; }
+
+  .mp-search-wrap { position: relative; }
+  .mp-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #8a92a1; pointer-events: none; }
+  .mp-search { border: 1px solid var(--mp-line); background: white; border-radius: 10px; padding: 10px 12px 10px 32px; font-size: 13px; min-width: 270px; font-family: inherit; color: #172033; }
+  @media (max-width: 900px) { .mp-search { min-width: 100%; } }
+
+  .mp-filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+  .mp-filter { border: 1px solid var(--mp-line); background: white; border-radius: 999px; padding: 8px 11px; font-size: 11px; font-weight: 800; cursor: pointer; font-family: inherit; color: #172033; }
+  .mp-filter.active { background: var(--mp-navy); color: white; border-color: var(--mp-navy); }
+
+  .mp-grid { display: grid; gap: 14px; }
+  .mp-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .mp-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 1100px) {
+    .mp-grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .mp-grid-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
   }
-  .contractor-projects-hero-eyebrow { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: #d8b27a; font-weight: 700; }
-  .contractor-projects-hero-title { font-size: 27px; font-weight: 700; color: white; margin: 6px 0 8px; line-height: 1.15; }
-  .contractor-projects-hero-sub { font-size: 13px; line-height: 1.45; color: #d2d7df; max-width: 780px; }
+  @media (max-width: 640px) {
+    .mp-grid-4, .mp-grid-3 { grid-template-columns: 1fr; }
+    .mp-project-card { min-height: auto; }
+  }
 
-  /* El contenido monta sobre el borde inferior del hero (como el prototipo);
-     la franja de identidad tiene su propia superficie blanca (ver
-     .contractor-projects-identity) para que ese solape nunca deje texto
-     oscuro flotando directamente sobre el fondo navy. */
-  .contractor-projects-floating { margin-top: -30px; position: relative; z-index: 2; }
+  .mp-kpi { background: #fff; border: 1px solid var(--mp-line); border-radius: 16px; padding: 18px; box-shadow: 0 2px 12px rgba(20,24,34,.04); }
+  .mp-metric-title { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: #8a92a1; font-weight: 800; }
+  .mp-metric-value { font-size: 26px; font-weight: 800; margin-top: 6px; }
+  .mp-metric-foot { font-size: 11.5px; color: #7a8190; margin-top: 4px; }
 
-  .contractor-projects-identity { background: white; border: 1px solid var(--cream3); border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(20,24,34,.08); }
+  .mp-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+  .mp-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .mp-badge-green { background: var(--mp-green-bg); color: var(--mp-green); }
+  .mp-badge-yellow { background: var(--mp-yellow-bg); color: var(--mp-yellow); }
+  .mp-badge-red { background: var(--mp-red-bg); color: var(--mp-red); }
 
-  .contractor-projects-kpi { background: white; border: 1px solid var(--cream3); border-radius: 16px; padding: 16px 18px; box-shadow: 0 2px 12px rgba(20,24,34,.04); }
-  .contractor-projects-kpi-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #8a92a1; font-weight: 700; }
-  .contractor-projects-kpi-value { font-size: 26px; font-weight: 800; margin-top: 6px; line-height: 1; }
-  .contractor-projects-kpi-foot { font-size: 11.5px; color: #7a8190; margin-top: 5px; }
+  .mp-project-card { background: #fff; border: 1px solid var(--mp-line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 330px; }
+  .mp-project-card.state-acreditado { border-top: 4px solid var(--mp-green); }
+  .mp-project-card.state-proceso { border-top: 4px solid var(--mp-yellow); }
+  .mp-project-card.state-bloqueado { border-top: 4px solid var(--mp-red); }
 
-  .contractor-projects-filter { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--cream3); background: white; color: var(--navy); border-radius: 999px; padding: 8px 12px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-  .contractor-projects-filter:hover { border-color: var(--navy); }
-  .contractor-projects-filter-count { background: rgba(0,0,0,.08); border-radius: 10px; padding: 0 6px; font-size: 10.5px; }
-  .contractor-projects-filter-active { background: var(--navy); color: white; border-color: var(--navy); }
-  .contractor-projects-filter-active .contractor-projects-filter-count { background: rgba(255,255,255,.22); }
+  .mp-project-head { padding: 16px; border-bottom: 1px solid #f0ece4; }
+  .mp-status-row { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .mp-project-title { font-size: 17px; font-weight: 800; }
+  .mp-project-sub { font-size: 11.5px; color: #7c8492; margin-top: 4px; }
 
-  .contractor-projects-card { background: white; border: 1px solid var(--cream3); border-top: 4px solid var(--cream3); border-radius: var(--r); overflow: hidden; box-shadow: 0 2px 12px rgba(20,24,34,.04); display: flex; flex-direction: column; transition: box-shadow 0.15s; }
-  .contractor-projects-card:hover { box-shadow: 0 4px 18px rgba(20,24,34,.08); }
-  .contractor-projects-card.state-bloqueado { border-top-color: #c02020; }
-  .contractor-projects-card.state-proceso { border-top-color: #d4a000; }
-  .contractor-projects-card.state-acreditado { border-top-color: #2a8040; }
-  .contractor-projects-card.selected { box-shadow: 0 0 0 1px var(--brown), 0 2px 12px rgba(20,24,34,.04); }
+  .mp-project-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .mp-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mp-mini { border: 1px solid var(--mp-line); border-radius: 12px; padding: 10px; background: #fcfbf7; }
+  .mp-mini-label { font-size: 10px; color: #8a92a1; text-transform: uppercase; font-weight: 800; letter-spacing: .05em; }
+  .mp-mini-value { font-size: 13px; font-weight: 800; margin-top: 4px; }
 
-  .contractor-projects-mini { background: #fcfbf7; border: 1px solid var(--cream3); border-radius: 12px; padding: 10px; }
-  .contractor-projects-mini-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #8a92a1; font-weight: 700; }
-  .contractor-projects-mini-value { font-size: 12.5px; font-weight: 700; margin-top: 4px; }
+  .mp-line-row { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; font-size: 12px; }
+  .mp-progress { height: 8px; background: #f1ece2; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .mp-progress-fill { display: block; height: 100%; }
 
-  .contractor-projects-alert { border: 1px solid; border-radius: 11px; padding: 11px 12px; font-size: 11.5px; line-height: 1.45; display: flex; align-items: flex-start; gap: 8px; }
-  .contractor-projects-alert.state-acreditado { background: var(--color-alert-success); border-color: #a9d9bc; color: #1a5030; }
-  .contractor-projects-alert.state-proceso { background: var(--color-alert-warn); border-color: #e6cd94; color: #7a5500; }
-  .contractor-projects-alert.state-bloqueado { background: var(--color-alert-danger); border-color: #efb4b4; color: #8a2020; }
+  .mp-alert { border: 1px solid; padding: 11px 12px; border-radius: 11px; font-size: 11.5px; line-height: 1.45; }
+  .mp-alert-yellow { background: #fff9e7; border-color: #f0e1a2; color: #8a6500; }
+  .mp-alert-red { background: #fff4f4; border-color: #f2cccc; color: #9b2222; }
+  .mp-alert-green { background: #f1faf3; border-color: #cfe8d5; color: #1f6b39; }
 
-  .contractor-projects-btn-primary { width: 100%; min-height: 38px; padding: 9px 12px; border-radius: 10px; border: none; background: linear-gradient(90deg, var(--gold), var(--brown)); color: white; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: filter 0.15s; }
-  .contractor-projects-btn-primary:hover { filter: brightness(1.04); }
+  .mp-expiry { font-size: 11.5px; color: #7d8594; }
 
-  .contractor-projects-btn-ghost { min-height: 34px; background: white; color: var(--navy); border: 1px solid var(--cream3); border-radius: 9px; font-family: inherit; }
-  .contractor-projects-btn-ghost:hover { background: var(--cream2); }
+  .mp-project-foot { padding: 14px 16px; border-top: 1px solid #f0ece4; display: flex; gap: 8px; }
+  .mp-btn { border: 0; border-radius: 10px; padding: 9px 12px; font-size: 11.5px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .mp-btn-primary { background: linear-gradient(90deg, #b8893f, #8c5a2b); color: white; flex: 1; }
+  .mp-btn-secondary { background: #fff; border: 1px solid var(--mp-line); color: #172033; }
+  .mp-btn-danger { background: #b22e2e; color: #fff; flex: 1; }
 
-  .contractor-projects-status-badge { padding: 5px 9px; font-size: 11px; font-weight: 700; line-height: 1; }
+  .mp-empty { padding: 25px; text-align: center; border: 1px dashed var(--mp-line); border-radius: 14px; color: #7a8190; background: #faf8f3; font-size: 12.5px; }
 }
