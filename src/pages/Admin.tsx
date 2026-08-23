@@ -38,19 +38,22 @@ import {
   ArrowRight,
   Search,
   ArrowLeft,
-  ChevronRight, Briefcase, Menu, ChevronLeft
+  ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
-import { Contratista, Proyecto, Requisito } from "../types";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getVerificadores, saveVerificadores, getClaimsRevision, saveClaimsRevision, getPlantillas, savePlantillas, getReglas, saveReglas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
+import { Contratista, Proyecto, Requisito, Verificador, ClaimRevision } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
 import { buildColaDocs, buildCorrectionDocs } from './admin/colaUtils';
+import { pruneClaimsRevision } from './admin/verificadorUtils';
 import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS, GLOBAL_PLANTILLA_DOCUMENTOS } from './admin/globalData';
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
 import MandantesTab from './admin/MandantesTab';
 import ContratistasTab from './admin/ContratistasTab';
 import ProyectosTab from './admin/ProyectosTab';
 import ProyectoDetailDrawer from './admin/ProyectoDetailDrawer';
+import VerificadoresTab from './admin/VerificadoresTab';
+import VerificadorDetailDrawer from './admin/VerificadorDetailDrawer';
 import AcreditacionesTab from './admin/AcreditacionesTab';
 import PlantillasTab from './admin/PlantillasTab';
 import ReglasTab from './admin/ReglasTab';
@@ -261,10 +264,27 @@ export default function AdminPortal() {
   // Proyecto), para que ambos aparezcan al instante sin recargar.
   const [proyectos, setProyectos] = useState<Proyecto[]>(() => getProyectos());
   const [requisitos, setRequisitos] = useState<Requisito[]>(() => getRequisitos());
+  // Equipo de verificación y claims de la Cola de revisión: única fuente
+  // reactiva compartida entre ColaRevisionTab y VerificadoresTab, para que
+  // "tomar revisión"/aprobar/rechazar en Cola se refleje al instante en
+  // Verificadores (y viceversa) sin depender de un refresh manual.
+  const [verificadores, setVerificadores] = useState<Verificador[]>(() => getVerificadores());
+  const [claimsRevision, setClaimsRevisionState] = useState<ClaimRevision[]>(() => getClaimsRevision());
+  const setClaimsRevision = (next: ClaimRevision[]) => {
+    saveClaimsRevision(next);
+    setClaimsRevisionState(next);
+  };
   useEffect(() => {
-    setContratistas(getContratistas());
-    setProyectos(getProyectos());
+    const freshContratistas = getContratistas();
+    const freshProyectos = getProyectos();
+    setContratistas(freshContratistas);
+    setProyectos(freshProyectos);
     setRequisitos(getRequisitos());
+    setVerificadores(getVerificadores());
+    // Red de seguridad: al cambiar de pestaña, descarta claims cuyo
+    // documento ya no esté en la cola (p. ej. modificado por otro flujo).
+    setClaimsRevision(pruneClaimsRevision(getClaimsRevision(), freshContratistas, freshProyectos));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aprobadosHoy, setAprobadosHoy] = useState(2);
@@ -294,6 +314,11 @@ export default function AdminPortal() {
   useEffect(() => {
     if (!proyectoSeleccionado) setTabProyecto("resumen");
   }, [proyectoSeleccionado]);
+  const [verificadorSeleccionado, setVerificadorSeleccionado] = useState<any>(null);
+  const [tabVerificador, setTabVerificador] = useState("resumen");
+  useEffect(() => {
+    if (!verificadorSeleccionado) setTabVerificador("resumen");
+  }, [verificadorSeleccionado]);
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
@@ -473,16 +498,11 @@ export default function AdminPortal() {
     { id: "mandantes", label: "Mandantes", icon: Building2, section: "Directorios" },
     { id: "contratistas", label: "Contratistas", icon: Users },
     { id: "proyectos", label: "Proyectos", icon: FolderOpen },
+    { id: "verificadores", label: "Verificadores", icon: UserCheck },
     { id: "plantillas", label: "Plantillas", icon: FileCode2, section: "Configuración" },
     { id: "reglas", label: "Reglas de vigencia", icon: SlidersHorizontal },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
     { id: "auditoria", label: "Auditoría", icon: ShieldAlert, badgePunto: hayAccesosFallidos, badgeTipo: "alerta" },
-  ];
-
-  const REVISORES = [
-    { nombre: "Ana Díaz", estado: "Online", revisados: 14 },
-    { nombre: "Carlos Reyes", estado: "Online", revisados: 9 },
-    { nombre: "María Pérez", estado: "Offline", revisados: 0 },
   ];
 
   const PROYECTOS_BUSQUEDA = proyectos.map(p => {
@@ -499,7 +519,12 @@ export default function AdminPortal() {
     ...GLOBAL_CONTRATISTAS.map(c => ({ tipo: "empresa", label: c.nombre, sub: c.isNew ? "Contratista (Nuevo)" : "Contratista", data: c, esMandante: false })),
     ...ACTIVIDAD_RECIENTE.map(a => ({ tipo: "documento", label: a.documento, sub: `${a.empresa} · ${a.estado}`, data: a })),
     ...PROYECTOS_BUSQUEDA.map(p => ({ tipo: "proyecto", label: p.nombre, sub: p.mandante, data: p })),
-    ...REVISORES.map(r => ({ tipo: "revisor", label: r.nombre, sub: r.estado, data: r })),
+    ...verificadores.map(v => ({
+      tipo: "revisor",
+      label: v.nombre,
+      sub: `${v.rol === 'supervisor' ? 'Supervisor' : 'Verificador'} · ${v.estado === 'online' ? 'Online' : 'Offline'}`,
+      data: v,
+    })),
   ];
 
   const resultadosBusqueda = busquedaGlobal.trim().length === 0
@@ -624,6 +649,12 @@ export default function AdminPortal() {
                       {resultadosPorTipo.revisor.map((r, i) => (
                         <div
                           key={i}
+                          onClick={() => {
+                            setActiveTab('verificadores');
+                            setVerificadorSeleccionado(r.data as any);
+                            setBusquedaAbierta(false);
+                            setBusquedaGlobal("");
+                          }}
                           className="flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-cream cursor-pointer"
                         >
                           <span className="text-[13px] text-navy">{r.label}</span>
@@ -889,6 +920,9 @@ export default function AdminPortal() {
               rechazadosHoy={rechazadosHoy}
               setRechazadosHoy={setRechazadosHoy}
               showToast={showToast}
+              verificadores={verificadores}
+              claimsRevision={claimsRevision}
+              setClaimsRevision={setClaimsRevision}
             />
           )}
 
@@ -927,6 +961,17 @@ export default function AdminPortal() {
               onVerProyecto={(proyecto) => setProyectoSeleccionado(proyecto)}
               setShowNuevoProyectoModal={setShowNuevoProyectoModal}
               selectedProyectoId={proyectoSeleccionado?.id || null}
+            />
+          )}
+
+          {activeTab === "verificadores" && (
+            <VerificadoresTab
+              verificadores={verificadores}
+              setVerificadores={setVerificadores}
+              claimsRevision={claimsRevision}
+              GLOBAL_CONTRATISTAS={contratistas}
+              GLOBAL_PROYECTOS={proyectos}
+              onVerVerificador={(verificador) => setVerificadorSeleccionado(verificador)}
             />
           )}
 
@@ -1426,6 +1471,21 @@ export default function AdminPortal() {
           onVerAcreditacion={(contratista, proyectoId) => {
             setSelectedAcreditacionContratista({ ...contratista, _fichaProyectoId: proyectoId });
           }}
+        />
+      )}
+
+      {/* Drawer Verificador Seleccionado */}
+      {verificadorSeleccionado && (
+        <VerificadorDetailDrawer
+          verificadorSeleccionado={verificadorSeleccionado}
+          setVerificadorSeleccionado={setVerificadorSeleccionado}
+          tabVerificador={tabVerificador}
+          setTabVerificador={setTabVerificador}
+          verificadores={verificadores}
+          setVerificadores={setVerificadores}
+          claimsRevision={claimsRevision}
+          GLOBAL_CONTRATISTAS={contratistas}
+          GLOBAL_PROYECTOS={proyectos}
         />
       )}
 

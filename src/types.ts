@@ -92,6 +92,36 @@ export interface Contratista {
   isNew?: boolean;
 }
 
+export interface Verificador {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: 'verificador' | 'supervisor';
+  estado: 'online' | 'offline';
+  activo: boolean;
+}
+
+// Un documento "tomado" en la Cola de revisión: se identifica por la misma
+// key estable que usa el resto del frontend (buildDocumentoQueueKey), nunca
+// por nombre, para que sobreviva a reconstrucciones de la lista y a reloads.
+export interface ClaimRevision {
+  documentoKey: string;
+  verificadorId: string;
+  claimedAt: number;
+}
+
+// Registro mínimo de actividad operacional (no reemplaza a Auditoría, que
+// sigue intacta): una fila por decisión de aprobar/rechazar, para que
+// Verificadores pueda mostrar "Revisados hoy" sin parsear texto ni depender
+// de nombres como identidad.
+export interface ActividadVerificador {
+  id: string;
+  verificadorId: string;
+  documentoKey: string;
+  accion: 'aprobado' | 'rechazado';
+  fecha: string;
+}
+
 export interface Invitacion {
   id: string;
   contratistaId: string;

@@ -1,4 +1,14 @@
-import { Mandante, Proyecto, Contratista, Documento, Trabajador } from '../types';
+import { Mandante, Proyecto, Contratista, Documento, Trabajador, Verificador } from '../types';
+
+// Equipo de verificación inicial — única fuente de verdad de nombres de
+// revisor/supervisor para todo el frontend (reemplaza los nombres antes
+// hardcodeados por separado en Admin.tsx y ColaRevisionTab.tsx).
+export const VERIFICADORES: Verificador[] = [
+  { id: 'ver_maria', nombre: 'María González', email: 'maria.gonzalez@acredita.cl', rol: 'verificador', estado: 'online', activo: true },
+  { id: 'ver_carlos', nombre: 'Carlos Reyes', email: 'carlos.reyes@acredita.cl', rol: 'verificador', estado: 'online', activo: true },
+  { id: 'sup_ana', nombre: 'Ana Ruiz', email: 'ana.ruiz@acredita.cl', rol: 'supervisor', estado: 'online', activo: true },
+  { id: 'ver_sofia', nombre: 'Sofía Pérez', email: 'sofia.perez@acredita.cl', rol: 'verificador', estado: 'offline', activo: true },
+];
 
 export const PLANTILLA_DOCUMENTOS = [
   { id: 'liquidacion', nombre: 'Liquidación de sueldo (mes vigente)', categoria: 'Laboral', frecuencia: 'Mensual', destino: 'trabajador' },

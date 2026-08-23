@@ -1,5 +1,5 @@
-import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento } from '../types';
+import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES } from './mockData';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador } from '../types';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -98,6 +98,8 @@ export function initDb() {
     localStorage.setItem('acredita_plantillas', JSON.stringify(PLANTILLA_DOCUMENTOS));
     
     localStorage.setItem('acredita_reglas', JSON.stringify(REGLAS_DEFAULT));
+    localStorage.setItem('acredita_verificadores', JSON.stringify(VERIFICADORES));
+    localStorage.setItem('acredita_verificador_actual', JSON.stringify('ver_maria'));
     localStorage.setItem('acredita_db_initialized', 'true');
   }
 }
@@ -266,6 +268,108 @@ export function saveReglas(data: any[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem('acredita_reglas', JSON.stringify(data));
   }
+}
+
+export function getVerificadores(): Verificador[] {
+  initDb();
+  if (typeof window === 'undefined') return VERIFICADORES;
+  return JSON.parse(localStorage.getItem('acredita_verificadores') || '[]');
+}
+
+export function saveVerificadores(data: Verificador[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('acredita_verificadores', JSON.stringify(data));
+  }
+}
+
+// Verificador operativo actual: se guarda solo el id (nunca el nombre) para
+// que sobreviva a un cambio de nombre y no dependa de strings hardcodeados
+// en ningún componente.
+export function getVerificadorActualId(): string | null {
+  initDb();
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem('acredita_verificador_actual');
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function setVerificadorActual(id: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('acredita_verificador_actual', JSON.stringify(id));
+  }
+}
+
+// Resuelve el verificador operativo actual con fallback: si el id guardado
+// ya no existe o quedó inactivo, usa el primer verificador activo,
+// prefiriendo uno en línea. Si no queda ninguno, retorna null (la UI debe
+// mostrar esa ausencia, nunca un nombre inventado).
+export function getVerificadorActual(): Verificador | null {
+  const verificadores = getVerificadores();
+  const storedId = getVerificadorActualId();
+  const stored = storedId ? verificadores.find(v => v.id === storedId && v.activo) : undefined;
+  if (stored) return stored;
+
+  const activos = verificadores.filter(v => v.rol === 'verificador' && v.activo);
+  return activos.find(v => v.estado === 'online') || activos[0] || null;
+}
+
+// Supervisor para escalamientos: primer supervisor activo, prefiriendo uno
+// en línea. Sin fallback inventado — si no hay ninguno, la UI debe mostrar
+// "Supervisor no disponible".
+export function getSupervisorActual(): Verificador | null {
+  const supervisores = getVerificadores().filter(v => v.rol === 'supervisor' && v.activo);
+  return supervisores.find(v => v.estado === 'online') || supervisores[0] || null;
+}
+
+export function getClaimsRevision(): ClaimRevision[] {
+  if (typeof window === 'undefined') return [];
+  return JSON.parse(localStorage.getItem('acredita_claims_revision') || '[]');
+}
+
+export function saveClaimsRevision(data: ClaimRevision[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('acredita_claims_revision', JSON.stringify(data));
+  }
+}
+
+export function getActividadVerificadores(): ActividadVerificador[] {
+  if (typeof window === 'undefined') return [];
+  return JSON.parse(localStorage.getItem('acredita_actividad_verificadores') || '[]');
+}
+
+export function saveActividadVerificadores(data: ActividadVerificador[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('acredita_actividad_verificadores', JSON.stringify(data));
+  }
+}
+
+// Registra una decisión (aprobar/rechazar) apenas ocurre — no en cada click.
+// Es una capa operacional mínima separada de Auditoría (que sigue intacta):
+// evita depender de nombres como identidad y evita parsear texto libre para
+// saber "quién hizo qué hoy".
+export function registrarActividadVerificador(verificadorId: string, documentoKey: string, accion: 'aprobado' | 'rechazado') {
+  const lista = getActividadVerificadores();
+  lista.push({
+    id: `act_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    verificadorId,
+    documentoKey,
+    accion,
+    fecha: new Date().toISOString(),
+  });
+  saveActividadVerificadores(lista);
+}
+
+// "Hoy" para actividad de verificadores usa la fecha real del navegador
+// (igual que registrarAuditoria/Auditoría, que ya timestampean con
+// new Date() en vez de la fecha demo central) — no una fecha demo distinta.
+export function getActividadHoyPorVerificador(verificadorId: string): { aprobados: number; rechazados: number } {
+  const hoy = new Date().toDateString();
+  const actividad = getActividadVerificadores().filter(a =>
+    a.verificadorId === verificadorId && new Date(a.fecha).toDateString() === hoy
+  );
+  return {
+    aprobados: actividad.filter(a => a.accion === 'aprobado').length,
+    rechazados: actividad.filter(a => a.accion === 'rechazado').length,
+  };
 }
 
 export const DEMO_TODAY = new Date(2026, 7, 22); // 22 de Agosto, 2026

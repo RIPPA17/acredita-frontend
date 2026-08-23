@@ -1,22 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle, XCircle, Search, AlertTriangle, History, ArrowUpRight, X } from "lucide-react";
-import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, simularNuevaVersion, sembrarDocumentosEjemplo } from "../../data/localStorageDb";
+import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, simularNuevaVersion, sembrarDocumentosEjemplo, getVerificadorActual, getSupervisorActual, registrarActividadVerificador } from "../../data/localStorageDb";
 import { buildColaDocs, buildCorrectionDocs } from "./colaUtils";
+import { pruneClaimsRevision } from "./verificadorUtils";
+import { Verificador, ClaimRevision } from "../../types";
 import DocumentPreview from "./DocumentPreview";
 
 type Tab = "pending" | "review" | "correction";
 
-interface ClaimInfo {
-  verificador: string;
-  claimedAt: number;
-}
 interface EscalationInfo {
-  supervisor: string;
+  supervisorId: string;
   motivo: string;
 }
-
-const CURRENT_VERIFICADOR = "María González";
-const SUPERVISOR = "Ana Ruiz";
 
 const BADGE: Record<string, string> = {
   red: "border-red-200 bg-red-50 text-red-700",
@@ -70,6 +65,9 @@ export default function ColaRevisionTab({
   rechazadosHoy,
   setRechazadosHoy,
   showToast,
+  verificadores,
+  claimsRevision,
+  setClaimsRevision,
 }: {
   onVerEmpresa?: (empresa: any) => void;
   selectedDocKey?: string | null;
@@ -79,10 +77,24 @@ export default function ColaRevisionTab({
   rechazadosHoy: number;
   setRechazadosHoy: (updater: (n: number) => number) => void;
   showToast: (msg: string, type?: "success" | "error" | "warning") => void;
+  verificadores: Verificador[];
+  claimsRevision: ClaimRevision[];
+  setClaimsRevision: (data: ClaimRevision[]) => void;
 }) {
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_CONTRATISTAS = getContratistas();
+
+  // Verificador operativo actual y supervisor de escalamiento: se resuelven
+  // desde el equipo central (nunca strings hardcodeados), y se recalculan si
+  // el equipo cambia (p. ej. alguien pasa a Offline o se crea un nuevo
+  // verificador) sin necesitar recargar la página.
+  const currentVerificador = useMemo(() => getVerificadorActual(), [verificadores]);
+  const supervisor = useMemo(() => getSupervisorActual(), [verificadores]);
+  const nombreVerificador = (id: string | undefined) =>
+    (id && verificadores.find(v => v.id === id)?.nombre) || "Verificador no disponible";
+  const nombreSupervisor = (id: string) =>
+    verificadores.find(v => v.id === id)?.nombre || "Supervisor no disponible";
 
   const initialPendingDocs = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
   const initialCorrectionDocs = buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
@@ -98,13 +110,9 @@ export default function ColaRevisionTab({
   const [pendingDocs, setPendingDocs] = useState(initialPendingDocs);
   const [correctionDocs, setCorrectionDocs] = useState(initialCorrectionDocs);
 
-  // Únicamente documentos tomados por el verificador actual en esta sesión —
-  // sin backend ni locking real, solo estado de React. Se usa el `key`
-  // estable de cada item (contratista + trabajador + docId) como clave, no el
-  // `id` numérico secuencial: ese se reasigna desde 1 cada vez que se
-  // reconstruye la lista (tras aprobar/rechazar/simular nueva versión), así
-  // que no sirve como clave persistente entre reconstrucciones.
-  const [claims, setClaims] = useState<Record<string, ClaimInfo>>({});
+  // Los escalamientos siguen viviendo solo en esta sesión de Cola (no hay
+  // pantalla de Verificadores que los muestre en el MVP), pero ahora
+  // identifican al supervisor por id, nunca por nombre.
   const [escalations, setEscalations] = useState<Record<string, EscalationInfo>>({});
 
   const [search, setSearch] = useState("");
@@ -135,7 +143,7 @@ export default function ColaRevisionTab({
     return m ? m.nombre : "—";
   };
 
-  const claimedKeys = new Set(Object.keys(claims));
+  const claimedKeys = new Set(claimsRevision.map(c => c.documentoKey));
   const porRevisar = pendingDocs.filter(d => !claimedKeys.has(d.key));
   const enRevision = pendingDocs.filter(d => claimedKeys.has(d.key));
   const esperandoCorreccion = correctionDocs;
@@ -163,7 +171,7 @@ export default function ColaRevisionTab({
 
   const current = filtered.find(d => d.key === selectedKey) ?? filtered[0];
   const isTaken = !!current && claimedKeys.has(current.key);
-  const currentClaim = current ? claims[current.key] : undefined;
+  const currentClaim = current ? claimsRevision.find(c => c.documentoKey === current.key) : undefined;
   const currentEscalation = current ? escalations[current.key] : undefined;
 
   const revisadosHoy = aprobadosHoy + rechazadosHoy;
@@ -192,11 +200,10 @@ export default function ColaRevisionTab({
     const newCorrection = buildCorrectionDocs(updated, GLOBAL_PROYECTOS);
     setPendingDocs(newPending);
     setCorrectionDocs(newCorrection);
-    setClaims(prev => {
-      const next: Record<string, ClaimInfo> = {};
-      Object.keys(prev).forEach(k => { if (newPending.some(d => d.key === k)) next[k] = prev[k]; });
-      return next;
-    });
+    // Red de seguridad: si algún documento salió de la cola sin pasar por
+    // aprobar/rechazar (p. ej. datos de ejemplo recargados), su claim no
+    // debe seguir mostrando carga fantasma.
+    setClaimsRevision(pruneClaimsRevision(claimsRevision, updated, GLOBAL_PROYECTOS));
     setEscalations(prev => {
       const next: Record<string, EscalationInfo> = {};
       Object.keys(prev).forEach(k => { if (newPending.some(d => d.key === k)) next[k] = prev[k]; });
@@ -208,12 +215,12 @@ export default function ColaRevisionTab({
   };
 
   const tomarRevision = () => {
-    if (!current) return;
-    setClaims(prev => ({ ...prev, [current.key]: { verificador: CURRENT_VERIFICADOR, claimedAt: Date.now() } }));
+    if (!current || !currentVerificador) return;
+    setClaimsRevision([...claimsRevision, { documentoKey: current.key, verificadorId: currentVerificador.id, claimedAt: Date.now() }]);
     setTab("review");
     setSelectedKeyLocal(current.key);
     resetDecisionForm();
-    showToast(`Documento tomado por ${CURRENT_VERIFICADOR}`);
+    showToast(`Documento tomado por ${currentVerificador.nombre}`);
   };
 
   const aprobar = () => {
@@ -224,9 +231,11 @@ export default function ColaRevisionTab({
     }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
+    const verificadorId = currentClaim?.verificadorId || currentVerificador?.id;
     if (cObj) {
-      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve", { verificador: currentClaim?.verificador || CURRENT_VERIFICADOR });
+      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve", { verificador: nombreVerificador(verificadorId) });
       setAprobadosHoy(a => a + 1);
+      if (verificadorId) registrarActividadVerificador(verificadorId, current.key, "aprobado");
     }
     showToast(`Documento aprobado: ${current.title}`);
     refreshAndAdvance("pending");
@@ -238,13 +247,15 @@ export default function ColaRevisionTab({
     if (!note.trim()) { showToast("Indica brevemente qué debe corregir el contratista", "warning"); return; }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
+    const verificadorId = currentClaim?.verificadorId || currentVerificador?.id;
     if (cObj) {
       actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "reject", {
         motivoRechazo: reason,
         explicacionRechazo: note,
-        verificador: currentClaim?.verificador || CURRENT_VERIFICADOR,
+        verificador: nombreVerificador(verificadorId),
       });
       setRechazadosHoy(r => r + 1);
+      if (verificadorId) registrarActividadVerificador(verificadorId, current.key, "rechazado");
     }
     showToast(`Documento rechazado: ${current.title}`, "warning");
     refreshAndAdvance("pending");
@@ -262,12 +273,12 @@ export default function ColaRevisionTab({
   };
 
   const enviarEscalamiento = () => {
-    if (!current) return;
+    if (!current || !supervisor) return;
     if (!escalarMotivo.trim()) { showToast("Indica el motivo del escalamiento", "warning"); return; }
-    setEscalations(prev => ({ ...prev, [current.key]: { supervisor: SUPERVISOR, motivo: escalarMotivo } }));
+    setEscalations(prev => ({ ...prev, [current.key]: { supervisorId: supervisor.id, motivo: escalarMotivo } }));
     setEscalarOpen(false);
     setEscalarMotivo("");
-    showToast(`Caso escalado a ${SUPERVISOR}`, "warning");
+    showToast(`Caso escalado a ${supervisor.nombre}`, "warning");
   };
 
   const simularNuevaVersionAction = () => {
@@ -398,7 +409,7 @@ export default function ColaRevisionTab({
           </div>
           <div className="max-h-[640px] overflow-y-auto">
             {filtered.length > 0 ? filtered.map(d => {
-              const claim = claims[d.key];
+              const claim = claimsRevision.find(c => c.documentoKey === d.key);
               const escalation = escalations[d.key];
               return (
                 <div
@@ -430,7 +441,7 @@ export default function ColaRevisionTab({
                   </div>
                   <div className="flex justify-between items-start gap-2 mt-1.5 pt-1.5 border-t border-cream2 text-[9.5px]">
                     {tab === "review" && claim ? (
-                      <span className="text-blue-700 font-semibold">{claim.verificador} · {formatElapsed(claim.claimedAt)}</span>
+                      <span className="text-blue-700 font-semibold">{nombreVerificador(claim.verificadorId)} · {formatElapsed(claim.claimedAt)}</span>
                     ) : tab === "correction" ? (
                       <div className="min-w-0 text-gray-400 leading-snug">
                         <div className="truncate text-red-700"><span className="font-semibold">Motivo:</span> {d.motivoRechazo}</div>
@@ -544,7 +555,7 @@ export default function ColaRevisionTab({
                   <div className="mt-3.5 bg-red-50 border border-red-200 rounded-xl p-3 flex gap-2 items-start">
                     <ArrowUpRight size={15} className="text-red-700 shrink-0 mt-0.5" />
                     <span className="text-[11.5px] text-red-800 leading-relaxed">
-                      <strong>ESCALADO A SUPERVISOR</strong> — {currentEscalation.supervisor}: {currentEscalation.motivo}
+                      <strong>ESCALADO A SUPERVISOR</strong> — {nombreSupervisor(currentEscalation.supervisorId)}: {currentEscalation.motivo}
                     </span>
                   </div>
                 )}
@@ -607,7 +618,8 @@ export default function ColaRevisionTab({
               </div>
               <button
                 onClick={tomarRevision}
-                className="w-full flex items-center justify-center gap-1.5 text-[12px] font-bold py-2.5 rounded-lg border-none bg-navy text-white hover:bg-navy2 transition-colors cursor-pointer"
+                disabled={!currentVerificador}
+                className="w-full flex items-center justify-center gap-1.5 text-[12px] font-bold py-2.5 rounded-lg border-none bg-navy text-white hover:bg-navy2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Tomar revisión
               </button>
@@ -625,7 +637,7 @@ export default function ColaRevisionTab({
           ) : (
             <div className="p-3.5">
               <div className={`text-[10.5px] font-semibold px-2.5 py-2 rounded-lg mb-3 ${BADGE.blue}`}>
-                {`Documento tomado por ${currentClaim?.verificador || CURRENT_VERIFICADOR}${currentClaim ? " · " + formatElapsed(currentClaim.claimedAt) : ""}.`}
+                {`Documento tomado por ${nombreVerificador(currentClaim?.verificadorId)}${currentClaim ? " · " + formatElapsed(currentClaim.claimedAt) : ""}.`}
               </div>
 
               <div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-extrabold mb-2">Chequeo mínimo</div>
@@ -677,14 +689,15 @@ export default function ColaRevisionTab({
               {currentEscalation ? (
                 <div className="mt-2.5 text-[10.5px] font-semibold px-2.5 py-2 rounded-lg bg-red-50 border border-red-200 text-red-800">
                   ESCALADO A SUPERVISOR
-                  <div className="font-normal text-[10px] mt-0.5">Escalado a {currentEscalation.supervisor}</div>
+                  <div className="font-normal text-[10px] mt-0.5">Escalado a {nombreSupervisor(currentEscalation.supervisorId)}</div>
                 </div>
               ) : (
                 <button
                   onClick={() => setEscalarOpen(true)}
-                  className="w-full mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer"
+                  disabled={!supervisor}
+                  className="w-full mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] font-semibold py-2 rounded-lg border border-cream3 bg-white text-gray-600 hover:bg-cream2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ArrowUpRight size={13} /> Enviar a supervisor
+                  <ArrowUpRight size={13} /> {supervisor ? `Escalar a ${supervisor.nombre}` : "Supervisor no disponible"}
                 </button>
               )}
 
@@ -693,7 +706,7 @@ export default function ColaRevisionTab({
               </div>
 
               <div className="mt-3.5 pt-3 border-t border-cream2 flex flex-col gap-1.5">
-                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Verificador</b><span className="font-extrabold text-navy">{currentClaim?.verificador || CURRENT_VERIFICADOR}</span></div>
+                <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Verificador</b><span className="font-extrabold text-navy">{nombreVerificador(currentClaim?.verificadorId)}</span></div>
                 <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Prioridad</b><span className="font-extrabold text-navy">{current.prio}</span></div>
                 <div className="flex justify-between text-[10px]"><b className="text-navy font-semibold">Cargado</b><span className="font-extrabold text-navy">{current.time}</span></div>
               </div>
