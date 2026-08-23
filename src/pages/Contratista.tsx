@@ -626,14 +626,13 @@ export default function ContratistaPortal() {
 
           {activeTab === 'subir' && (
             <SubirTab
+              contratistaLogueado={contratistaLogueado}
               misProyectos={misProyectos}
-              numAprobados={numAprobados}
-              numPorVencer={numPorVencer}
-              numRechazados={numRechazados}
-              numPendientes={numPendientes}
-              documentosData={documentosData}
+              allMandantes={allMandantes}
               selectedProyectoId={selectedProyectoId}
+              setSelectedProyectoId={setSelectedProyectoId}
               setSelectedDocumentForPanel={setSelectedDocumentForPanel}
+              setSelectedWorkerForDocs={setSelectedWorkerForDocs}
             />
           )}
 

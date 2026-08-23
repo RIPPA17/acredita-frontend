@@ -1,212 +1,443 @@
-import { CheckCircle, Clock, X, Upload, FileCheck, AlertTriangle, Eye, CloudUpload } from 'lucide-react';
-import { getRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes } from '../../data/localStorageDb';
-import { Proyecto, Documento } from '../../types';
+import { useState } from 'react';
+import { esTrabajadorAsignado, getRequisitos } from '../../data/localStorageDb';
+import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
+import { DocEstado } from '../admin/acreditacionUtils';
+import {
+  buildRequisitosEmpresa,
+  buildRequisitosTrabajador,
+  impactoLabel,
+  motivoRechazo,
+  RequisitoConDoc,
+} from './inicio/inicioUtils';
+
+// Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
+// reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
+// estado tiene cada requisito/documento) sale de la lógica central; el
+// color/label/copy de ayuda es presentación.
+const DOC_BADGE_CLASS: Record<DocEstado, string> = {
+  Aprobado: 'doc-badge-green',
+  Rechazado: 'doc-badge-red',
+  Vencido: 'doc-badge-red',
+  'En revisión': 'doc-badge-blue',
+  'Por vencer': 'doc-badge-yellow',
+  Pendiente: 'doc-badge-gray',
+};
+const DOC_PRIORITY: Record<DocEstado, number> = {
+  Rechazado: 0,
+  Vencido: 0,
+  Pendiente: 1,
+  'Por vencer': 2,
+  'En revisión': 3,
+  Aprobado: 4,
+};
+
+type Scope = 'todos' | 'empresa' | 'trabajadores';
+type StatusFilter = 'todos' | 'accion' | 'revision' | 'por_vencer' | 'aprobado';
+
+interface Row extends RequisitoConDoc {
+  key: string;
+  scope: 'empresa' | 'trabajadores';
+  ownerNombre: string;
+}
+
+function accionDoc(item: Row): { label: string; cls: string } {
+  if (!item.doc) return { label: 'Subir', cls: 'doc-btn-primary' };
+  if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
+  if (item.estado === 'Por vencer') return { label: 'Renovar', cls: 'doc-btn-warning' };
+  return { label: 'Ver', cls: 'doc-btn-ghost' };
+}
+
+// Texto de estado (info-box superior): genérico por estado, igual criterio
+// que usa el resto del portal para no pedir "corregir" cuando en realidad
+// el documento está en revisión o simplemente no se ha subido todavía.
+function stateCopy(item: RequisitoConDoc): string {
+  switch (item.estado) {
+    case 'Pendiente':
+      return item.requisito.obligatorio
+        ? 'Este requisito obligatorio todavía no tiene un documento cargado. Mientras siga pendiente puede impedir completar la acreditación.'
+        : 'Este requisito es opcional. Puedes subirlo, pero su ausencia no bloquea la acreditación.';
+    case 'Rechazado':
+      return 'Acredita rechazó esta versión. Corrige exactamente la observación indicada y reemplaza el documento.';
+    case 'Vencido':
+      return 'El documento dejó de estar vigente. Mientras siga vencido, aplica el bloqueo definido por este requisito.';
+    case 'En revisión':
+      return 'El documento ya fue enviado y está esperando revisión. No necesitas volver a subirlo mientras siga en este estado.';
+    case 'Por vencer':
+      return 'El documento todavía es válido, pero está próximo a vencer. Puedes renovarlo anticipadamente para evitar un bloqueo.';
+    default:
+      return 'El documento está vigente y aprobado. No requiere acción en este momento.';
+  }
+}
+
+function guidanceText(item: RequisitoConDoc): string {
+  switch (item.estado) {
+    case 'Rechazado':
+      return item.doc?.solucionRechazo || 'Corrige exactamente la observación indicada y vuelve a subir el documento.';
+    case 'Vencido':
+      return item.doc?.solucionRechazo || 'Solicita una versión vigente y reemplaza este documento cuanto antes.';
+    case 'Por vencer':
+      return 'Puedes renovarlo anticipadamente para evitar que el requisito quede bloqueado cuando venza.';
+    case 'Pendiente':
+      return item.requisito.obligatorio
+        ? 'Sube este documento para que Acredita pueda revisarlo.'
+        : 'Puedes subirlo si el mandante lo solicita; no es obligatorio.';
+    default:
+      return '';
+  }
+}
+
+function stateBoxClass(estado: DocEstado): string {
+  if (estado === 'Rechazado' || estado === 'Vencido') return 'red';
+  if (estado === 'Por vencer') return 'yellow';
+  if (estado === 'En revisión') return 'blue';
+  if (estado === 'Aprobado') return 'green';
+  return '';
+}
 
 export default function SubirTab({
+  contratistaLogueado,
   misProyectos,
-  numAprobados,
-  numPorVencer,
-  numRechazados,
-  numPendientes,
-  documentosData,
+  allMandantes,
   selectedProyectoId,
+  setSelectedProyectoId,
   setSelectedDocumentForPanel,
+  setSelectedWorkerForDocs,
 }: {
+  contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
-  numAprobados: number;
-  numPorVencer: number;
-  numRechazados: number;
-  numPendientes: number;
-  documentosData: any[];
+  allMandantes: Mandante[];
   selectedProyectoId: string;
+  setSelectedProyectoId: (id: string) => void;
   setSelectedDocumentForPanel: (d: Documento | null) => void;
+  setSelectedWorkerForDocs: (w: Trabajador | null) => void;
 }) {
+  const [scope, setScope] = useState<Scope>('todos');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const proyectoActual = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
+  const requisitosAll = getRequisitos();
+
+  const trabajadoresAsignados = proyectoActual
+    ? (contratistaLogueado.trabajadores || []).filter(w => esTrabajadorAsignado(w, proyectoActual.id, misProyectos))
+    : [];
+
+  const allItems: Row[] = proyectoActual
+    ? [
+        ...buildRequisitosEmpresa(contratistaLogueado, proyectoActual.id, requisitosAll).map(item => ({
+          ...item,
+          key: item.requisito.id,
+          scope: 'empresa' as const,
+          ownerNombre: contratistaLogueado.nombre,
+        })),
+        ...trabajadoresAsignados.flatMap(w =>
+          buildRequisitosTrabajador(w, proyectoActual.id, requisitosAll).map(item => ({
+            ...item,
+            key: `${item.requisito.id}::${w.rut}`,
+            scope: 'trabajadores' as const,
+            ownerNombre: w.nombre,
+          }))
+        ),
+      ]
+    : [];
+
+  const accion = allItems.filter(i => i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado)).length;
+  const revision = allItems.filter(i => i.estado === 'En revisión').length;
+  const porVencer = allItems.filter(i => i.estado === 'Por vencer').length;
+  const aprobados = allItems.filter(i => i.estado === 'Aprobado').length;
+
+  const q = search.trim().toLowerCase();
+  const filtrados = allItems
+    .filter(i => {
+      const scopeOk = scope === 'todos' || i.scope === scope;
+      let statusOk = true;
+      if (statusFilter === 'accion') statusOk = i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado);
+      else if (statusFilter === 'revision') statusOk = i.estado === 'En revisión';
+      else if (statusFilter === 'por_vencer') statusOk = i.estado === 'Por vencer';
+      else if (statusFilter === 'aprobado') statusOk = i.estado === 'Aprobado';
+      const qOk = !q || i.requisito.nombre.toLowerCase().includes(q) || i.ownerNombre.toLowerCase().includes(q);
+      return scopeOk && statusOk && qOk;
+    })
+    .sort((a, b) => {
+      const p = DOC_PRIORITY[a.estado] - DOC_PRIORITY[b.estado];
+      if (p !== 0) return p;
+      if (a.requisito.obligatorio !== b.requisito.obligatorio) return a.requisito.obligatorio ? -1 : 1;
+      return a.ownerNombre.localeCompare(b.ownerNombre, 'es');
+    });
+
+  const grupos: Array<['Empresa' | 'Trabajadores', Row[]]> = [];
+  if (scope === 'todos' || scope === 'empresa') grupos.push(['Empresa', filtrados.filter(i => i.scope === 'empresa')]);
+  if (scope === 'todos' || scope === 'trabajadores') grupos.push(['Trabajadores', filtrados.filter(i => i.scope === 'trabajadores')]);
+  const totalMostrado = grupos.reduce((acc, [, rows]) => acc + rows.length, 0);
+
+  const selected = allItems.find(i => i.key === selectedKey);
+
+  const cambiarProyecto = (id: string) => {
+    setSelectedProyectoId(id);
+    setSelectedKey(null);
+  };
+
+  const abrirAccion = (item: Row) => {
+    if (!item.doc) return;
+    setSelectedWorkerForDocs(item.worker ?? null);
+    setSelectedDocumentForPanel(item.doc);
+  };
+
+  if (!proyectoActual) {
+    return (
+      <div className="doc-page">
+        <div className="doc-empty">Todavía no tienes proyectos asociados.</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fade-in">
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Checklist de documentos</h2>
-          <p className="page-sub">Proyecto Torre Mackenna · Constructora Andina SA</p>
+    <div className="doc-page">
+      <section className="doc-hero">
+        <div className="doc-hero-grid">
+          <div>
+            <div className="doc-eyebrow">Portal contratista</div>
+            <h1 className="doc-h1">Documentos</h1>
+            <p className="doc-hero-sub">Gestiona todos los requisitos documentales del proyecto. Lo urgente aparece primero: qué falta, qué fue rechazado, qué está próximo a vencer y qué ya se encuentra validado.</p>
+          </div>
+          <div className="doc-picker">
+            <label htmlFor="doc-project-select">Proyecto activo</label>
+            <select id="doc-project-select" value={selectedProyectoId} onChange={e => cambiarProyecto(e.target.value)}>
+              {misProyectos.map(p => {
+                const mandante = allMandantes.find(m => m.id === p.mandanteId);
+                return <option key={p.id} value={p.id}>{p.nombre} · {mandante?.nombre || 'Mandante no disponible'}</option>;
+              })}
+            </select>
+          </div>
         </div>
-        <select className="form-input py-1.5 min-w-[200px]">
-          {misProyectos.map(p => (
-            <option key={p.id}>Proyecto {p.nombre}</option>
-          ))}
-        </select>
-      </div>
+      </section>
 
-      <div className="flex gap-2 flex-wrap mb-4">
-        <span className="badge b-green px-3 py-1"><CheckCircle size={14} /> Aprobados: {numAprobados}</span>
-        <span className="badge b-yellow px-3 py-1"><Clock size={14} /> Por vencer: {numPorVencer}</span>
-        <span className="badge b-red px-3 py-1"><X size={14} /> Rechazados: {numRechazados}</span>
-        <span className="badge b-gray px-3 py-1"><Upload size={14} /> Pendientes: {numPendientes}</span>
-      </div>
+      <section className="doc-floating">
+        <div className="doc-summary">
+          <div className="doc-metric action">
+            <div className="doc-metric-label">Requieren acción</div>
+            <div className="doc-metric-value">{accion}</div>
+            <div className="doc-metric-foot">Obligatorios pendientes, rechazados o vencidos</div>
+          </div>
+          <div className="doc-metric review">
+            <div className="doc-metric-label">En revisión</div>
+            <div className="doc-metric-value">{revision}</div>
+            <div className="doc-metric-foot">Esperando validación de Acredita</div>
+          </div>
+          <div className="doc-metric expiry">
+            <div className="doc-metric-label">Por vencer</div>
+            <div className="doc-metric-value">{porVencer}</div>
+            <div className="doc-metric-foot">Todavía vigentes; conviene renovar</div>
+          </div>
+          <div className="doc-metric ok">
+            <div className="doc-metric-label">Aprobados</div>
+            <div className="doc-metric-value">{aprobados}</div>
+            <div className="doc-metric-foot">Vigentes y sin acción inmediata</div>
+          </div>
+        </div>
 
-      <div className="md:hidden flex flex-col gap-3">
-        {documentosData.map(doc => {
-          const isVencido = esVencidoPorFecha(doc.vencimiento);
-          const req = getRequisitos().find(r => r.proyectoId === selectedProyectoId && (doc.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(doc.nombre.toLowerCase())));
-          const alertaDias = req ? req.alertaDias : 30;
-          const isPorVencer = esPorVencerPorFecha(doc.vencimiento, alertaDias);
-          const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+        <div className="doc-notice">
+          <div className="doc-notice-icon">!</div>
+          <div><b>Cómo funciona:</b> cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".</div>
+        </div>
 
-          let badgeColor = 'b-gray';
-          let statusLabel = doc.estado;
-          let subtext = doc.vencimiento && doc.vencimiento !== '—' ? `Vence: ${doc.vencimiento}` : 'Sin vencimiento';
-
-          if (doc.estado === 'aprobado') {
-            if (isVencido) {
-              badgeColor = 'b-red';
-              statusLabel = 'Vencido';
-              subtext = 'Tu documento está vencido';
-            } else if (isPorVencer) {
-              badgeColor = 'b-yellow';
-              statusLabel = 'Por vencer';
-              subtext = `Tu documento vence en ${diasRestantes} días`;
-            } else {
-              badgeColor = 'b-green';
-              statusLabel = 'Aprobado';
-            }
-          } else if (doc.estado === 'rechazado') {
-            badgeColor = 'b-red';
-            statusLabel = 'Rechazado';
-          } else if (doc.estado === 'revision') {
-            badgeColor = 'b-blue';
-            statusLabel = 'En revisión';
-          }
-
-          return (
-            <div key={doc.id} className="card p-4 flex flex-col gap-2 cursor-pointer hover:shadow-sm transition-all" onClick={() => setSelectedDocumentForPanel(doc)}>
-              <div className="flex justify-between items-start">
-                <span className="font-medium text-sm text-navy">{doc.nombre}</span>
-                <span className={`badge ${badgeColor} text-xs`}>{statusLabel}</span>
+        <div className="doc-workspace">
+          <section className="doc-shell doc-list-card">
+            <div className="doc-toolbar">
+              <div className="doc-scope-tabs">
+                {([['todos', 'Todos'], ['empresa', 'Empresa'], ['trabajadores', 'Trabajadores']] as Array<[Scope, string]>).map(([value, label]) => (
+                  <button key={value} className={`doc-scope-btn ${scope === value ? 'active' : ''}`} onClick={() => setScope(value)}>{label}</button>
+                ))}
               </div>
-              <span className="text-xs text-gray-500">{subtext}</span>
-              {doc.observacion && <span className="text-xs text-red-500">{doc.observacion}</span>}
+              <div className="doc-tools">
+                <input
+                  className="doc-search"
+                  placeholder="Buscar requisito o trabajador..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  aria-label="Buscar requisito o trabajador"
+                />
+                <select className="doc-status-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} aria-label="Filtrar por estado">
+                  <option value="todos">Todos los estados</option>
+                  <option value="accion">Requieren acción</option>
+                  <option value="revision">En revisión</option>
+                  <option value="por_vencer">Por vencer</option>
+                  <option value="aprobado">Aprobados</option>
+                </select>
+              </div>
             </div>
-          );
-        })}
-      </div>
 
-      <div className="card hidden md:block">
-        {documentosData.map(doc => {
-          const isVencido = esVencidoPorFecha(doc.vencimiento);
-          const req = getRequisitos().find(r => r.proyectoId === selectedProyectoId && (doc.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(doc.nombre.toLowerCase())));
-          const alertaDias = req ? req.alertaDias : 30;
-          const isPorVencer = esPorVencerPorFecha(doc.vencimiento, alertaDias);
-          const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
+            <div className="doc-priority-strip">
+              <strong>Orden automático:</strong>
+              <span className="doc-priority-chip">Rechazado / Vencido</span>
+              <span>→</span>
+              <span className="doc-priority-chip">Pendiente</span>
+              <span>→</span>
+              <span className="doc-priority-chip">Por vencer</span>
+              <span>→</span>
+              <span className="doc-priority-chip">En revisión</span>
+              <span>→</span>
+              <span className="doc-priority-chip">Aprobado</span>
+            </div>
 
-          let RowIcon = Clock;
-          let iconColorClass = 'text-gray-400';
-          let rowBgClass = '';
-          let badgeClass = 'b-gray';
-          let badgeLabel = 'Pendiente';
-          let subtext = `Sin subir · Vence el ${doc.vencimiento}`;
-          let actionBtn = (
-            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
-              <Upload size={14} /> Subir
-            </button>
-          );
-
-          let effectiveEstado = doc.estado;
-          if (doc.estado === 'aprobado') {
-            if (isVencido) effectiveEstado = 'vencido';
-            else if (isPorVencer) effectiveEstado = 'por_vencer';
-          }
-
-          if (effectiveEstado === 'aprobado') {
-            RowIcon = FileCheck;
-            iconColorClass = 'text-[#2a6a3a]';
-            badgeClass = 'b-green';
-            badgeLabel = 'Aprobado';
-            subtext = 'Subido · Validación automática';
-            actionBtn = (
-              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
-                <Eye size={14}/>
-              </button>
-            );
-          } else if (effectiveEstado === 'por_vencer') {
-            RowIcon = AlertTriangle;
-            iconColorClass = 'text-[#c08000]';
-            rowBgClass = 'bg-[#fffdf5] -mx-4 px-4 py-3 border-y border-cream3 rounded-md';
-            badgeClass = 'b-yellow';
-            badgeLabel = 'Por vencer';
-            subtext = `Tu documento vence en ${diasRestantes} días`;
-            actionBtn = (
-              <button className="btn btn-primary btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
-                <Upload size={14} /> Renovar
-              </button>
-            );
-          } else if (effectiveEstado === 'rechazado' || effectiveEstado === 'vencido') {
-            RowIcon = X;
-            iconColorClass = 'text-[#c02020]';
-            rowBgClass = 'bg-[#fff8f8] -mx-4 px-4 py-3 border-b border-cream3 rounded-md';
-            badgeClass = 'b-red';
-            badgeLabel = effectiveEstado === 'vencido' ? 'Vencido' : 'Rechazado';
-            subtext = effectiveEstado === 'vencido' ? 'Tu documento está vencido' : (doc.observacion || 'Documento rechazado.');
-            actionBtn = (
-              <button className="btn btn-danger btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
-                <Upload size={14} /> Corregir
-              </button>
-            );
-          } else if (effectiveEstado === 'revision') {
-            RowIcon = Clock;
-            iconColorClass = 'text-blue-500';
-            badgeClass = 'b-blue';
-            badgeLabel = 'En revisión';
-            subtext = 'Enviado para revisión por auditoría';
-            actionBtn = (
-              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDocumentForPanel(doc)}>
-                <Eye size={14}/>
-              </button>
-            );
-          }
-
-          return (
-            <div key={doc.id} className={`doc-row cursor-pointer hover:bg-cream/40 ${rowBgClass} transition-colors`} onClick={() => setSelectedDocumentForPanel(doc)}>
-              <RowIcon size={20} className={`${iconColorClass} shrink-0`} />
-              <div className="flex-1 font-sans">
-                <div className="text-[15.4px] font-medium text-navy">{doc.nombre}</div>
-                <div className={`text-[13.2px] ${doc.estado === 'por_vencer' ? 'text-[#a07000]' : doc.estado === 'rechazado' ? 'text-[#c03030]' : 'text-gray-400'}`}>
-                  {subtext}
+            {totalMostrado === 0 ? (
+              <div className="doc-empty">No hay requisitos que coincidan con los filtros actuales.</div>
+            ) : (
+              grupos.map(([titulo, rows]) => rows.length > 0 && (
+                <div key={titulo}>
+                  <div className="doc-section-head">
+                    <strong>{titulo}</strong>
+                    <span>{rows.length} requisito{rows.length === 1 ? '' : 's'}</span>
+                  </div>
+                  {rows.map(item => {
+                    const { label, cls } = accionDoc(item);
+                    return (
+                      <div
+                        key={item.key}
+                        className={`doc-row ${selectedKey === item.key ? 'selected' : ''}`}
+                        onClick={() => setSelectedKey(item.key)}
+                      >
+                        <div className="doc-main">
+                          <div className="doc-title-line">
+                            <div className="doc-title">{item.requisito.nombre}</div>
+                            <span className={`doc-req-chip ${item.requisito.obligatorio ? 'required' : 'optional'}`}>{item.requisito.obligatorio ? 'Obligatorio' : 'Opcional'}</span>
+                          </div>
+                          <div className="doc-sub">
+                            <span>{impactoLabel(item.requisito)}</span>
+                            <span>·</span>
+                            <span>{item.requisito.frecuencia}</span>
+                          </div>
+                        </div>
+                        <div className="doc-owner">
+                          {item.scope === 'empresa' ? 'Empresa' : item.ownerNombre}
+                          <small>{item.requisito.categoria}</small>
+                        </div>
+                        <div>
+                          <span className={`doc-badge ${DOC_BADGE_CLASS[item.estado]}`}><span className="doc-dot" />{item.estado}</span>
+                          <div className="doc-date">{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}</div>
+                        </div>
+                        <button
+                          className={`doc-btn ${cls}`}
+                          disabled={!item.doc}
+                          title={!item.doc ? 'La carga de documentos nuevos aún no está disponible en este entorno de demostración.' : undefined}
+                          onClick={e => { e.stopPropagation(); setSelectedKey(item.key); abrirAccion(item); }}
+                        >
+                          {label}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-              <span className={`badge ${badgeClass}`}>{badgeLabel}</span>
-              <div className="doc-meta font-sans">{doc.vencimiento && doc.vencimiento !== '—' ? doc.vencimiento : ''}</div>
-              <div onClick={(e) => e.stopPropagation()}>
-                {actionBtn}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              ))
+            )}
+          </section>
 
-      <div className="card mt-4">
-        <h3 className="section-title">Subir nuevo documento</h3>
-        <div className="border-2 border-dashed border-cream3 rounded-xl p-8 flex flex-col items-center justify-center bg-cream2 hover:bg-[#faf5f0] hover:border-brown transition-colors cursor-pointer text-center">
-          <CloudUpload size={32} className="text-brown mb-2" />
-          <div className="text-[15.4px] font-medium text-navy mb-1">Arrastra el archivo aquí o haz clic para seleccionar</div>
-          <div className="text-[13.2px] text-gray-500">PDF, JPG o PNG · máx. 10 MB</div>
+          <aside className="doc-shell doc-detail-card">
+            {!selected ? (
+              <div className="doc-detail-empty">
+                <div className="doc-detail-big">D</div>
+                <strong>Selecciona un requisito</strong>
+                <div style={{ marginTop: 6, fontSize: 11.5 }}>Aquí verás su estado, impacto, vigencia, corrección y versiones anteriores.</div>
+              </div>
+            ) : (() => {
+              const { label, cls } = accionDoc(selected);
+              const historial = selected.doc?.historial || [];
+              return (
+                <>
+                  <div className="doc-detail-head">
+                    <div className="doc-detail-kicker">Detalle del requisito</div>
+                    <div className="doc-detail-title">{selected.requisito.nombre}</div>
+                    <div className="doc-detail-meta">{selected.scope === 'empresa' ? `Empresa · ${contratistaLogueado.nombre}` : `Trabajador · ${selected.ownerNombre}`}</div>
+                  </div>
+                  <div className="doc-detail-body">
+                    <div className="doc-detail-state">
+                      <span className={`doc-badge ${DOC_BADGE_CLASS[selected.estado]}`}><span className="doc-dot" />{selected.estado}</span>
+                      <span className="doc-impact">{impactoLabel(selected.requisito)}</span>
+                    </div>
+
+                    <div className="doc-tags">
+                      <span className={`doc-req-chip ${selected.requisito.obligatorio ? 'required' : 'optional'}`}>{selected.requisito.obligatorio ? 'Obligatorio' : 'Opcional'}</span>
+                      <span className="doc-req-chip">{selected.requisito.frecuencia}</span>
+                    </div>
+
+                    <div className={`doc-info-box ${stateBoxClass(selected.estado)}`}>
+                      <strong>{selected.estado}</strong>
+                      <p>{stateCopy(selected)}</p>
+                    </div>
+
+                    {(selected.estado === 'Rechazado' || selected.estado === 'Vencido') && (
+                      <div className="doc-info-box red">
+                        <strong>Motivo</strong>
+                        <p>{motivoRechazo(selected.doc)}</p>
+                      </div>
+                    )}
+
+                    {guidanceText(selected) && (
+                      <div className={`doc-info-box ${selected.estado === 'Rechazado' || selected.estado === 'Vencido' ? 'red' : selected.estado === 'Por vencer' ? 'yellow' : ''}`}>
+                        <strong>{selected.estado === 'Pendiente' ? 'Qué debes hacer' : 'Cómo corregirlo'}</strong>
+                        <p>{guidanceText(selected)}</p>
+                      </div>
+                    )}
+
+                    <div className="doc-mini-list">
+                      <div className="doc-mini"><span>Categoría</span><b>{selected.requisito.categoria}</b></div>
+                      <div className="doc-mini"><span>Vigencia actual</span><b>{selected.doc?.vencimiento && selected.doc.vencimiento !== '-' ? selected.doc.vencimiento : '—'}</b></div>
+                      <div className="doc-mini"><span>Frecuencia</span><b>{selected.requisito.frecuencia}</b></div>
+                      <div className="doc-mini"><span>Consecuencia</span><b>{impactoLabel(selected.requisito)}</b></div>
+                    </div>
+
+                    {selected.doc ? (
+                      <div className="doc-upload-box">
+                        <strong>{selected.doc.archivoReferencia || 'Documento cargado'}</strong>
+                        {selected.doc.subido ? `Última carga: ${selected.doc.subido}` : 'Archivo asociado actualmente'}
+                      </div>
+                    ) : (
+                      <div className="doc-upload-box">
+                        <strong>Sin archivo cargado</strong>
+                        PDF, JPG o PNG · máximo 10 MB
+                      </div>
+                    )}
+
+                    {historial.length === 0 ? (
+                      <div className="doc-history">
+                        <div className="doc-history-head">Historial de versiones</div>
+                        <div style={{ padding: '12px 10px', fontSize: 11, color: '#7a7a6a' }}>Todavía no existen versiones anteriores.</div>
+                      </div>
+                    ) : (
+                      <div className="doc-history">
+                        <div className="doc-history-head">Historial de versiones</div>
+                        {historial.map((h, idx) => (
+                          <div key={idx} className="doc-history-row">
+                            <div className="doc-history-date">{h.fecha}</div>
+                            <div>
+                              <div className="doc-history-name">Versión {h.version}</div>
+                              <div className="doc-history-note">{h.explicacionRechazo || h.motivoRechazo || (h.estado === 'aprobado' ? 'Aprobado por Acredita.' : 'Rechazado por Acredita.')}</div>
+                            </div>
+                            <span className={`doc-badge ${h.estado === 'aprobado' ? 'doc-badge-green' : 'doc-badge-red'}`}>{h.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="doc-detail-actions">
+                      <button className="doc-btn doc-btn-ghost" onClick={() => setSelectedKey(null)}>Cerrar</button>
+                      <button
+                        className={`doc-btn ${cls}`}
+                        disabled={!selected.doc}
+                        title={!selected.doc ? 'La carga de documentos nuevos aún no está disponible en este entorno de demostración.' : undefined}
+                        onClick={() => abrirAccion(selected)}
+                      >
+                        {selected.estado === 'En revisión' || selected.estado === 'Aprobado' ? 'Ver documento' : label}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </aside>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          <div className="form-group">
-            <label className="form-label">Tipo de documento</label>
-            <select className="form-input">
-              <option>Liquidación de sueldo</option>
-              <option>Contrato de trabajo</option>
-              <option>F30 SII</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Trabajador (si aplica)</label>
-            <select className="form-input">
-              <option>— Empresa general —</option>
-              <option>Juan Pérez González</option>
-            </select>
-          </div>
-        </div>
-        <button className="btn btn-primary w-full py-2.5 mt-2 cursor-not-allowed opacity-55" disabled title="Usa la sección 'Mis proyectos' o la Ficha para subir documentos de forma interactiva"><Upload size={16} /> Subir y validar [Demo]</button>
-      </div>
+      </section>
     </div>
   );
 }
