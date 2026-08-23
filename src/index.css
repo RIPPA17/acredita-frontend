@@ -723,4 +723,88 @@
     .tw-check-row { grid-template-columns: minmax(0,1fr) auto; }
     .tw-check-row > :nth-child(2), .tw-check-row > :nth-child(3) { display: none; }
   }
+
+  /* ---- Contratista > Configuración ---- */
+  .cfg-page { color: var(--navy); }
+  .cfg-hero { position: relative; overflow: hidden; margin: -0.75rem -0.75rem 0; padding: 28px 30px 56px; border-radius: 0 0 20px 20px; color: var(--cream); background: linear-gradient(135deg,var(--navy),var(--navy2)); }
+  .cfg-hero::after { position: absolute; top: -110px; right: -80px; width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle,rgba(255,255,255,.08),transparent 70%); content: ''; }
+  @media (min-width:1280px) { .cfg-hero { margin: -1rem -1rem 0; } }
+  .cfg-eyebrow { color: var(--brown2); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .cfg-hero h1 { margin: 5px 0 7px; font-size: 29px; line-height: 1.1; }
+  .cfg-hero p { max-width: 760px; margin: 0; color: rgba(235,235,221,.76); font-size: 13px; line-height: 1.5; }
+  .cfg-floating { position: relative; z-index: 3; margin-top: -30px; }
+  .cfg-account-strip { display: grid; grid-template-columns: minmax(240px,1.4fr) repeat(3,minmax(130px,.6fr)); gap: 14px; align-items: center; padding: 14px 16px; border: 1px solid var(--cream3); border-radius: 16px; background: #fff; box-shadow: 0 5px 16px rgba(38,48,59,.05); }
+  .cfg-company { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .cfg-company-icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 11px; color: var(--brown3); background: var(--cream); font-weight: 800; }
+  .cfg-company strong { display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .cfg-company small { display: block; margin-top: 3px; color: #74786f; font-size: 10.5px; }
+  .cfg-stat { padding-left: 14px; border-left: 1px solid var(--cream3); }
+  .cfg-stat > span, .cfg-session-box span { display: block; color: #74786f; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .cfg-stat b { display: block; margin-top: 5px; font-size: 12px; }
+  .cfg-stat > div { margin-top: 5px; }
+  .cfg-status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 999px; color: #1a6030; background: #d4f0de; font-size: 10px; font-weight: 700; }
+  .cfg-status::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ''; }
+  .cfg-workspace { display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 14px; align-items: start; margin-top: 14px; }
+  .cfg-nav { padding: 8px; border: 1px solid var(--cream3); border-radius: 16px; background: #fff; box-shadow: 0 5px 16px rgba(38,48,59,.04); }
+  .cfg-nav button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 11px; border: 0; border-radius: 10px; color: #667068; background: transparent; font-size: 11.5px; font-weight: 650; text-align: left; }
+  .cfg-nav button:hover { color: var(--navy); background: var(--cream2); }
+  .cfg-nav button.active { color: var(--cream); background: var(--navy); }
+  .cfg-nav-icon { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--cream3); border-radius: 8px; }
+  .cfg-nav button.active .cfg-nav-icon { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); }
+  .cfg-content { min-width: 0; }
+  .cfg-card { overflow: hidden; border: 1px solid var(--cream3); border-radius: 16px; background: #fff; box-shadow: 0 5px 16px rgba(38,48,59,.045); }
+  .cfg-card + .cfg-card { margin-top: 12px; }
+  .cfg-card header { padding: 16px 17px; border-bottom: 1px solid var(--cream); }
+  .cfg-card h2 { margin: 0; font-size: 14px; }
+  .cfg-card header p { margin: 5px 0 0; color: #74786f; font-size: 10.8px; line-height: 1.4; }
+  .cfg-card-body { padding: 16px 17px; }
+  .cfg-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cfg-fields label span { display: block; margin-bottom: 5px; color: #74786f; font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .cfg-fields input { width: 100%; padding: 9px 10px; border: 1px solid var(--cream3); border-radius: 9px; color: #5f655e; background: var(--cream2); cursor: default; }
+  .cfg-note { margin-top: 12px; padding: 10px 11px; border: 1px solid var(--cream3); border-radius: 10px; color: #60655e; background: var(--cream2); font-size: 10.5px; line-height: 1.4; }
+  .cfg-project-list, .cfg-pref-list { overflow: hidden; border: 1px solid var(--cream3); border-radius: 11px; }
+  .cfg-project-row { display: grid; grid-template-columns: minmax(190px,1fr) minmax(160px,.8fr) 90px; gap: 12px; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--cream); }
+  .cfg-project-row:last-child, .cfg-pref-row:last-child { border-bottom: 0; }
+  .cfg-project-row strong { font-size: 11.5px; }
+  .cfg-project-row small { display: block; margin-top: 3px; color: #74786f; font-size: 9.8px; }
+  .cfg-project-row > span { font-size: 10px; font-weight: 700; }
+  .cfg-project-row > span.active { color: #1a6030; }
+  .cfg-empty { padding: 24px; color: #74786f; font-size: 11px; text-align: center; }
+  .cfg-pref-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px; border-bottom: 1px solid var(--cream); }
+  .cfg-pref-row strong { display: block; font-size: 11.8px; }
+  .cfg-pref-row p { max-width: 650px; margin: 4px 0 0; color: #74786f; font-size: 10.5px; line-height: 1.4; }
+  .cfg-switch { flex: 0 0 auto; width: 38px; height: 22px; padding: 2px; border: 0; border-radius: 999px; background: #cfd2ca; transition: .18s ease; }
+  .cfg-switch span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); transition: .18s ease; }
+  .cfg-switch.on { background: #2a8040; }
+  .cfg-switch.on span { transform: translateX(16px); }
+  .cfg-pref-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 11px; border: 1px solid var(--cream3); border-radius: 10px; background: var(--cream2); }
+  .cfg-pref-foot > span { color: #62665f; font-size: 10.5px; }
+  .cfg-save { padding: 8px 11px; border: 0; border-radius: 9px; color: #fff; background: var(--brown); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .cfg-save:hover:not(:disabled) { background: var(--brown2); }
+  .cfg-save:disabled { opacity: .45; cursor: not-allowed; }
+  .cfg-session-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; }
+  .cfg-session-box { min-width: 0; padding: 11px; border: 1px solid var(--cream3); border-radius: 11px; background: #fff; }
+  .cfg-session-box b { display: block; overflow-wrap: anywhere; margin-top: 5px; font-size: 11.5px; }
+  .cfg-logout { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; padding-top: 13px; border-top: 1px solid var(--cream); }
+  .cfg-logout strong { display: block; font-size: 11px; }
+  .cfg-logout p { margin: 4px 0 0; color: #74786f; font-size: 10px; }
+  .cfg-logout button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #efb4b4; border-radius: 9px; color: #9a2020; background: #fff; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .cfg-logout button:hover { background: #fde8e8; }
+  @media (max-width:1050px) {
+    .cfg-account-strip { grid-template-columns: 1fr 1fr; }
+    .cfg-stat { padding: 10px 0 0; border-top: 1px solid var(--cream3); border-left: 0; }
+  }
+  @media (max-width:760px) {
+    .cfg-hero { margin: -0.75rem -0.75rem 0; padding: 22px 18px 48px; }
+    .cfg-account-strip { grid-template-columns: 1fr; }
+    .cfg-workspace { grid-template-columns: 1fr; }
+    .cfg-nav { display: flex; overflow-x: auto; padding: 6px; }
+    .cfg-nav button { width: auto; min-width: max-content; }
+    .cfg-fields, .cfg-session-row { grid-template-columns: 1fr; }
+    .cfg-project-row { grid-template-columns: 1fr auto; }
+    .cfg-project-row > :nth-child(2) { display: none; }
+    .cfg-pref-row { align-items: flex-start; }
+    .cfg-pref-foot, .cfg-logout { align-items: stretch; flex-direction: column; }
+    .cfg-save, .cfg-logout button { justify-content: center; width: 100%; }
+  }
 }

@@ -1,5 +1,5 @@
 import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador } from '../types';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador, PreferenciasNotificacionesContratista } from '../types';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -518,7 +518,42 @@ const ACREDITA_DATA_KEYS = [
   'acredita_actividad_verificadores',
   'acredita_invitaciones',
   'acredita_audit_logs',
+  'acredita_preferencias_notificaciones_contratista',
 ];
+
+const DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA: PreferenciasNotificacionesContratista = {
+  documentoRechazado: true,
+  documentoPorVencer: true,
+  acreditacionAprobada: true,
+  cambioEstadoTrabajador: false,
+};
+
+const PREFERENCIAS_CONTRATISTA_KEY = 'acredita_preferencias_notificaciones_contratista';
+
+export function getPreferenciasNotificacionesContratista(contratistaId: string): PreferenciasNotificacionesContratista {
+  if (typeof window === 'undefined') return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
+  try {
+    const todas = JSON.parse(localStorage.getItem(PREFERENCIAS_CONTRATISTA_KEY) || '{}') as Record<string, Partial<PreferenciasNotificacionesContratista>>;
+    return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA, ...(todas[contratistaId] || {}) };
+  } catch {
+    return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
+  }
+}
+
+export function savePreferenciasNotificacionesContratista(
+  contratistaId: string,
+  preferencias: PreferenciasNotificacionesContratista,
+): void {
+  if (typeof window === 'undefined') return;
+  let todas: Record<string, PreferenciasNotificacionesContratista> = {};
+  try {
+    todas = JSON.parse(localStorage.getItem(PREFERENCIAS_CONTRATISTA_KEY) || '{}');
+  } catch {
+    todas = {};
+  }
+  todas[contratistaId] = preferencias;
+  localStorage.setItem(PREFERENCIAS_CONTRATISTA_KEY, JSON.stringify(todas));
+}
 
 // Herramienta de desarrollo: vuelve a cargar el estado inicial del MVP.
 // Borra únicamente las claves de datos de Acredita (nunca localStorage.clear(),

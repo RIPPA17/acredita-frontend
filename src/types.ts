@@ -92,6 +92,13 @@ export interface Contratista {
   isNew?: boolean;
 }
 
+export interface PreferenciasNotificacionesContratista {
+  documentoRechazado: boolean;
+  documentoPorVencer: boolean;
+  acreditacionAprobada: boolean;
+  cambioEstadoTrabajador: boolean;
+}
+
 export interface Verificador {
   id: string;
   nombre: string;

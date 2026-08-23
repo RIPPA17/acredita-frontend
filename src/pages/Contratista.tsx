@@ -43,13 +43,6 @@ export default function ContratistaPortal() {
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
   const [fichaTipo, setFichaTipo] = useState<'empresa' | 'trabajador'>('empresa');
   const [fichaTrabajador, setFichaTrabajador] = useState<any>(null);
-  const [activeConfigTab, setActiveConfigTab] = useState<'perfil' | 'alertas' | 'seguridad'>('perfil');
-  const [canalAlertas, setCanalAlertas] = useState({
-    rechazoEmail: true,
-    vencimientoEmail: true,
-    vencimientoWhatsapp: false,
-    aprobacionEmail: true
-  });
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
   const [newWorkerForm, setNewWorkerForm] = useState({
@@ -61,6 +54,12 @@ export default function ContratistaPortal() {
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
     setToast({msg, type});
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setMobileMenuOpen(false);
+    navigate('/');
   };
 
   const menuItems = [
@@ -528,7 +527,7 @@ export default function ContratistaPortal() {
           <div className="sb-bottom">
             <button 
               className="sb-item w-full flex text-left mt-auto" 
-              onClick={() => { logoutUser(); navigate('/'); }}
+              onClick={handleLogout}
               title={sidebarCollapsed ? "Cerrar sesión" : undefined}
             >
               <LogOut size={18} className="shrink-0" /> 
@@ -569,7 +568,7 @@ export default function ContratistaPortal() {
               ))}
               
               <div className="sb-bottom">
-                <button className="sb-item w-full flex text-left mt-auto" onClick={() => { logoutUser(); setMobileMenuOpen(false); navigate('/'); }}>
+                <button className="sb-item w-full flex text-left mt-auto" onClick={handleLogout}>
                   <LogOut size={18} /> Cerrar sesión
                 </button>
               </div>
@@ -654,10 +653,12 @@ export default function ContratistaPortal() {
 
           {activeTab === 'config' && (
             <ConfigTab
-              activeConfigTab={activeConfigTab}
-              setActiveConfigTab={setActiveConfigTab}
-              canalAlertas={canalAlertas}
-              setCanalAlertas={setCanalAlertas}
+              contratistaLogueado={contratistaLogueado}
+              misProyectos={misProyectos}
+              allMandantes={allMandantes}
+              session={session}
+              onLogout={handleLogout}
+              showToast={showToast}
             />
           )}
 
