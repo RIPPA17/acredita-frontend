@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { XCircle, Plus, Edit } from 'lucide-react';
-import { Contratista, Proyecto, Mandante, Requisito } from '../../types';
-import { saveRequisitos } from '../../data/localStorageDb';
+import { Contratista, Proyecto, Mandante, Requisito, PlantillaBase } from '../../types';
+import { saveRequisitos, getPlantillas } from '../../data/localStorageDb';
 import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
 
 type Tab = 'resumen' | 'contratistas' | 'requisitos' | 'acreditaciones';
@@ -257,6 +257,18 @@ export default function ProyectoDetailDrawer({
   const [showRequisitoModal, setShowRequisitoModal] = useState(false);
   const [editingRequisito, setEditingRequisito] = useState<Requisito | null>(null);
   const [form, setForm] = useState(FORM_VACIO);
+  const [plantillaSeleccionadaId, setPlantillaSeleccionadaId] = useState('');
+
+  // Catálogo reutilizable de Configuración → Plantillas base: se lee
+  // directamente cada vez que el modal está abierto (sin levantar estado
+  // global) para reflejar siempre las plantillas activas actuales. Solo
+  // aplica a crear un requisito nuevo — nunca al editar uno existente.
+  const plantillasDisponibles: PlantillaBase[] = showRequisitoModal
+    ? getPlantillas()
+        .filter((p: any) => p.activo !== false)
+        .map((p: any): PlantillaBase => ({ id: p.id, nombre: p.nombre, categoria: p.categoria, destino: p.destino === 'trabajador' ? 'trabajador' : 'empresa', activo: true }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    : [];
 
   // Siempre se re-resuelve el proyecto real desde el arreglo vivo (nunca se
   // confía en la instantánea con la que se abrió el drawer), y nunca cae de
@@ -298,6 +310,7 @@ export default function ProyectoDetailDrawer({
   const abrirNuevoRequisito = () => {
     setEditingRequisito(null);
     setForm(FORM_VACIO);
+    setPlantillaSeleccionadaId('');
     setShowRequisitoModal(true);
   };
 
@@ -312,6 +325,7 @@ export default function ProyectoDetailDrawer({
       criticidad: r.criticidad,
       alertaDias: r.alertaDias,
     });
+    setPlantillaSeleccionadaId('');
     setShowRequisitoModal(true);
   };
 
@@ -319,6 +333,19 @@ export default function ProyectoDetailDrawer({
     setShowRequisitoModal(false);
     setEditingRequisito(null);
     setForm(FORM_VACIO);
+    setPlantillaSeleccionadaId('');
+  };
+
+  // Selector "Usar plantilla base": solo precarga nombre/categoría/destino.
+  // Nunca toca frecuencia/obligatorio/criticidad/alertaDias — esas reglas
+  // son del requisito en este proyecto, no de la plantilla. Volver a la
+  // opción vacía no borra lo que el usuario ya haya escrito.
+  const seleccionarPlantilla = (id: string) => {
+    setPlantillaSeleccionadaId(id);
+    if (!id) return;
+    const plantilla = plantillasDisponibles.find(p => p.id === id);
+    if (!plantilla) return;
+    setForm(f => ({ ...f, nombre: plantilla.nombre, categoria: plantilla.categoria, destino: plantilla.destino }));
   };
 
   const guardarRequisito = (e: React.FormEvent) => {
@@ -436,6 +463,24 @@ export default function ProyectoDetailDrawer({
             </div>
 
             <form onSubmit={guardarRequisito} className="p-6 flex flex-col gap-4">
+              {!editingRequisito && (
+                <div>
+                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Usar plantilla base</label>
+                  <select
+                    value={plantillaSeleccionadaId}
+                    onChange={e => seleccionarPlantilla(e.target.value)}
+                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
+                  >
+                    <option value="">Crear requisito manualmente</option>
+                    {plantillasDisponibles.map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
+                    Opcional. Precarga nombre, categoría y destino; las reglas del requisito se configuran para este proyecto.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Nombre</label>
                 <input

@@ -27,7 +27,6 @@ import {
   Building,
   Building2,
   ChevronDown,
-  Clock,
   ShieldAlert,
   List,
   FolderOpen,
@@ -60,101 +59,6 @@ import DocumentoDetailModal from './admin/DocumentoDetailModal';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
-
-type LogEntry = {
-  id: number;
-  accion: "aprobacion" | "rechazo" | "subida" | "acceso_fallido" | "alerta";
-  actor: string;
-  rol: "Revisor" | "Contratista" | "Sistema Automático" | "Desconocido";
-  empresa: string;
-  proyecto: string;
-  detalle: string;
-  fecha: string;
-  resultado: "exitoso" | "bloqueado" | "informativo";
-  ip?: string;
-};
-
-const ACTIVIDAD_RECIENTE: any[] = [];
-let actId = 1;
-
-const cTecnico = GLOBAL_CONTRATISTAS.find(c => c.id === 'tecnicosur');
-if (cTecnico) {
-  ACTIVIDAD_RECIENTE.push({
-    id: actId++,
-    evento: 'Registro',
-    empresa: cTecnico.nombre,
-    rut: cTecnico.rut,
-    documento: 'Cuenta nueva',
-    categoria: '—',
-    hora: '08:55',
-    fecha: '04 Jun 2026',
-    estado: 'registrado',
-    revisor: '—',
-    proyecto: 'Torre Mackenna'
-  });
-}
-
-GLOBAL_CONTRATISTAS.forEach(c => {
-  c.documentos.forEach(d => {
-    const pId = c.proyectos[0] || 'costanera';
-    const project = GLOBAL_PROYECTOS.find(p => p.id === pId);
-    const proyectoNombre = project ? project.nombre : 'Costanera Norte';
-
-    let evento = 'Doc subido';
-    let revisor = '—';
-    if (d.estado === 'aprobado') {
-      evento = 'Aprobado';
-      revisor = 'Ana Díaz';
-    } else if (d.estado === 'rechazado') {
-      evento = 'Rechazado';
-      revisor = 'Carlos Reyes';
-    }
-
-    if (d.estado === 'revision' || d.estado === 'aprobado' || d.estado === 'rechazado') {
-      ACTIVIDAD_RECIENTE.push({
-        id: actId++,
-        evento,
-        empresa: c.nombre,
-        rut: c.rut,
-        documento: d.nombre,
-        categoria: d.categoria,
-        hora: d.estado === 'revision' ? '08:40' : d.estado === 'aprobado' ? '09:35' : '09:18',
-        fecha: '04 Jun 2026',
-        estado: d.estado,
-        revisor,
-        proyecto: proyectoNombre,
-        motivo: d.motivo || d.observacion
-      });
-    }
-  });
-});
-
-const ALERTAS_DASHBOARD = [
-  {
-    id: 1,
-    tipo: "urgente",
-    icono: AlertCircle,
-    titulo: "3 documentos llevan más de 24 hrs sin revisión",
-    detalle: "Costanera Norte y Torre Mackenna",
-    doc: { documento: "Liquidación Mayo 2026", empresa: "Servicios Norte", rut: "76.111.222-3", categoria: "Laboral", proyecto: "Costanera Norte", fecha: "16-06-2026", hora: "09:42", estado: "revision", revisor: "—", evento: "Doc subido" },
-  },
-  {
-    id: 2,
-    tipo: "bloqueo",
-    icono: XCircle,
-    titulo: "1 empresa con documentos rechazados",
-    detalle: "No cumple requisitos mínimos de acceso a faena",
-    doc: { documento: "Registro Mutual ACHS", empresa: "TécnicoSur SpA", rut: "77.321.654-1", categoria: "Prevención", proyecto: "Torre Mackenna", fecha: "12-06-2026", hora: "08:10", estado: "rechazado", revisor: "Ana Díaz", evento: "Rechazado", motivo: "la firma del representante legal es ilegible en página 2" },
-  },
-  {
-    id: 3,
-    tipo: "por_vencer",
-    icono: Clock,
-    titulo: "Certificado ODI de TécnicoSur vence próximamente",
-    detalle: "Proyecto Torre Mackenna",
-    doc: { documento: "Certificado ODI", empresa: "TécnicoSur SpA", rut: "77.321.654-1", categoria: "Prevención", proyecto: "Torre Mackenna", fecha: "19-06-2026", hora: "-", estado: "revision", revisor: "—", evento: "Por vencer" },
-  },
-];
 
 export default function AdminPortal() {
   const navigate = useNavigate();
