@@ -304,20 +304,23 @@
   .contractor-projects-hero {
     background: linear-gradient(135deg, var(--navy), var(--navy2));
     margin: -0.75rem -0.75rem 0;
-    padding: 22px 20px 34px;
+    padding: 22px 20px 52px;
     border-radius: 0 0 18px 18px;
   }
   @media (min-width: 1280px) {
-    .contractor-projects-hero { margin: -1rem -1rem 0; padding: 26px 28px 40px; }
+    .contractor-projects-hero { margin: -1rem -1rem 0; padding: 26px 28px 56px; }
   }
   .contractor-projects-hero-eyebrow { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: #d8b27a; font-weight: 700; }
   .contractor-projects-hero-title { font-size: 27px; font-weight: 700; color: white; margin: 6px 0 8px; line-height: 1.15; }
   .contractor-projects-hero-sub { font-size: 13px; line-height: 1.45; color: #d2d7df; max-width: 780px; }
 
-  /* Un solape pequeño (no el texto completo) para que el hero se sienta
-     integrado con el contenido en vez de dejar un salto brusco, sin arriesgar
-     texto oscuro ilegible sobre el fondo oscuro del hero. */
-  .contractor-projects-floating { margin-top: -6px; position: relative; z-index: 2; }
+  /* El contenido monta sobre el borde inferior del hero (como el prototipo);
+     la franja de identidad tiene su propia superficie blanca (ver
+     .contractor-projects-identity) para que ese solape nunca deje texto
+     oscuro flotando directamente sobre el fondo navy. */
+  .contractor-projects-floating { margin-top: -30px; position: relative; z-index: 2; }
+
+  .contractor-projects-identity { background: white; border: 1px solid var(--cream3); border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(20,24,34,.08); }
 
   .contractor-projects-kpi { background: white; border: 1px solid var(--cream3); border-radius: 16px; padding: 16px 18px; box-shadow: 0 2px 12px rgba(20,24,34,.04); }
   .contractor-projects-kpi-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #8a92a1; font-weight: 700; }
@@ -330,12 +333,12 @@
   .contractor-projects-filter-active { background: var(--navy); color: white; border-color: var(--navy); }
   .contractor-projects-filter-active .contractor-projects-filter-count { background: rgba(255,255,255,.22); }
 
-  .contractor-projects-card { background: white; border: 1px solid var(--cream3); border-left: 4px solid var(--cream3); border-radius: var(--r); overflow: hidden; box-shadow: 0 2px 12px rgba(20,24,34,.04); display: flex; flex-direction: column; transition: box-shadow 0.15s; }
+  .contractor-projects-card { background: white; border: 1px solid var(--cream3); border-top: 4px solid var(--cream3); border-radius: var(--r); overflow: hidden; box-shadow: 0 2px 12px rgba(20,24,34,.04); display: flex; flex-direction: column; transition: box-shadow 0.15s; }
   .contractor-projects-card:hover { box-shadow: 0 4px 18px rgba(20,24,34,.08); }
-  .contractor-projects-card.state-bloqueado { border-left-color: #c02020; }
-  .contractor-projects-card.state-proceso { border-left-color: #d4a000; }
-  .contractor-projects-card.state-acreditado { border-left-color: #2a8040; }
-  .contractor-projects-card.selected { border-left-width: 6px; }
+  .contractor-projects-card.state-bloqueado { border-top-color: #c02020; }
+  .contractor-projects-card.state-proceso { border-top-color: #d4a000; }
+  .contractor-projects-card.state-acreditado { border-top-color: #2a8040; }
+  .contractor-projects-card.selected { box-shadow: 0 0 0 1px var(--brown), 0 2px 12px rgba(20,24,34,.04); }
 
   .contractor-projects-mini { background: #fcfbf7; border: 1px solid var(--cream3); border-radius: 12px; padding: 10px; }
   .contractor-projects-mini-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #8a92a1; font-weight: 700; }
@@ -346,6 +349,11 @@
   .contractor-projects-alert.state-proceso { background: var(--color-alert-warn); border-color: #e6cd94; color: #7a5500; }
   .contractor-projects-alert.state-bloqueado { background: var(--color-alert-danger); border-color: #efb4b4; color: #8a2020; }
 
-  .contractor-projects-btn-ghost { background: white; color: var(--navy); border-color: var(--cream3); }
+  .contractor-projects-btn-primary { width: 100%; min-height: 38px; padding: 9px 12px; border-radius: 10px; border: none; background: linear-gradient(90deg, var(--gold), var(--brown)); color: white; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: filter 0.15s; }
+  .contractor-projects-btn-primary:hover { filter: brightness(1.04); }
+
+  .contractor-projects-btn-ghost { min-height: 34px; background: white; color: var(--navy); border: 1px solid var(--cream3); border-radius: 9px; font-family: inherit; }
   .contractor-projects-btn-ghost:hover { background: var(--cream2); }
+
+  .contractor-projects-status-badge { padding: 5px 9px; font-size: 11px; font-weight: 700; line-height: 1; }
 }

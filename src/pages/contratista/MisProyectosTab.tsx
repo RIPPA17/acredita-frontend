@@ -148,11 +148,9 @@ export default function MisProyectosTab({
   const totalEnProceso = proyectosInfo.filter(i => i.estadoUI === 'En proceso').length;
   const totalBloqueados = proyectosInfo.filter(i => i.estadoUI === 'Bloqueado').length;
 
-  // "Activos": proyectos cuyo estado real así lo indica; si el campo no
-  // distingue nada (todo el catálogo vigente se modela como 'Activo'), cae
-  // de vuelta a contar todos los asignados en vez de mostrar 0 en falso.
-  const proyectosActivosReales = misProyectos.filter(p => String(p.estado).toLowerCase() === 'activo').length;
-  const totalProyectosActivos = proyectosActivosReales > 0 ? proyectosActivosReales : misProyectos.length;
+  // "Activos": solo cuenta lo que el modelo realmente marca como estado
+  // 'Activo'. Sin fallback — si no hay ninguno, el KPI debe mostrar 0.
+  const totalProyectosActivos = misProyectos.filter(p => String(p.estado).toLowerCase() === 'activo').length;
 
   // Orden: Bloqueado primero, luego En proceso, luego Acreditado; después por nombre.
   const proyectosOrdenados = [...proyectosInfo].sort((a, b) => {
@@ -179,11 +177,13 @@ export default function MisProyectosTab({
       <Hero />
 
       <div className="contractor-projects-floating flex flex-col gap-5">
-        {/* Identidad del contratista + buscador */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        {/* Identidad del contratista + buscador: superficie blanca propia
+            para que el solape sobre el hero nunca deje texto oscuro sin
+            soporte visual encima del fondo navy. */}
+        <div className="contractor-projects-identity flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-[20px] font-bold text-navy leading-tight">{contratistaLogueado.nombre}</p>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">RUT {contratistaLogueado.rut} · {misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} activo{misProyectos.length === 1 ? '' : 's'}</p>
+            <p className="text-[11.5px] text-gray-500 mt-0.5">RUT {contratistaLogueado.rut} · {totalProyectosActivos} proyecto{totalProyectosActivos === 1 ? '' : 's'} activo{totalProyectosActivos === 1 ? '' : 's'}</p>
           </div>
           <div className="relative w-full md:w-auto">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -271,7 +271,7 @@ export default function MisProyectosTab({
                         </div>
                         <h3 className="text-[17.5px] font-bold text-navy mt-1">{p.nombre}</h3>
                       </div>
-                      <span className={`badge ${badge} shrink-0`}>{estadoUI}</span>
+                      <span className={`badge contractor-projects-status-badge ${badge} shrink-0`}>{estadoUI}</span>
                     </div>
                     {esSeleccionado && <p className="text-[10.5px] text-brown font-semibold mt-1.5">Proyecto seleccionado</p>}
                   </div>
@@ -316,10 +316,7 @@ export default function MisProyectosTab({
                   </div>
 
                   <div className="p-4 pt-3 mt-auto border-t border-cream flex flex-col gap-2">
-                    <button
-                      className={`btn ${estadoUI === 'Bloqueado' ? 'btn-reject' : 'btn-primary'} btn-sm w-full`}
-                      onClick={() => irAInicio(p.id)}
-                    >
+                    <button className="contractor-projects-btn-primary" onClick={() => irAInicio(p.id)}>
                       Ver proyecto
                     </button>
                     <div className="grid grid-cols-2 gap-2">
