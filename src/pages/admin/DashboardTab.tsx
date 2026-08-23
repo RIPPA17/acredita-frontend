@@ -1,33 +1,17 @@
-import { useState } from 'react';
-import { ArrowRight, ShieldAlert, Clock, Building2, Users, HardHat, ClipboardList } from 'lucide-react';
-import { getAlertasVigencia, getInvitaciones, calcularEstadoAcreditacion } from '../../data/localStorageDb';
+import { ClipboardList, ShieldCheck, Building2, Users } from 'lucide-react';
 import { Contratista, Proyecto } from '../../types';
-import { buildColaDocs } from './colaUtils';
+import { buildColaDocs, buildCorrectionDocs } from './colaUtils';
+import { buildAcreditacionRows, badgeClass, AcredRow } from './acreditacionUtils';
 import { GLOBAL_MANDANTES } from './globalData';
 
-/**
- * One severity taxonomy for the whole dashboard. Everything that used to be
- * labelled "Alta prioridad", "Crítica", "Atención", "urgente" or "Bloquea
- * faena" now maps onto exactly these three levels.
- */
-type Severidad = 'critico' | 'atencion' | 'normal';
+const VERIFICADORES_HOY = [
+  { nombre: 'María González', rol: 'Analista de acreditación', peso: 0.38 },
+  { nombre: 'Carlos Soto', rol: 'Analista de acreditación', peso: 0.30 },
+  { nombre: 'Ana Ruiz', rol: 'Supervisora', peso: 0.20 },
+];
+const VERIFICADORES_ACTIVOS = 4;
 
-type ItemCola = {
-  key: string;
-  sev: Severidad;
-  empresa: string;
-  documento: string;
-  meta: string;
-  tiempo: string;
-  accion: string;
-  onAccion: () => void;
-};
-
-const SEV_LABEL: Record<Severidad, string> = {
-  critico: 'Crítico',
-  atencion: 'Atención',
-  normal: 'Normal',
-};
+const rankEstado = (e: AcredRow['estado']) => (e === 'Vencido/Bloqueado' ? 0 : e === 'En proceso' ? 1 : 2);
 
 export default function DashboardTab({
   GLOBAL_CONTRATISTAS,
@@ -36,11 +20,6 @@ export default function DashboardTab({
   aprobadosHoy,
   rechazadosHoy,
   setSelectedDocId,
-  filtroActividad,
-  setFiltroActividad,
-  ACTIVIDAD_RECIENTE,
-  setActividadSeleccionada,
-  showToast,
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
@@ -48,464 +27,228 @@ export default function DashboardTab({
   aprobadosHoy: number;
   rechazadosHoy: number;
   setSelectedDocId: (id: number | null) => void;
-  filtroActividad: string;
-  setFiltroActividad: (v: string) => void;
-  ACTIVIDAD_RECIENTE: any[];
-  setActividadSeleccionada: (v: any) => void;
-  showToast?: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
-  const [filtroCola, setFiltroCola] = useState<'todos' | Severidad>('todos');
-
   const dynamicCola = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
+  const correctionDocs = buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
 
-  const waitingCorrectionList: any[] = [];
-  GLOBAL_CONTRATISTAS.forEach(c => {
-    c.documentos.forEach(d => {
-      if (d.estado === 'rechazado') {
-        const pId = c.proyectos[0] || 'costanera';
-        const project = GLOBAL_PROYECTOS.find(p => p.id === pId);
+  // Mirrors ColaRevisionTab's own illustrative claim simulation (2 of the
+  // oldest/highest-priority pending docs shown as "already taken" once there
+  // are enough of them), so this KPI agrees with what that tab shows.
+  const enRevisionCount = dynamicCola.length >= 3 ? 2 : 0;
+  const porRevisarCount = dynamicCola.length - enRevisionCount;
+  const esperandoCorreccionCount = correctionDocs.length;
 
-        waitingCorrectionList.push({
-          id: d.id,
-          empresa: c.nombre,
-          rut: c.rut,
-          proyecto: project ? project.nombre : 'Faena Costanera',
-          documento: d.nombre,
-          motivo: d.motivo || 'Firma digital no legible en el anexo 2.',
-          intentos: 2,
-          fecha: d.vencimiento || '12-05-2026'
-        });
-      }
-    });
+  const acredRows = buildAcreditacionRows(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES);
+  const bloqueadasCount = acredRows.filter(r => r.estado === 'Vencido/Bloqueado').length;
+
+  // "Requiere atención": worst acreditación per contratista (not per project,
+  // so the same company in 3 projects doesn't crowd out other companies),
+  // top 5 by severity.
+  const worstPerContratista = new Map<string, AcredRow>();
+  acredRows.forEach(r => {
+    const existing = worstPerContratista.get(r.contratista.id);
+    if (!existing || rankEstado(r.estado) < rankEstado(existing.estado)) worstPerContratista.set(r.contratista.id, r);
   });
+  const atencion = Array.from(worstPerContratista.values())
+    .filter(r => r.estado !== 'Aprobado')
+    .sort((a, b) => rankEstado(a.estado) - rankEstado(b.estado))
+    .slice(0, 5);
 
-  const alertas = getAlertasVigencia();
-
-  const mockCasosDecision = [
-    { id: "dec-1", empresa: "TécnicoSur SpA", proyecto: "Torre Mackenna", detalle: "Certificado ODI", info: "Excepción de firma notarial para trabajador extranjero (Jefe Verificador)" },
-    { id: "dec-2", empresa: "Constructora del Sol", proyecto: "Planta Solar", detalle: "Certificado Antecedentes", info: "Discrepancia en validación de firma digital homologada (Jefe Verificador)" },
-    { id: "dec-3", empresa: "Eléctrica del Sur", proyecto: "Torre Mackenna", detalle: "Examen de Altura Física", info: "Criterio de vigencia de examen médico extranjero (Jefe Verificador)" },
-    { id: "dec-4", empresa: "Lagos y Cía", proyecto: "Costanera Norte", detalle: "Declaración jurada F30", info: "Revisión de cláusula de responsabilidad solidaria (Jefe Verificador)" }
-  ];
-
-  /* --- The three former panels, merged into one prioritised queue --- */
-  const itemsCola: ItemCola[] = [
-    ...dynamicCola.map((d): ItemCola => ({
-      key: `cola-${d.id}`,
-      sev: d.prio === 'Alta' ? 'critico' : 'normal',
-      empresa: d.emp,
-      documento: d.title,
-      meta: `${d.proyecto} · esperando revisión${d.origen === 'Trabajador' ? ` · ${d.trabajadorNombre}` : ''}`,
-      tiempo: d.time,
-      accion: 'Revisar',
-      onAccion: () => { setSelectedDocId(d.id); setActiveTab('cola'); },
-    })),
-    ...alertas.map((a): ItemCola => ({
-      key: `alerta-${a.id}`,
-      sev: a.criticidad === 'Crítica' || a.bloquea ? 'critico' : a.criticidad === 'Atención' ? 'atencion' : 'normal',
-      empresa: a.empresaNombre,
-      documento: a.documentoNombre,
-      meta: [
-        a.proyectoNombre,
-        a.diasRestantes < 0 ? `vencido el ${a.vencimiento}` : `vence en ${a.diasRestantes} días`,
-        a.trabajadorNombre,
-        a.bloquea ? 'bloquea faena' : null,
-      ].filter(Boolean).join(' · '),
-      tiempo: a.diasRestantes < 0 ? 'Vencido' : `${a.diasRestantes} d`,
-      accion: 'Ver',
-      onAccion: () => setActiveTab('acreditaciones'),
-    })),
-    ...waitingCorrectionList.map((w): ItemCola => ({
-      key: `correccion-${w.id}`,
-      sev: 'atencion',
-      empresa: w.empresa,
-      documento: w.documento,
-      meta: `${w.proyecto} · rechazado: ${w.motivo}`,
-      tiempo: `${w.intentos} int.`,
-      accion: 'Ver',
-      onAccion: () => setActiveTab('acreditaciones'),
-    })),
-  ];
-
-  const ordenSev: Record<Severidad, number> = { critico: 0, atencion: 1, normal: 2 };
-  itemsCola.sort((a, b) => ordenSev[a.sev] - ordenSev[b.sev]);
-
-  const conteo = {
-    todos: itemsCola.length,
-    critico: itemsCola.filter(i => i.sev === 'critico').length,
-    atencion: itemsCola.filter(i => i.sev === 'atencion').length,
-    normal: itemsCola.filter(i => i.sev === 'normal').length,
+  const problemText = (r: AcredRow) => {
+    if (r.estado === 'Vencido/Bloqueado') {
+      const empresaBlockers = r.blockers.filter(b => b.tipo === 'Empresa');
+      const trabajadorBlockers = r.blockers.filter(b => b.tipo === 'Trabajador');
+      if (empresaBlockers.length > 0) return `${empresaBlockers[0].detalle}. La acreditación no puede completarse.`;
+      if (trabajadorBlockers.length > 0) return `${trabajadorBlockers.length} trabajador${trabajadorBlockers.length === 1 ? '' : 'es'} impide${trabajadorBlockers.length === 1 ? '' : 'n'} completar la acreditación.`;
+      return 'Requisitos obligatorios rechazados o vencidos.';
+    }
+    const pendientes = dynamicCola.filter(d => d.emp === r.entity && d.proyecto === r.proyectoNombre).length;
+    if (pendientes > 0) return `${pendientes} documento${pendientes === 1 ? '' : 's'} pendiente${pendientes === 1 ? '' : 's'} de revisión.`;
+    return 'Documentación en proceso de validación.';
   };
 
-  const colaVisible = filtroCola === 'todos' ? itemsCola : itemsCola.filter(i => i.sev === filtroCola);
+  const revisadosHoy = aprobadosHoy + rechazadosHoy;
 
-  const primerPendiente = dynamicCola[0];
-
-  /* --- Top-of-page KPIs and "Atención requerida" / "Salud de acreditación",
-     adapted from the uploaded prototype but wired to real data instead of the
-     mock counts it shipped with. --- */
-  const totalMandantes = GLOBAL_MANDANTES.length;
-  const totalProyectos = GLOBAL_PROYECTOS.length;
-  const totalContratistas = GLOBAL_CONTRATISTAS.length;
-  const contratistasConIncumplimiento = GLOBAL_CONTRATISTAS.filter(c =>
-    c.documentos.some(d => d.estado === 'rechazado' || d.estado === 'por_vencer')
-  ).length;
-  const totalTrabajadores = GLOBAL_CONTRATISTAS.reduce((sum, c) => sum + (c.trabajadores?.length || 0), 0);
-  const trabajadoresVigentes = GLOBAL_CONTRATISTAS.reduce(
-    (sum, c) => sum + (c.trabajadores?.filter(t => t.estado === 'aprobado').length || 0), 0
-  );
-  const pctVigente = totalTrabajadores > 0 ? Math.round((trabajadoresVigentes / totalTrabajadores) * 100) : 0;
-  const revisionPendiente = dynamicCola.length;
-  const prioridadAlta = dynamicCola.filter(d => d.prio === 'Alta').length;
-
-  const contratistasBloqueados = GLOBAL_CONTRATISTAS.filter(
-    c => calcularEstadoAcreditacion(c) === 'Vencido/Bloqueado'
-  ).length;
-  const contratistasAprobados = GLOBAL_CONTRATISTAS.filter(
-    c => calcularEstadoAcreditacion(c) === 'Aprobado'
-  ).length;
-  const contratistasEnProceso = totalContratistas - contratistasAprobados - contratistasBloqueados;
-  const pctAcreditados = totalContratistas > 0 ? Math.round((contratistasAprobados / totalContratistas) * 100) : 0;
-
-  const documentosRechazados = GLOBAL_CONTRATISTAS.reduce(
-    (sum, c) => sum + c.documentos.filter(d => d.estado === 'rechazado').length, 0
-  );
-  const invitacionesPendientes = getInvitaciones().filter(i => i.estado === 'pendiente').length;
-
-  const issuesAtencion = [
-    contratistasBloqueados > 0 && {
-      key: 'bloq', color: '#a32d2d',
-      titulo: `${contratistasBloqueados} contratistas bloqueados`,
-      detalle: 'Podrían afectar acceso o continuidad operacional.',
-      accion: 'Gestionar', onClick: () => setActiveTab('contratistas'),
-    },
-    documentosRechazados > 0 && {
-      key: 'rech', color: '#a32d2d',
-      titulo: `${documentosRechazados} documentos rechazados`,
-      detalle: 'Esperan una nueva carga o corrección.',
-      accion: 'Revisar', onClick: () => setActiveTab('acreditaciones'),
-    },
-    alertas.length > 0 && {
-      key: 'venc', color: '#b58600',
-      titulo: `${alertas.length} documentos por vencer o vencidos`,
-      detalle: 'Requieren seguimiento de vigencia en los próximos 30 días.',
-      accion: 'Ver', onClick: () => setActiveTab('acreditaciones'),
-    },
-    invitacionesPendientes > 0 && {
-      key: 'inv', color: 'var(--brown)',
-      titulo: `${invitacionesPendientes} invitaciones pendientes`,
-      detalle: 'Contratistas todavía no han aceptado la invitación.',
-      accion: 'Gestionar', onClick: () => setActiveTab('mandantes'),
-    },
-  ].filter(Boolean) as Array<{ key: string; color: string; titulo: string; detalle: string; accion: string; onClick: () => void }>;
-
-  /* Admin.tsx passes activity items shaped { empresa, documento, fecha, estado,
-     detalle } with estado capitalised, so compare case-insensitively — the old
-     lowercase comparison silently matched nothing. */
-  const normalizarEstado = (e: unknown) => String(e ?? '').toLowerCase();
-  const actividadFiltrada = ACTIVIDAD_RECIENTE.filter(
-    a => filtroActividad === 'todos' || normalizarEstado(a.estado) === filtroActividad
-  );
-  const MAX_ACTIVIDAD = 8;
-  const actividadVisible = actividadFiltrada.slice(0, MAX_ACTIVIDAD);
-
-  const filtros: Array<{ id: 'todos' | Severidad; label: string }> = [
-    { id: 'todos', label: 'Todos' },
-    { id: 'critico', label: 'Críticos' },
-    { id: 'atencion', label: 'Atención' },
-    { id: 'normal', label: 'Normal' },
-  ];
+  const irACola = () => {
+    const first = dynamicCola[0];
+    if (first) setSelectedDocId(first.id);
+    setActiveTab('cola');
+  };
 
   return (
-    <div className="fade-in space-y-6">
-      <div className="page-header items-start flex-wrap gap-3">
-        <div>
-          <div className="text-[11.5px] text-gray-500 mb-1 uppercase tracking-wide">Inicio · Administración</div>
-          <h2 className="page-title text-navy font-bold text-[26px]">Resumen de Acredita</h2>
-          <p className="page-sub text-gray-500 text-[13.5px] mt-1">
-            Estado general de mandantes, contratistas, acreditaciones y documentación.
-          </p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={() => showToast?.('Generando reporte de cumplimiento...', 'success')}
-            className="btn btn-ghost"
-          >
-            Exportar reporte
-          </button>
-          <button
-            onClick={() => {
-              if (primerPendiente) setSelectedDocId(primerPendiente.id);
-              setActiveTab('cola');
-            }}
-            className="btn btn-primary"
-          >
-            Comenzar revisión <ArrowRight size={16} />
-          </button>
-        </div>
+    <div className="dashv2 fade-in pb-10">
+      <style>{`
+        .dashv2{--line:var(--cream3);--muted:#717b87;--red:#a6302f;--amber:#a06d14;--green:#2d7b45;--blue:#315b8a;}
+        .dashv2 .head{margin-bottom:18px;}
+        .dashv2 .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--brown);font-weight:800;}
+        .dashv2 .title{font-size:29px;font-weight:850;color:var(--navy);margin:5px 0;}
+        .dashv2 .sub{font-size:13px;color:var(--muted);max-width:900px;line-height:1.45;}
+
+        .dashv2 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+        .dashv2 .kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px;cursor:pointer;transition:.15s;border:none;text-align:left;font-family:inherit;}
+        .dashv2 .kpi{border:1px solid var(--line);}
+        .dashv2 .kpi:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(18,32,56,.06);}
+        .dashv2 .kpi-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+        .dashv2 .k{font-size:9.5px;text-transform:uppercase;color:#8a919b;font-weight:800;letter-spacing:.05em;}
+        .dashv2 .v{font-size:25px;font-weight:900;color:var(--navy);margin-top:7px;}
+        .dashv2 .n{font-size:9.5px;color:var(--muted);margin-top:3px;}
+        .dashv2 .link{font-size:9.5px;font-weight:850;color:var(--brown);margin-top:10px;}
+        .dashv2 .kpi.warn .v{color:var(--amber);}
+        .dashv2 .kpi.danger .v{color:var(--red);}
+        .dashv2 .kpi.good .v{color:var(--green);}
+        .dashv2 .kpi.blue .v{color:var(--blue);}
+        .dashv2 .badge{display:inline-flex;padding:5px 8px;border-radius:999px;font-size:9.5px;font-weight:800;white-space:nowrap;}
+        .dashv2 .badge.red{background:#f9ecec;color:var(--red);}
+        .dashv2 .badge.amber{background:#fbf4e3;color:var(--amber);}
+        .dashv2 .badge.green{background:#edf7ef;color:var(--green);}
+        .dashv2 .badge.gray{background:#f2f4f7;color:#667085;}
+        .dashv2 .badge.blue{background:#edf3fa;color:var(--blue);}
+
+        .dashv2 .layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:14px;}
+        .dashv2 .box{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 3px 12px rgba(18,32,56,.035);overflow:hidden;}
+        .dashv2 .box-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+        .dashv2 .box-title{font-size:14px;font-weight:900;color:var(--navy);}
+        .dashv2 .box-sub{font-size:10px;color:var(--muted);margin-top:3px;}
+        .dashv2 .attention{padding:2px 16px 6px;}
+        .dashv2 .attention-item{padding:13px 0;border-bottom:1px solid #f0ece7;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;}
+        .dashv2 .attention-item:last-child{border-bottom:0;}
+        .dashv2 .attention-title{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+        .dashv2 .attention-title b{font-size:11.5px;color:var(--navy);}
+        .dashv2 .meta{font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.4;}
+        .dashv2 .problem{font-size:10px;color:#475467;margin-top:5px;line-height:1.4;}
+        .dashv2 .icon{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;font-size:10px;font-weight:800;color:#475467;cursor:pointer;font-family:inherit;white-space:nowrap;}
+        .dashv2 .footer{padding:11px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+        .dashv2 .muted{font-size:10px;color:var(--muted);}
+        .dashv2 .btn{border:1px solid var(--line);background:#fff;color:var(--navy);padding:9px 13px;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;}
+        .dashv2 .btn:hover{background:var(--cream2);}
+
+        .dashv2 .today{padding:14px 16px;}
+        .dashv2 .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+        .dashv2 .metric-card{border:1px solid var(--line);border-radius:10px;padding:11px;background:#faf9f7;}
+        .dashv2 .metric-card .label{font-size:8.5px;text-transform:uppercase;color:#8a919b;font-weight:800;}
+        .dashv2 .metric-card .number{font-size:20px;font-weight:900;color:var(--navy);margin-top:4px;}
+        .dashv2 .section-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#8a919b;font-weight:800;margin:16px 0 7px;}
+        .dashv2 .verifier{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #f0ece7;}
+        .dashv2 .verifier:last-child{border-bottom:0;}
+        .dashv2 .verifier b{font-size:10.5px;color:var(--navy);}
+        .dashv2 .verifier span{font-size:9.5px;color:var(--muted);}
+
+        .dashv2 .quick{margin-top:14px;}
+        .dashv2 .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;}
+        .dashv2 .quick-card{border:1px solid var(--line);border-radius:11px;padding:14px;background:#fff;cursor:pointer;transition:.15s;text-align:left;font-family:inherit;}
+        .dashv2 .quick-card:hover{background:#faf9f7;transform:translateY(-1px);}
+        .dashv2 .quick-icon{width:32px;height:32px;border-radius:9px;background:#f3ece5;color:var(--brown);display:grid;place-items:center;margin-bottom:10px;}
+        .dashv2 .quick-card b{display:block;font-size:11px;color:var(--navy);}
+        .dashv2 .quick-card span{display:block;font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;}
+        .dashv2 .quick-card .go{margin-top:10px;font-size:9px;font-weight:850;color:var(--brown);}
+
+        @media(max-width:1150px){.dashv2 .layout{grid-template-columns:1fr;}}
+        @media(max-width:1050px){.dashv2 .quick-grid{grid-template-columns:1fr 1fr;}}
+        @media(max-width:680px){.dashv2 .kpis{grid-template-columns:1fr 1fr;}}
+        @media(max-width:650px){.dashv2 .quick-grid{grid-template-columns:1fr;}.dashv2 .attention-item{grid-template-columns:1fr;}}
+      `}</style>
+
+      <div className="head">
+        <div className="eyebrow">Centro de Operaciones · Acredita</div>
+        <div className="title">Inicio</div>
+        <div className="sub">Resumen de la operación de acreditación y tareas que requieren atención.</div>
       </div>
 
-      {/* Top-level KPIs — icons wrap in a tinted square badge, like the prototype's .metric-icon */}
-      <section className="stats">
-        <div className="stat s-brown shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[12px] font-bold text-gray-500">Mandantes activos</span>
-            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(154,105,78,0.12)' }}>
-              <Building2 size={17} className="text-brown" />
-            </div>
-          </div>
-          <div className="stat-n !font-bold">{totalMandantes}</div>
-          <div className="stat-l">{totalProyectos} proyectos asociados</div>
-        </div>
-        <div className="stat s-blue shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[12px] font-bold text-gray-500">Contratistas</span>
-            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(47,111,176,0.12)' }}>
-              <Users size={17} className="text-[#2f6fb0]" />
-            </div>
-          </div>
-          <div className="stat-n !font-bold">{totalContratistas}</div>
-          <div className="stat-l">{contratistasConIncumplimiento} con incumplimientos</div>
-        </div>
-        <div className="stat s-green shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[12px] font-bold text-gray-500">Trabajadores</span>
-            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(42,128,64,0.12)' }}>
-              <HardHat size={17} className="text-[#2a8040]" />
-            </div>
-          </div>
-          <div className="stat-n !font-bold">{totalTrabajadores}</div>
-          <div className="stat-l">{pctVigente}% con documentación vigente</div>
-        </div>
-        <div className="stat s-orange shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[12px] font-bold text-gray-500">Revisión pendiente</span>
-            <div className="w-[34px] h-[34px] rounded-[10px] grid place-items-center shrink-0" style={{ background: 'rgba(212,122,26,0.12)' }}>
-              <ClipboardList size={17} className="text-[#d47a1a]" />
-            </div>
-          </div>
-          <div className="stat-n !font-bold">{revisionPendiente}</div>
-          <div className="stat-l">{prioridadAlta} son prioridad alta</div>
-        </div>
-      </section>
+      <div className="kpis">
+        <button className="kpi warn" onClick={irACola}>
+          <div className="kpi-top"><div className="k">Por revisar</div><span className="badge amber">Pendiente</span></div>
+          <div className="v">{porRevisarCount}</div><div className="n">Documentos pendientes de revisión</div><div className="link">Ver cola →</div>
+        </button>
+        <button className="kpi blue" onClick={() => setActiveTab('cola')}>
+          <div className="kpi-top"><div className="k">En revisión</div><span className="badge blue">Activo</span></div>
+          <div className="v">{enRevisionCount}</div><div className="n">Documentos tomados por verificadores</div><div className="link">Ver documentos →</div>
+        </button>
+        <button className="kpi danger" onClick={() => setActiveTab('cola')}>
+          <div className="kpi-top"><div className="k">Esperando corrección</div><span className="badge red">Atención</span></div>
+          <div className="v">{esperandoCorreccionCount}</div><div className="n">Documentos rechazados esperando nueva versión</div><div className="link">Ver correcciones →</div>
+        </button>
+        <button className="kpi danger" onClick={() => setActiveTab('acreditaciones')}>
+          <div className="kpi-top"><div className="k">Acreditaciones bloqueadas</div><span className="badge red">Bloqueado</span></div>
+          <div className="v">{bloqueadasCount}</div><div className="n">Con documentos obligatorios rechazados o vencidos</div><div className="link">Ver acreditaciones →</div>
+        </button>
+      </div>
 
-      {/* Hero: what needs attention, and overall accreditation health */}
-      <section className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-4">
-        <div className="card p-0 overflow-hidden flex flex-col shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex justify-between items-start px-5 py-4 border-b border-cream3">
-            <div>
-              <div className="text-[15px] font-bold text-navy">Atención requerida</div>
-              <div className="text-[11.5px] text-gray-500 mt-0.5">Lo más importante para resolver ahora.</div>
-            </div>
-            <span className="badge b-brown shrink-0">
-              {issuesAtencion.length} incidencia{issuesAtencion.length === 1 ? '' : 's'}
-            </span>
+      <div className="layout">
+        <section className="box">
+          <div className="box-head">
+            <div><div className="box-title">Requiere atención</div><div className="box-sub">Situaciones que necesitan una acción del equipo</div></div>
+            <span className="badge red">{atencion.length} pendiente{atencion.length === 1 ? '' : 's'}</span>
           </div>
-          <div className="p-3 flex flex-col gap-1.5">
-            {issuesAtencion.length > 0 ? (
-              issuesAtencion.map(issue => (
-                <div key={issue.key} className="flex items-center gap-3 p-3 rounded-[11px] bg-cream2">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: issue.color }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-navy">{issue.titulo}</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">{issue.detalle}</div>
+          <div className="attention">
+            {atencion.length > 0 ? atencion.map(r => (
+              <div className="attention-item" key={r.key}>
+                <div>
+                  <div className="attention-title">
+                    <b>{r.entity}</b>
+                    <span className={`badge ${badgeClass(r.estado)}`}>{r.estado === 'Vencido/Bloqueado' ? 'Bloqueado' : r.estado}</span>
                   </div>
-                  <button onClick={issue.onClick} className="text-[11px] font-bold text-brown shrink-0 hover:underline">
-                    {issue.accion} →
-                  </button>
+                  <div className="meta">{r.mandanteNombre} · {r.proyectoNombre}</div>
+                  <div className="problem">{problemText(r)}</div>
                 </div>
-              ))
-            ) : (
-              <p className="text-center py-8 text-gray-400 text-[13.5px]">Sin incidencias. Todo al día.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="card shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="text-[15px] font-bold text-navy">Salud de acreditación</div>
-          <div className="text-[11.5px] text-gray-500 mt-0.5 mb-4">Contratistas activos</div>
-          <div className="flex items-end justify-between">
-            <span className="text-[36px] font-extrabold text-navy leading-none">{pctAcreditados}%</span>
-            <span className="text-[12px] text-gray-500 mb-1.5">acreditados</span>
-          </div>
-          <div className="prog-wrap my-4">
-            <div className="prog-fill" style={{ width: `${pctAcreditados}%` }} />
-          </div>
-          <div className="flex flex-col gap-2.5 text-[12.5px]">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-1.5 text-gray-500">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#2a8040' }} />
-                Acreditados
-              </span>
-              <strong className="text-navy">{contratistasAprobados}</strong>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-1.5 text-gray-500">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#b58600' }} />
-                En proceso
-              </span>
-              <strong className="text-navy">{contratistasEnProceso}</strong>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-1.5 text-gray-500">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#a32d2d' }} />
-                Bloqueados
-              </span>
-              <strong className="text-navy">{contratistasBloqueados}</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Priority queue and escalated cases, side by side. Headers and cards
-          are separate grid items placed row-major (row 1 = both headers, row
-          2 = both cards) so each row auto-sizes to its tallest cell and the
-          cards start at the exact same height regardless of header length.
-          `order` keeps the DOM (and mobile single-column view) in natural
-          reading order — header, list, header, list — while md: reorders
-          into the 2x2 layout. */}
-      <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-x-4 gap-y-3">
-        <div className="min-w-0 order-1 md:order-1 flex flex-wrap justify-between items-end gap-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Cola prioritaria</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Pendientes de revisión, alertas de vigencia y correcciones, unificadas y ordenadas por urgencia.
-            </p>
-          </div>
-          <div className="flex gap-3.5 text-[11.5px] text-gray-500">
-            {(['critico', 'atencion', 'normal'] as Severidad[]).map(s => (
-              <span key={s} className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${s === 'critico' ? 'bg-[#a32d2d]' : s === 'atencion' ? 'bg-[#b58600]' : 'bg-gray-400'}`} />
-                {SEV_LABEL[s]}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="min-w-0 order-2 md:order-3 card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-cream3">
-            {filtros.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFiltroCola(f.id)}
-                className={`chip ${filtroCola === f.id ? 'active' : ''}`}
-              >
-                {f.label} <span className="chip-count">{conteo[f.id]}</span>
-              </button>
-            ))}
-          </div>
-
-          {colaVisible.length > 0 ? (
-            colaVisible.map(item => (
-              <div key={item.key} className="qrow">
-                <span className={`sev sev-${item.sev} w-[76px] px-0`}>{SEV_LABEL[item.sev]}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13.5px] font-semibold text-navy truncate">
-                    {item.empresa} — {item.documento}
-                  </div>
-                  <div className="text-[11.5px] text-gray-500 truncate" title={item.meta}>{item.meta}</div>
-                </div>
-                <span className="text-[11.5px] text-gray-400 shrink-0 hidden sm:block text-right whitespace-nowrap">{item.tiempo}</span>
-                <button onClick={item.onAccion} className="btn btn-ghost btn-sm shrink-0">
-                  {item.accion}
+                <button
+                  className="icon"
+                  onClick={() => r.estado === 'Vencido/Bloqueado' ? setActiveTab('acreditaciones') : setActiveTab('cola')}
+                >
+                  {r.estado === 'Vencido/Bloqueado' ? 'Ver acreditación' : 'Ir a revisión'}
                 </button>
               </div>
-            ))
-          ) : (
-            <p className="text-center py-8 text-gray-400 text-[13.5px]">
-              {filtroCola === 'todos' ? 'No hay nada pendiente. Todo al día.' : `No hay items en "${SEV_LABEL[filtroCola as Severidad]}".`}
-            </p>
-          )}
-        </div>
-
-        {/* Cases escalated to the verification lead. There is no screen for this
-            yet, so each row shows a static marker instead of a dead button. */}
-        <div className="min-w-0 order-3 md:order-2 flex justify-between items-end gap-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy flex items-center gap-2">
-              <ShieldAlert size={17} className="text-[#a32d2d]" />
-              Requieren decisión
-            </h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">
-              Casos escalados al Jefe de Verificadores.
-            </p>
+            )) : (
+              <p style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: '13px' }}>Sin incidencias. Todo al día.</p>
+            )}
           </div>
-        </div>
+          <div className="footer">
+            <span className="muted">Priorizado por bloqueos y documentos pendientes.</span>
+            <button className="btn" onClick={() => setActiveTab('acreditaciones')}>Ver todas las acreditaciones</button>
+          </div>
+        </section>
 
-        <div className="min-w-0 order-4 md:order-4 card p-0 overflow-hidden shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          {mockCasosDecision.map(caso => (
-            <div key={caso.id} className="qrow">
-              <div className="flex-1 min-w-0">
-                <div className="text-[13.5px] font-semibold text-navy truncate">
-                  {caso.empresa} — {caso.detalle}
-                </div>
-                <div className="text-[11.5px] text-gray-500 truncate" title={caso.info}>
-                  {caso.proyecto} · {caso.info}
-                </div>
+        <aside className="box">
+          <div className="box-head"><div><div className="box-title">Operación de hoy</div><div className="box-sub">Resumen del trabajo de revisión</div></div><span className="badge green">Hoy</span></div>
+          <div className="today">
+            <div className="metric-grid">
+              <div className="metric-card"><div className="label">Revisados</div><div className="number">{revisadosHoy}</div></div>
+              <div className="metric-card"><div className="label">Aprobados</div><div className="number">{aprobadosHoy}</div></div>
+              <div className="metric-card"><div className="label">Rechazados</div><div className="number">{rechazadosHoy}</div></div>
+              <div className="metric-card"><div className="label">Verificadores activos</div><div className="number">{VERIFICADORES_ACTIVOS}</div></div>
+            </div>
+            <div className="section-label">Más activos hoy</div>
+            {VERIFICADORES_HOY.map(v => (
+              <div className="verifier" key={v.nombre}>
+                <div><b>{v.nombre}</b><br /><span>{v.rol}</span></div>
+                <span><b>{Math.round(revisadosHoy * v.peso)}</b> revisiones</span>
               </div>
-              <span className="text-[11.5px] text-gray-400 shrink-0 flex items-center gap-1.5">
-                <Clock size={13} /> Escalado
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent activity: quieter than the queue above */}
-      <div>
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
-          <div>
-            <h3 className="section-title mb-0 text-[16px] font-semibold text-navy">Actividad reciente</h3>
-            <p className="text-[11.5px] text-gray-500 mt-0.5">Últimos eventos de la operación.</p>
+            ))}
+            <button className="btn" style={{ width: '100%', marginTop: '12px' }} onClick={() => setActiveTab('auditoria')}>Ver verificadores</button>
           </div>
-          <select
-            value={filtroActividad}
-            onChange={(e) => setFiltroActividad(e.target.value)}
-            className="form-input text-[11.5px] py-1 px-2 w-auto"
-          >
-            <option value="todos">Todos los estados</option>
-            <option value="revision">En revisión</option>
-            <option value="aprobado">Aprobado</option>
-            <option value="rechazado">Rechazado</option>
-            <option value="registrado">Registrado</option>
-          </select>
-        </div>
-
-        <div className="card p-0 overflow-hidden bg-white/70 shadow-[0_2px_8px_rgba(38,48,59,0.04)]">
-          {actividadVisible.length > 0 ? (
-            actividadVisible.map(a => {
-              const estado = normalizarEstado(a.estado);
-              const badge = estado === 'aprobado' ? 'b-green'
-                : estado === 'rechazado' ? 'b-red'
-                : estado === 'registrado' ? 'b-blue' : 'b-yellow';
-              const label = estado === 'aprobado' ? 'Aprobado'
-                : estado === 'rechazado' ? 'Rechazado'
-                : estado === 'registrado' ? 'Registrado' : 'En revisión';
-              return (
-                <div
-                  key={a.id}
-                  className="arow cursor-pointer"
-                  onClick={() => setActividadSeleccionada(a)}
-                >
-                  <span className="font-semibold text-navy w-[170px] shrink-0 truncate">{a.empresa}</span>
-                  <span className="flex-1 text-gray-600 truncate" title={a.detalle || a.documento}>
-                    {a.documento}{a.detalle ? ` · ${a.detalle}` : ''}
-                  </span>
-                  <span className={`badge ${badge} text-[11.5px] shrink-0`}>{label}</span>
-                  <span className="text-[11.5px] text-gray-400 shrink-0 text-right whitespace-nowrap">{a.hora || a.fecha}</span>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-center py-8 text-gray-400 text-[13.5px]">No hay actividad con este estado.</p>
-          )}
-          {actividadFiltrada.length > MAX_ACTIVIDAD && (
-            <div className="px-4 py-2.5 text-[11.5px] text-gray-400 border-t border-cream text-center">
-              Mostrando {MAX_ACTIVIDAD} de {actividadFiltrada.length} eventos
-            </div>
-          )}
-        </div>
+        </aside>
       </div>
+
+      <section className="box quick">
+        <div className="box-head"><div><div className="box-title">Accesos rápidos</div><div className="box-sub">Entradas directas a las tareas principales del MVP</div></div></div>
+        <div className="quick-grid">
+          <button className="quick-card" onClick={() => setActiveTab('cola')}>
+            <div className="quick-icon"><ClipboardList size={17} /></div>
+            <b>Cola de revisión</b><span>Revisar documentos pendientes y continuar el flujo.</span><div className="go">Abrir →</div>
+          </button>
+          <button className="quick-card" onClick={() => setActiveTab('acreditaciones')}>
+            <div className="quick-icon"><ShieldCheck size={17} /></div>
+            <b>Acreditaciones</b><span>Revisar estados, bloqueos y causas.</span><div className="go">Abrir →</div>
+          </button>
+          <button className="quick-card" onClick={() => setActiveTab('mandantes')}>
+            <div className="quick-icon"><Building2 size={17} /></div>
+            <b>Mandantes</b><span>Consultar mandantes y sus proyectos.</span><div className="go">Abrir →</div>
+          </button>
+          <button className="quick-card" onClick={() => setActiveTab('contratistas')}>
+            <div className="quick-icon"><Users size={17} /></div>
+            <b>Contratistas</b><span>Consultar empresas, trabajadores y acreditaciones.</span><div className="go">Abrir →</div>
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

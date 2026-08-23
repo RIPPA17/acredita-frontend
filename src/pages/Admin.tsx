@@ -267,7 +267,6 @@ export default function AdminPortal() {
   const [busquedaDoc, setBusquedaDoc] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [ordenDoc, setOrdenDoc] = useState("vencimiento");
-  const [filtroActividad, setFiltroActividad] = useState("todos");
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [activeFilterPlantillas, setActiveFilterPlantillas] = useState("Todas");
@@ -830,11 +829,6 @@ export default function AdminPortal() {
               aprobadosHoy={aprobadosHoy}
               rechazadosHoy={rechazadosHoy}
               setSelectedDocId={setSelectedDocId}
-              filtroActividad={filtroActividad}
-              setFiltroActividad={setFiltroActividad}
-              ACTIVIDAD_RECIENTE={ACTIVIDAD_RECIENTE}
-              setActividadSeleccionada={setActividadSeleccionada}
-              showToast={showToast}
             />
           )}
 
