@@ -15,6 +15,7 @@ import type { ConfigTabId } from './mandante/config/configUtils';
 import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
 import ContratistasTab from './mandante/ContratistasTab';
+import ContractorInvitationModal from '../components/ContractorInvitationModal';
 
 export default function MandantePortal() {
   const session = getCurrentSession();
@@ -650,136 +651,13 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
         </div>
       )}
 
-      {showInvitarModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b border-cream">
-              <h3 className="font-medium text-navy text-[17.6px]">Invitar contratista</h3>
-              <button 
-                onClick={() => setShowInvitarModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                
-                const res = crearInvitacion(
-                  mandanteLogueado.id,
-                  formInvitacion.proyectoId,
-                  formInvitacion.contratistaId,
-                  formInvitacion.correo,
-                  formInvitacion.mensaje
-                );
-
-                if (!res.success) {
-                  showToast(res.error || 'Error al enviar invitación', 'error');
-                  return;
-                }
-
-                setShowInvitarModal(false);
-                const newInv = res.invitacion!;
-
-                // Add placeholder/pending row to the local state list for display
-                setContractorsData(prev => [...prev, {
-                  id: newInv.id,
-                  name: newInv.contratistaNombre,
-                  rut: newInv.contratistaRut,
-                  reqs: { contrato: true, odi: true, mutual: true } as any,
-                  status: { contrato: 'pending', odi: 'pending', mutual: 'pending' } as any,
-                  isPending: true,
-                  isNew: true
-                } as any]);
-
-                showToast(`Invitación enviada a ${formInvitacion.correo}`);
-                setFormInvitacion({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
-              }} className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contratista a invitar</label>
-                  <select 
-                    value={formInvitacion.contratistaId}
-                    onChange={(e) => {
-                      const cid = e.target.value;
-                      setFormInvitacion({
-                        ...formInvitacion,
-                        contratistaId: cid,
-                        correo: cid === 'tecnicosur' ? 'tecnico@tecnicosur.cl' : cid === 'servicios-norte' ? 'norte@serviciosnorte.cl' : ''
-                      });
-                    }}
-                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                    required
-                  >
-                    <option value="">Selecciona un contratista...</option>
-                    {allContratistas.map(c => (
-                      <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Correo del contratista</label>
-                  <input 
-                    type="email" 
-                    value={formInvitacion.correo}
-                    onChange={(e) => setFormInvitacion({...formInvitacion, correo: e.target.value})}
-                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all" 
-                    placeholder="tu@empresa.cl" 
-                    required 
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Proyecto al que se invita</label>
-                  <select 
-                    value={formInvitacion.proyectoId}
-                    onChange={(e) => setFormInvitacion({...formInvitacion, proyectoId: e.target.value})}
-                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                    required
-                  >
-                    <option value="">Selecciona un proyecto...</option>
-                    {misProyectos.map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Mensaje opcional</label>
-                  <textarea 
-                    value={formInvitacion.mensaje}
-                    onChange={(e) => setFormInvitacion({...formInvitacion, mensaje: e.target.value})}
-                    className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all resize-none" 
-                    rows={2}
-                    placeholder="Hola, te invitamos a acreditar tu empresa para trabajar con nosotros..." 
-                  ></textarea>
-                </div>
-                
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600 font-mono mb-2 break-all">
-                  Mensaje incluirá: <br/>
-                  "Accede aquí: app.acredita.cl/invitacion"
-                </div>
-
-                <div className="flex justify-end gap-3 mt-2">
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      navigator.clipboard.writeText('app.acredita.cl/invitacion');
-                      showToast('Link copiado');
-                    }} 
-                    className="btn btn-secondary"
-                  >
-                    Copiar link de invitación
-                  </button>
-                  <button type="submit" className="btn btn-primary">Enviar invitación</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      <ContractorInvitationModal
+  open={showInvitarModal}
+  onClose={() => setShowInvitarModal(false)}
+  contractors={allContratistas}
+  projects={misProyectos}
+  showToast={showToast}
+/>
     </div>
   );
 }
