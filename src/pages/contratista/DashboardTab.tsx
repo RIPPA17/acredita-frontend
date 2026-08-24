@@ -83,7 +83,7 @@ export default function DashboardTab({
     return (
       <div className="inicio2-page">
         <section className="inicio2-hero"><div className="inicio2-eyebrow">Portal contratista</div><h1>Inicio</h1><p>Revisa en segundos el estado de tu acreditación, los bloqueos y los próximos vencimientos.</p></section>
-        <div className="inicio2-empty inicio2-empty-projects"><FolderOpen size={34} /><strong>Todavía no tienes proyectos asociados</strong><p>Cuando un mandante te asigne a un proyecto, aquí verás su acreditación y requisitos.</p></div>
+        <div className="inicio2-empty inicio2-empty-projects"><FolderOpen size={34} /><strong>Aún no tienes proyectos asignados</strong><p>Cuando un mandante te invite o asigne a un proyecto, aparecerá aquí.</p></div>
       </div>
     );
   }

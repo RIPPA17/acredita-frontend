@@ -351,20 +351,11 @@ export default function ContratistaPortal() {
       </div>
 
       {!tieneProyecto && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 flex items-center justify-between sticky top-[64px] z-40">
+        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 flex items-center sticky top-[64px] z-40">
           <div className="flex items-center gap-2 text-yellow-800 text-sm">
-            <AlertTriangle size={16}/>
-            <span>Aún no tienes proyectos asignados. Comparte tu perfil para que un mandante te encuentre.</span>
+            <AlertTriangle size={16} className="shrink-0"/>
+            <span><strong>Aún no tienes proyectos asignados.</strong> Cuando un mandante te invite o asigne a un proyecto, aparecerá aquí.</span>
           </div>
-          <button 
-            className="btn btn-sm btn-secondary" 
-            onClick={() => {
-              navigator.clipboard.writeText('app.acredita.cl/contratista/mi-perfil');
-              showToast('Link copiado al portapapeles');
-            }}
-          >
-            Copiar link de perfil
-          </button>
         </div>
       )}
 
