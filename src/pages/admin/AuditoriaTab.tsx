@@ -21,6 +21,18 @@ interface LogEntry {
 }
 
 const ACCION_INFO: Record<string, { label: string; tipo: string; resultado: Resultado; badge: Badge }> = {
+  document_submitted: { label: 'Cargó documento', tipo: 'Documento', resultado: 'Pendiente', badge: 'amber' },
+  document_resubmitted: { label: 'Cargó nueva versión', tipo: 'Documento', resultado: 'Pendiente', badge: 'amber' },
+  document_approved: { label: 'Revisó documento', tipo: 'Documento', resultado: 'Aprobado', badge: 'green' },
+  document_rejected: { label: 'Rechazó documento', tipo: 'Documento', resultado: 'Rechazado', badge: 'red' },
+  document_review_updated: { label: 'Actualizó revisión', tipo: 'Documento', resultado: 'Actualizado', badge: 'blue' },
+  worker_assigned: { label: 'Asignó trabajador', tipo: 'Trabajador', resultado: 'Actualizado', badge: 'blue' },
+  worker_unassigned: { label: 'Desasignó trabajador', tipo: 'Trabajador', resultado: 'Actualizado', badge: 'gray' },
+  requirement_created: { label: 'Creó requisito', tipo: 'Requisito', resultado: 'Creado', badge: 'green' },
+  requirement_updated: { label: 'Actualizó requisito', tipo: 'Requisito', resultado: 'Actualizado', badge: 'blue' },
+  accreditation_created: { label: 'Creó acreditación', tipo: 'Acreditación', resultado: 'Creado', badge: 'green' },
+  accreditation_activated: { label: 'Activó acreditación', tipo: 'Acreditación', resultado: 'Actualizado', badge: 'green' },
+  accreditation_deactivated: { label: 'Desactivó acreditación', tipo: 'Acreditación', resultado: 'Bloqueado', badge: 'red' },
   aprobacion_documento: { label: 'Revisó documento', tipo: 'Documento', resultado: 'Aprobado', badge: 'green' },
   rechazo_documento: { label: 'Rechazó documento', tipo: 'Documento', resultado: 'Rechazado', badge: 'red' },
   bloqueo_acceso: { label: 'Cambió estado', tipo: 'Contratista', resultado: 'Actualizado', badge: 'blue' },
