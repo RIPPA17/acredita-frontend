@@ -1,0 +1,74 @@
+name: Run runtime store patch
+
+on:
+  push:
+    branches:
+      - 'feat/remove-business-localstorage'
+
+permissions:
+  contents: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    env:
+      PREVIEW_URL: https://acredita-frontend-pwrjkd9pp-roigppr-3548s-projects.vercel.app
+      E2E_URL: https://jwlscxbmttpicwljozwf.supabase.co/functions/v1/acredita-browser-e2e-f4f87705
+      E2E_KEY: 6S6DvDpIHS4LV2kdAnlpqNZ2tblR5ycrEb8FuQ-iK-E
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/remove-business-localstorage
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Create isolated Auth users
+        run: |
+          curl --fail-with-body -sS -X POST "$E2E_URL" -H 'Content-Type: application/json' -H "x-test-key: $E2E_KEY" -d '{"action":"bootstrap"}' > /tmp/e2e-users.json
+          node -e "const x=require('/tmp/e2e-users.json'); if(!x.ok||x.users?.length!==3) { console.error(x); process.exit(1) }"
+      - name: Verify all roles reload from Supabase
+        run: |
+          cat > e2e-runtime-store.cjs <<'JS'
+          const { chromium } = require('playwright');
+          const fs = require('node:fs');
+          (async () => {
+            const preview = process.env.PREVIEW_URL;
+            const users = JSON.parse(fs.readFileSync('/tmp/e2e-users.json','utf8')).users;
+            const expected = { admin: '/admin', mandante: '/mandante', contratista: '/contratista' };
+            const forbidden = ['acredita_contratistas','acredita_proyectos','acredita_mandantes','acredita_requisitos'];
+            const browser = await chromium.launch();
+            try {
+              for (const user of users) {
+                const context = await browser.newContext();
+                const page = await context.newPage();
+                await page.goto(`${preview}/login?rol=${user.role}`, { waitUntil: 'networkidle' });
+                await page.locator('#login-email').fill(user.email);
+                await page.locator('#login-password').fill(user.password);
+                await page.getByRole('button', { name: 'Ingresar' }).click();
+                await page.waitForURL(url => url.pathname.startsWith(expected[user.role]), { timeout: 30000 });
+                await page.waitForLoadState('networkidle');
+                if ((await page.locator('body').innerText()).trim().length < 100) throw new Error(`${user.role}: portal vacío`);
+                let keys = await page.evaluate(() => Object.keys(localStorage));
+                let leaked = forbidden.filter(k => keys.includes(k));
+                if (leaked.length) throw new Error(`${user.role}: localStorage negocio antes reload: ${leaked.join(',')}`);
+                if (!keys.includes('acredita_session')) throw new Error(`${user.role}: sesión ausente`);
+                await page.reload({ waitUntil: 'networkidle' });
+                await page.waitForURL(url => url.pathname.startsWith(expected[user.role]), { timeout: 30000 });
+                if ((await page.locator('body').innerText()).trim().length < 100) throw new Error(`${user.role}: portal vacío después reload`);
+                keys = await page.evaluate(() => Object.keys(localStorage));
+                leaked = forbidden.filter(k => keys.includes(k));
+                if (leaked.length) throw new Error(`${user.role}: localStorage negocio después reload: ${leaked.join(',')}`);
+                console.log(`PASS ${user.role}: localStorage negocio=0 | reload=OK`);
+                await context.close();
+              }
+            } finally { await browser.close(); }
+          })().catch(e => { console.error(e); process.exit(1); });
+          JS
+          node e2e-runtime-store.cjs
+      - name: Cleanup isolated Auth users
+        if: always()
+        run: |
+          curl --fail-with-body -sS -X POST "$E2E_URL" -H 'Content-Type: application/json' -H "x-test-key: $E2E_KEY" -d '{"action":"cleanup"}'
