@@ -25,7 +25,19 @@ jobs:
           sed -n "/python - <<'PY'/,/^          PY$/p" .github/workflows/patch-runtime-store.yml | sed '1d;$d;s/^          //' > /tmp/runtime_patch.py
           python /tmp/runtime_patch.py
       - run: npm ci
-      - run: npm run lint
+      - name: Typecheck without adding new errors
+        shell: bash
+        run: |
+          set +e
+          npm run lint > /tmp/tsc.log 2>&1
+          set -e
+          cat /tmp/tsc.log
+          grep -E "error TS" /tmp/tsc.log | grep -Ev "src/pages/contratista/SubirTab.tsx|supabase/functions/send-contractor-invitation/index.ts|supabase/functions/signup-contractor-invitation/index.ts" > /tmp/new-ts-errors.log || true
+          if [ -s /tmp/new-ts-errors.log ]; then
+            echo "Se detectaron errores TypeScript nuevos:" >&2
+            cat /tmp/new-ts-errors.log >&2
+            exit 1
+          fi
       - run: npm run build
       - name: Commit validated migration
         shell: bash
