@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '../data/supabaseAuth';
 import { prepareCoreDataForSession, startCoreDataAutoSync } from '../data/supabaseCoreData';
+import { prepareOperationalDataForSession, startOperationalDataAutoSync } from '../data/supabaseOperationalData';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -16,7 +17,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   React.useEffect(() => {
     let active = true;
     let stopCoreSync = () => {};
+    let stopOperationalSync = () => {};
     let refreshTimer: number | undefined;
+
+    const startSyncForSession = (current: SupabaseUserSession) => {
+      stopCoreSync();
+      stopOperationalSync();
+      stopCoreSync = startCoreDataAutoSync(current);
+      stopOperationalSync = startOperationalDataAutoSync(current);
+    };
 
     const loadSession = async () => {
       try {
@@ -26,10 +35,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           return;
         }
 
-        // Solo intentamos subir datos legacy si el navegador realmente tiene
-        // una base local completa previa. En una sesión nueva, Supabase debe
-        // hidratar primero el cache; ausencia de localStorage no significa
-        // que el usuario haya eliminado proyectos o requisitos.
+        // Solo intentamos subir datos core legacy si el navegador realmente
+        // tiene una base local completa previa. En una sesión nueva, Supabase
+        // hidrata primero el catálogo y conserva los mocks como compatibilidad
+        // únicamente hasta que el bloque operacional termina su migración.
         const hasLegacyCoreData =
           localStorage.getItem('acredita_db_initialized') === 'true'
           && localStorage.getItem('acredita_proyectos') !== null
@@ -41,24 +50,25 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
         }
 
         await prepareCoreDataForSession(restored);
+        await prepareOperationalDataForSession(restored);
         if (!active) return;
 
-        stopCoreSync = startCoreDataAutoSync(restored);
+        startSyncForSession(restored);
         setSession(restored);
 
-        // Mantiene viva la sesión en portales que quedan abiertos durante
-        // jornadas largas. restoreSupabaseSession refresca el access token
-        // cuando corresponde; reiniciamos el watcher con ese token vigente.
+        // Mantiene viva la sesión en jornadas largas. Cuando cambia el token,
+        // reiniciamos ambos watchers para que todas las escrituras sigan
+        // pasando por RLS con el JWT vigente.
         refreshTimer = window.setInterval(async () => {
           const refreshed = await restoreSupabaseSession();
           if (!active) return;
           if (!refreshed) {
             stopCoreSync();
+            stopOperationalSync();
             setSession(null);
             return;
           }
-          stopCoreSync();
-          stopCoreSync = startCoreDataAutoSync(refreshed);
+          startSyncForSession(refreshed);
           setSession(refreshed);
         }, 15 * 60 * 1000);
       } catch (error) {
@@ -74,6 +84,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return () => {
       active = false;
       stopCoreSync();
+      stopOperationalSync();
       if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, []);
