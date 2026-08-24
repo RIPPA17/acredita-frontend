@@ -12,6 +12,8 @@ import {
   esPorVencerPorFecha
 } from '../data/localStorageDb';
 import { Contratista, Trabajador, Requisito, Documento } from '../types';
+import { Mandante, Proyecto } from '../types';
+import ContratistaFichaAcreditacion from './ContratistaFichaAcreditacion';
 
 interface FichaAcreditacionProps {
   tipo: 'empresa' | 'trabajador';
@@ -22,9 +24,14 @@ interface FichaAcreditacionProps {
   rol: 'admin' | 'mandante' | 'contratista';
   onCorregirDocumento?: (doc: Documento) => void;
   onRevisarDocumento?: (doc: Documento) => void;
+  proyectos?: Proyecto[];
+  mandantes?: Mandante[];
+  onProyectoChange?: (id: string) => void;
+  onIrADocumentos?: (proyectoId: string) => void;
+  onIrATrabajador?: (proyectoId: string, trabajador: Trabajador) => void;
 }
 
-export default function FichaAcreditacion({
+function LegacyFichaAcreditacion({
   tipo,
   contratista,
   trabajador: initialTrabajador,
@@ -656,4 +663,11 @@ export default function FichaAcreditacion({
       </div>
     </div>
   );
+}
+
+export default function FichaAcreditacion(props: FichaAcreditacionProps) {
+  if (props.rol === 'contratista' && props.proyectos && props.mandantes && props.onProyectoChange && props.onIrADocumentos && props.onIrATrabajador) {
+    return <ContratistaFichaAcreditacion contratista={props.contratista} proyectoId={props.proyectoId} proyectos={props.proyectos} mandantes={props.mandantes} onProyectoChange={props.onProyectoChange} onClose={props.onClose} onIrADocumentos={props.onIrADocumentos} onIrATrabajador={props.onIrATrabajador} />;
+  }
+  return <LegacyFichaAcreditacion {...props} />;
 }

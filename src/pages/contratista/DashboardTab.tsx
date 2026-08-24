@@ -62,8 +62,6 @@ export default function DashboardTab({
   setShowWelcomeAlert,
   documentosData,
   setActiveTab,
-  setFichaTipo,
-  setFichaTrabajador,
   setShowFichaAcreditacion,
   setSelectedWorkerForDocs,
   setShowAddWorkerModal,
@@ -86,8 +84,6 @@ export default function DashboardTab({
   pendingWorkers: number;
   setActiveTab: (tab: string) => void;
   setSelectedDocumentForPanel: (documento: Documento | null) => void;
-  setFichaTipo: (tipo: 'empresa' | 'trabajador') => void;
-  setFichaTrabajador: (trabajador: Trabajador | null) => void;
   setShowFichaAcreditacion: (value: boolean) => void;
   setSelectedWorkerForDocs: (trabajador: Trabajador | null) => void;
   setShowAddWorkerModal: (value: boolean) => void;
@@ -158,11 +154,7 @@ export default function DashboardTab({
       setActiveTab('subir');
     }
   };
-  const abrirFicha = () => {
-    setFichaTipo('empresa');
-    setFichaTrabajador(null);
-    setShowFichaAcreditacion(true);
-  };
+  const abrirFicha = () => setShowFichaAcreditacion(true);
 
   const descripcionEstado = estado === 'Acreditado'
     ? 'Todos los requisitos obligatorios de empresa y trabajadores están aprobados y vigentes.'

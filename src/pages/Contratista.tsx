@@ -41,8 +41,6 @@ export default function ContratistaPortal() {
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
-  const [fichaTipo, setFichaTipo] = useState<'empresa' | 'trabajador'>('empresa');
-  const [fichaTrabajador, setFichaTrabajador] = useState<any>(null);
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
   const [newWorkerForm, setNewWorkerForm] = useState({
@@ -599,8 +597,6 @@ export default function ContratistaPortal() {
               pendingWorkers={pendingWorkers}
               setActiveTab={setActiveTab}
               setSelectedDocumentForPanel={setSelectedDocumentForPanel}
-              setFichaTipo={setFichaTipo}
-              setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
               setShowAddWorkerModal={setShowAddWorkerModal}
@@ -628,8 +624,6 @@ export default function ContratistaPortal() {
               setSelectedProyectoId={setSelectedProyectoId}
               setActiveTab={setActiveTab}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
-              setFichaTipo={setFichaTipo}
-              setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
             />
           )}
@@ -641,9 +635,6 @@ export default function ContratistaPortal() {
               contratistaLogueado={contratistaLogueado}
               selectedProyectoId={selectedProyectoId}
               setSelectedProyectoId={setSelectedProyectoId}
-              setFichaTipo={setFichaTipo}
-              setFichaTrabajador={setFichaTrabajador}
-              setShowFichaAcreditacion={setShowFichaAcreditacion}
               misProyectos={misProyectos}
               allMandantes={allMandantes}
               setShowAddWorkerModal={setShowAddWorkerModal}
@@ -689,15 +680,22 @@ export default function ContratistaPortal() {
 
       {showFichaAcreditacion && (
         <FichaAcreditacion
-          tipo={fichaTipo}
+          tipo="empresa"
           contratista={contratistaLogueado}
-          trabajador={fichaTrabajador}
           proyectoId={selectedProyectoId}
           onClose={() => setShowFichaAcreditacion(false)}
           rol="contratista"
-          onCorregirDocumento={(doc) => {
-            setSelectedDocumentForPanel(doc);
-            setShowFichaAcreditacion(false);
+          proyectos={misProyectos}
+          mandantes={allMandantes}
+          onProyectoChange={setSelectedProyectoId}
+          onIrADocumentos={(proyectoId) => {
+            setSelectedProyectoId(proyectoId);
+            setActiveTab('subir');
+          }}
+          onIrATrabajador={(proyectoId, trabajador) => {
+            setSelectedProyectoId(proyectoId);
+            setSelectedWorkerForDocs(trabajador);
+            setActiveTab('trabajadores');
           }}
         />
       )}

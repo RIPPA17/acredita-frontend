@@ -91,9 +91,6 @@ export default function TrabajadoresTab({
   contratistaLogueado,
   selectedProyectoId,
   setSelectedProyectoId,
-  setFichaTipo,
-  setFichaTrabajador,
-  setShowFichaAcreditacion,
   misProyectos,
   allMandantes,
   setShowAddWorkerModal,
@@ -105,9 +102,6 @@ export default function TrabajadoresTab({
   contratistaLogueado: Contratista;
   selectedProyectoId: string;
   setSelectedProyectoId: (id: string) => void;
-  setFichaTipo: (value: 'empresa' | 'trabajador') => void;
-  setFichaTrabajador: (value: Trabajador) => void;
-  setShowFichaAcreditacion: (value: boolean) => void;
   misProyectos: Proyecto[];
   allMandantes: Mandante[];
   setShowAddWorkerModal: (value: boolean) => void;
@@ -183,11 +177,6 @@ export default function TrabajadoresTab({
           </div>
           <div className="tw-detail-actions">
             <span className={`tw-badge ${ESTADO_UI[selected.estado].badge}`}>{ESTADO_UI[selected.estado].label}</span>
-            <button className="tw-row-action" onClick={() => {
-              setFichaTipo('trabajador');
-              setFichaTrabajador(selected.trabajador);
-              setShowFichaAcreditacion(true);
-            }}>Ver ficha</button>
           </div>
         </header>
 

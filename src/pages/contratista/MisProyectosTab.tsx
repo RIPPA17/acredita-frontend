@@ -299,8 +299,6 @@ export default function MisProyectosTab({
   setSelectedProyectoId,
   setActiveTab,
   setSelectedWorkerForDocs,
-  setFichaTipo,
-  setFichaTrabajador,
   setShowFichaAcreditacion,
 }: {
   contratistaLogueado: Contratista;
@@ -310,8 +308,6 @@ export default function MisProyectosTab({
   setSelectedProyectoId: (id: string) => void;
   setActiveTab: (v: string) => void;
   setSelectedWorkerForDocs?: (v: Trabajador | null) => void;
-  setFichaTipo?: (v: 'empresa' | 'trabajador') => void;
-  setFichaTrabajador?: (v: Trabajador | null) => void;
   setShowFichaAcreditacion?: (v: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -421,11 +417,9 @@ export default function MisProyectosTab({
     setActiveTab('trabajadores');
     if (worker && setSelectedWorkerForDocs) setSelectedWorkerForDocs(worker);
   };
-  const verFicha = (setFichaTipo && setFichaTrabajador && setShowFichaAcreditacion)
+  const verFicha = setShowFichaAcreditacion
     ? (proyectoId: string) => {
         setSelectedProyectoId(proyectoId);
-        setFichaTipo('empresa');
-        setFichaTrabajador(null);
         setShowFichaAcreditacion(true);
       }
     : undefined;
