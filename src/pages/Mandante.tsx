@@ -587,6 +587,7 @@ export default function MandantePortal() {
               setSelectedContratista={setSelectedContratista}
               focus={contractorFocus}
               onClearFocus={() => setContractorFocus(null)}
+              onSetFocus={focus => setContractorFocus(focus)}
               onOpenProject={projectId => {
                 setSelectedProjectId(projectId);
                 setVistaContratistas(projectId);
