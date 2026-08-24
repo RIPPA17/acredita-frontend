@@ -25,6 +25,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           return;
         }
 
+        // Solo intentamos subir datos legacy si el navegador realmente tiene
+        // una base local completa previa. En una sesión nueva, Supabase debe
+        // hidratar primero el cache; ausencia de localStorage no significa
+        // que el usuario haya eliminado proyectos o requisitos.
+        const hasLegacyCoreData =
+          localStorage.getItem('acredita_db_initialized') === 'true'
+          && localStorage.getItem('acredita_proyectos') !== null
+          && localStorage.getItem('acredita_contratistas') !== null
+          && localStorage.getItem('acredita_requisitos') !== null;
+
+        if (!hasLegacyCoreData) {
+          localStorage.setItem(`acredita_core_supabase_migrated_v1:${restored.profileId}`, 'true');
+        }
+
         await prepareCoreDataForSession(restored);
         if (!active) return;
 
