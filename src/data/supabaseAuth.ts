@@ -16,6 +16,12 @@ export interface SupabaseUserSession {
   };
 }
 
+export interface SupabaseRawTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
 type TokenResponse = {
   access_token: string;
   refresh_token: string;
@@ -26,9 +32,9 @@ type TokenResponse = {
 type AuthUser = { id: string; email?: string };
 
 const SESSION_KEY = 'acredita_session';
-const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
+export const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
+export const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
 function apiHeaders(accessToken?: string): HeadersInit {
@@ -111,9 +117,7 @@ async function loadIdentity(accessToken: string, refreshToken: string, expiresAt
     _supabase: { accessToken, refreshToken, expiresAt },
   };
 
-  if (acreditaMemberships.length > 0) {
-    return { ...base, role: 'admin' };
-  }
+  if (acreditaMemberships.length > 0) return { ...base, role: 'admin' };
 
   if (mandanteMemberships.length > 0) {
     const membership = mandanteMemberships[0];
@@ -168,11 +172,58 @@ function persistSession(session: SupabaseUserSession): SupabaseUserSession {
   return session;
 }
 
-export async function loginWithSupabase(email: string, password: string): Promise<SupabaseUserSession> {
-  const tokens = await passwordGrant(email, password);
-  const expiresAt = Date.now() + Math.max(60, tokens.expires_in || 3600) * 1000;
-  const session = await loadIdentity(tokens.access_token, tokens.refresh_token, expiresAt);
+function toRawTokens(tokens: TokenResponse): SupabaseRawTokens {
+  return {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresAt: Date.now() + Math.max(60, tokens.expires_in || 3600) * 1000,
+  };
+}
+
+export async function authenticateSupabaseCredentials(email: string, password: string): Promise<SupabaseRawTokens> {
+  return toRawTokens(await passwordGrant(email, password));
+}
+
+export async function finalizeSupabaseSession(tokens: SupabaseRawTokens): Promise<SupabaseUserSession> {
+  const session = await loadIdentity(tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
   return persistSession(session);
+}
+
+export async function updateSupabaseUser(
+  accessToken: string,
+  updates: { password?: string; fullName?: string },
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (updates.password) body.password = updates.password;
+  if (updates.fullName) body.data = { full_name: updates.fullName };
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: 'PUT',
+    headers: apiHeaders(accessToken),
+    body: JSON.stringify(body),
+  });
+  await parseResponse(response);
+}
+
+export function tokensFromAuthHash(hash?: string): { tokens: SupabaseRawTokens; type: string | null } | null {
+  const rawHash = (hash ?? (typeof window !== 'undefined' ? window.location.hash : '')).replace(/^#/, '');
+  if (!rawHash) return null;
+  const params = new URLSearchParams(rawHash);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (!accessToken || !refreshToken) return null;
+  const expiresIn = Number(params.get('expires_in') || '3600');
+  return {
+    tokens: {
+      accessToken,
+      refreshToken,
+      expiresAt: Date.now() + Math.max(60, Number.isFinite(expiresIn) ? expiresIn : 3600) * 1000,
+    },
+    type: params.get('type'),
+  };
+}
+
+export async function loginWithSupabase(email: string, password: string): Promise<SupabaseUserSession> {
+  return finalizeSupabaseSession(await authenticateSupabaseCredentials(email, password));
 }
 
 export async function restoreSupabaseSession(): Promise<SupabaseUserSession | null> {
@@ -185,10 +236,10 @@ export async function restoreSupabaseSession(): Promise<SupabaseUserSession | nu
     let expiresAt = stored._supabase.expiresAt;
 
     if (expiresAt <= Date.now() + 60_000) {
-      const refreshed = await refreshGrant(refreshToken);
-      accessToken = refreshed.access_token;
-      refreshToken = refreshed.refresh_token;
-      expiresAt = Date.now() + Math.max(60, refreshed.expires_in || 3600) * 1000;
+      const refreshed = toRawTokens(await refreshGrant(refreshToken));
+      accessToken = refreshed.accessToken;
+      refreshToken = refreshed.refreshToken;
+      expiresAt = refreshed.expiresAt;
     }
 
     const session = await loadIdentity(accessToken, refreshToken, expiresAt);
