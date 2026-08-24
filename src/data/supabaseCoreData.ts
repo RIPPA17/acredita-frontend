@@ -1,13 +1,13 @@
 import { CONTRATISTAS, MANDANTES, PROYECTOS } from './mockData';
 import type { Contratista, Mandante, Proyecto, Requisito } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
+import { getRuntimeArray, purgeLegacyBusinessStorage, runtimeFingerprint, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
-const MIGRATION_MARKER_PREFIX = 'acredita_core_supabase_migrated_v1:';
 const CORE_KEYS = ['acredita_mandantes', 'acredita_proyectos', 'acredita_contratistas', 'acredita_requisitos'] as const;
 
 type BackendMandante = {
@@ -123,17 +123,11 @@ async function insertRows<T extends Record<string, unknown>>(
 }
 
 function readArray<T>(key: string, fallback: T[] = []): T[] {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(parsed) ? parsed as T[] : fallback;
-  } catch {
-    return fallback;
-  }
+  return getRuntimeArray<T>(key, fallback);
 }
 
 function writeArray(key: string, data: unknown[]): void {
-  if (typeof window !== 'undefined') localStorage.setItem(key, JSON.stringify(data));
+  setRuntimeArray(key, data);
 }
 
 function frontendStatus(status: BackendProject['status']): string {
@@ -308,7 +302,6 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   writeArray('acredita_proyectos', frontendProjects);
   writeArray('acredita_contratistas', frontendContractors);
   writeArray('acredita_requisitos', frontendRequirements);
-  localStorage.setItem('acredita_db_initialized', 'true');
 }
 
 async function syncContractors(
@@ -486,23 +479,12 @@ export async function pushCoreDataToSupabase(session: SupabaseUserSession): Prom
 }
 
 function coreFingerprint(): string {
-  if (typeof window === 'undefined') return '';
-  return CORE_KEYS.map(key => `${key}:${localStorage.getItem(key) || ''}`).join('|');
+  return runtimeFingerprint(CORE_KEYS);
 }
 
 export async function prepareCoreDataForSession(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
-  const marker = `${MIGRATION_MARKER_PREFIX}${session.profileId}`;
-
-  if (localStorage.getItem(marker) !== 'true') {
-    try {
-      await pushCoreDataToSupabase(session);
-      localStorage.setItem(marker, 'true');
-    } catch (error) {
-      console.warn('No fue posible migrar todos los datos core locales antes de hidratar Supabase.', error);
-    }
-  }
-
+  purgeLegacyBusinessStorage();
   await hydrateCoreDataFromSupabase(session);
 }
 
@@ -520,6 +502,8 @@ export function startCoreDataAutoSync(session: SupabaseUserSession): () => void 
     syncing = true;
     try {
       await pushCoreDataToSupabase(session);
+      await hydrateCoreDataFromSupabase(session);
+      lastFingerprint = coreFingerprint();
     } catch (error) {
       console.error('Error sincronizando Proyectos/Contratistas/Requisitos con Supabase.', error);
     } finally {

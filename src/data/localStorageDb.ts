@@ -1,6 +1,7 @@
 import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES } from './mockData';
 import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador, PreferenciasNotificacionesContratista } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
+import { clearRuntimeBusinessData, getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -16,9 +17,8 @@ const DB_SCHEMA_VERSION = 2;
 const SCHEMA_VERSION_KEY = 'acredita_schema_version';
 
 export function initDb() {
-  if (typeof window === 'undefined') return;
-  seedIfNeeded();
-  runMigrations();
+  // Los datos de negocio ya no se inicializan ni se leen desde localStorage.
+  // ProtectedRoute hidrata la memoria efímera desde Supabase antes de renderizar portales protegidos.
 }
 
 function seedIfNeeded() {
@@ -233,9 +233,7 @@ function runMigrations(): void {
 }
 
 export function getContratistas(): Contratista[] {
-  initDb();
-  if (typeof window === 'undefined') return CONTRATISTAS;
-  return safeParseStorageArray<Contratista>('acredita_contratistas', []);
+  return getRuntimeArray<Contratista>('acredita_contratistas', []);
 }
 
 function snapshotContractorStates(contratistas: Contratista[]): Record<string, { acreditacion: string; accesoBloqueado: boolean; pagoBloqueado: boolean }> {
@@ -258,108 +256,23 @@ function snapshotContractorStates(contratistas: Contratista[]): Record<string, {
 }
 
 export function saveContratistas(data: Contratista[]) {
-  if (typeof window !== 'undefined') {
-    const rawPrev = localStorage.getItem('acredita_contratistas') || '[]';
-    let prevContratistas: Contratista[] = [];
-    try {
-      prevContratistas = JSON.parse(rawPrev);
-    } catch(e) {}
-    
-    const oldStates = snapshotContractorStates(prevContratistas);
-
-    localStorage.setItem('acredita_contratistas', JSON.stringify(data));
-
-    const newStates = snapshotContractorStates(data);
-
-    // Comparar estados y auditar
-    const session = getCurrentSession();
-    const actorEmail = session?.email || 'Sistema';
-    const actorRol = session?.role || 'Sistema';
-
-    const allKeys = new Set([...Object.keys(oldStates), ...Object.keys(newStates)]);
-
-    allKeys.forEach(key => {
-      const [cId, pId] = key.split('_');
-      const oldVal = oldStates[key] || { acreditacion: 'No acreditado', accesoBloqueado: false, pagoBloqueado: false };
-      const newVal = newStates[key] || { acreditacion: 'No acreditado', accesoBloqueado: false, pagoBloqueado: false };
-
-      // 1. Acceso bloqueado/desbloqueado
-      if (oldVal.accesoBloqueado !== newVal.accesoBloqueado) {
-        registrarAuditoria({
-          usuarioId: actorEmail,
-          rol: actorRol,
-          contratistaId: cId,
-          proyectoId: pId,
-          accion: newVal.accesoBloqueado ? 'bloqueo_acceso' : 'desbloqueo_acceso',
-          entidad: 'contratista_proyecto',
-          entidadId: key,
-          estadoAnterior: oldVal.accesoBloqueado ? 'bloqueado' : 'habilitado',
-          estadoNuevo: newVal.accesoBloqueado ? 'bloqueado' : 'habilitado',
-          detalle: newVal.accesoBloqueado 
-            ? `Acceso bloqueado al proyecto para contratista debido a requisitos incumplidos`
-            : `Acceso habilitado al proyecto para contratista`
-        });
-      }
-
-      // 2. Pago bloqueado/desbloqueado
-      if (oldVal.pagoBloqueado !== newVal.pagoBloqueado) {
-        registrarAuditoria({
-          usuarioId: actorEmail,
-          rol: actorRol,
-          contratistaId: cId,
-          proyectoId: pId,
-          accion: newVal.pagoBloqueado ? 'bloqueo_pago' : 'desbloqueo_pago',
-          entidad: 'contratista_proyecto',
-          entidadId: key,
-          estadoAnterior: oldVal.pagoBloqueado ? 'bloqueado' : 'habilitado',
-          estadoNuevo: newVal.pagoBloqueado ? 'bloqueado' : 'habilitado',
-          detalle: newVal.pagoBloqueado
-            ? `Pago bloqueado del proyecto para contratista debido a requisitos incumplidos`
-            : `Pago habilitado del proyecto para contratista`
-        });
-      }
-
-      // 3. Acreditación
-      if (oldVal.acreditacion !== newVal.acreditacion) {
-        registrarAuditoria({
-          usuarioId: actorEmail,
-          rol: actorRol,
-          contratistaId: cId,
-          proyectoId: pId,
-          accion: 'cambios_relevantes_acreditacion',
-          entidad: 'contratista_proyecto',
-          entidadId: key,
-          estadoAnterior: oldVal.acreditacion,
-          estadoNuevo: newVal.acreditacion,
-          detalle: `Acreditación del contratista cambió de "${oldVal.acreditacion}" a "${newVal.acreditacion}"`
-        });
-      }
-    });
-  }
+  setRuntimeArray('acredita_contratistas', data);
 }
 
 export function getProyectos(): Proyecto[] {
-  initDb();
-  if (typeof window === 'undefined') return PROYECTOS;
-  return safeParseStorageArray<Proyecto>('acredita_proyectos', []);
+  return getRuntimeArray<Proyecto>('acredita_proyectos', []);
 }
 
 export function saveProyectos(data: Proyecto[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_proyectos', JSON.stringify(data));
-  }
+  setRuntimeArray('acredita_proyectos', data);
 }
 
 export function getMandantes(): Mandante[] {
-  initDb();
-  if (typeof window === 'undefined') return MANDANTES;
-  return safeParseStorageArray<Mandante>('acredita_mandantes', []);
+  return getRuntimeArray<Mandante>('acredita_mandantes', []);
 }
 
 export function saveMandantes(data: Mandante[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_mandantes', JSON.stringify(data));
-  }
+  setRuntimeArray('acredita_mandantes', data);
 }
 
 export function getPlantillas(): any[] {
@@ -375,15 +288,11 @@ export function savePlantillas(data: any[]) {
 }
 
 export function getRequisitos(): Requisito[] {
-  initDb();
-  if (typeof window === 'undefined') return [];
-  return safeParseStorageArray<Requisito>('acredita_requisitos', []);
+  return getRuntimeArray<Requisito>('acredita_requisitos', []);
 }
 
 export function saveRequisitos(data: Requisito[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_requisitos', JSON.stringify(data));
-  }
+  setRuntimeArray('acredita_requisitos', data);
 }
 
 export function getReglas(): any[] {
@@ -589,7 +498,7 @@ export function resetDemoData(): void {
   clearDerivedStateCache();
   if (typeof window === 'undefined') return;
   ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
-  initDb();
+  clearRuntimeBusinessData();
 }
 
 // Herramienta de desarrollo: elimina también la sesión activa, dejando el
@@ -600,6 +509,7 @@ export function limpiarDatosLocales(): void {
   clearDerivedStateCache();
   if (typeof window === 'undefined') return;
   ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
+  clearRuntimeBusinessData();
   localStorage.removeItem('acredita_session');
 }
 
