@@ -16,6 +16,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   React.useEffect(() => {
     let active = true;
     let stopCoreSync = () => {};
+    let refreshTimer: number | undefined;
 
     const loadSession = async () => {
       try {
@@ -44,6 +45,22 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
         stopCoreSync = startCoreDataAutoSync(restored);
         setSession(restored);
+
+        // Mantiene viva la sesión en portales que quedan abiertos durante
+        // jornadas largas. restoreSupabaseSession refresca el access token
+        // cuando corresponde; reiniciamos el watcher con ese token vigente.
+        refreshTimer = window.setInterval(async () => {
+          const refreshed = await restoreSupabaseSession();
+          if (!active) return;
+          if (!refreshed) {
+            stopCoreSync();
+            setSession(null);
+            return;
+          }
+          stopCoreSync();
+          stopCoreSync = startCoreDataAutoSync(refreshed);
+          setSession(refreshed);
+        }, 15 * 60 * 1000);
       } catch (error) {
         console.error('No fue posible preparar la sesión de Acredita.', error);
         if (active) setSession(null);
@@ -57,6 +74,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return () => {
       active = false;
       stopCoreSync();
+      if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, []);
 
