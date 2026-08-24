@@ -372,7 +372,7 @@ export default function DashboardTab({
           </div>
 
           {/* 4. KPIs */}
-          <div className="card-grid">
+          <div className="card-grid contractor-kpi-grid">
             <div className="card p-4">
               <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Empresa · Obligatorios</p>
               <p className="text-[22px] font-bold text-navy">{empresaObligatoriosOk}/{empresaObligatoriosTotal}</p>

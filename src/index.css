@@ -148,6 +148,10 @@
   /* Cards & Stats */
   .card { background: white; border-radius: var(--rl); border: 0.5px solid var(--cream3); padding: 1rem; }
   .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 1rem; }
+  .contractor-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 760px) {
+    .contractor-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1.2rem; }
   .stat { position: relative; background: white; border: 0.5px solid var(--cream3); border-radius: var(--rl); padding: 0.8rem 1rem; color: var(--navy); overflow: hidden; }
