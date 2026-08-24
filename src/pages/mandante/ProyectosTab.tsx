@@ -16,7 +16,6 @@ export default function ProyectosTab({
   allContratistas,
   selectedContratista,
   setSelectedContratista,
-  setActiveTab,
   proyectoSeleccionadoAjustes,
   setProyectoSeleccionadoAjustes,
   PROYECTOS_AJUSTES,
@@ -32,7 +31,6 @@ export default function ProyectosTab({
   selectedProjectId,
   setShowInvitarModal,
   contractorsData,
-  setFiltroDoc,
   documentRequirements,
   editingContractorId,
   setEditingContractorId,
@@ -48,7 +46,6 @@ export default function ProyectosTab({
   allContratistas: Contratista[];
   selectedContratista: string | null;
   setSelectedContratista: (v: string | null) => void;
-  setActiveTab: (v: string) => void;
   proyectoSeleccionadoAjustes: string | null;
   setProyectoSeleccionadoAjustes: (v: string | null) => void;
   PROYECTOS_AJUSTES: any[];
@@ -64,7 +61,6 @@ export default function ProyectosTab({
   selectedProjectId: string | null;
   setShowInvitarModal: (v: boolean) => void;
   contractorsData: any[];
-  setFiltroDoc: (v: string | null) => void;
   documentRequirements: any[];
   editingContractorId: string | null;
   setEditingContractorId: (v: string | null) => void;
@@ -75,14 +71,14 @@ export default function ProyectosTab({
   return (
     <div className="fade-in flex flex-col h-full">
       <div className="tab-bar mb-6 shrink-0">
-        <button className={`tab ${activeProjectTab === 'contratistas' ? 'active' : ''}`} onClick={() => setActiveProjectTab('contratistas')}>Proyectos</button>
-        <button className={`tab ${activeProjectTab === 'proyectos' ? 'active' : ''}`} onClick={() => setActiveProjectTab('proyectos')}>Ajustes del Proyecto</button>
-        <button className={`tab ${activeProjectTab === 'checklist' ? 'active' : ''}`} onClick={() => setActiveProjectTab('checklist')}>Checklist</button>
-        <button className={`tab ${activeProjectTab === 'pagos' ? 'active' : ''}`} onClick={() => setActiveProjectTab('pagos')}>Estado de Pago</button>
+        <button className={`tab ${activeProjectTab === 'resumen' ? 'active' : ''}`} onClick={() => setActiveProjectTab('resumen')}>Resumen</button>
+        <button className={`tab ${activeProjectTab === 'contratistas' ? 'active' : ''}`} onClick={() => setActiveProjectTab('contratistas')}>Contratistas</button>
+        <button className={`tab ${activeProjectTab === 'requisitos' ? 'active' : ''}`} onClick={() => setActiveProjectTab('requisitos')}>Requisitos</button>
+        <button className={`tab ${activeProjectTab === 'acreditaciones' ? 'active' : ''}`} onClick={() => setActiveProjectTab('acreditaciones')}>Acreditaciones</button>
       </div>
 
       {/* PAGOS TAB (Complex example) */}
-      {activeProjectTab === 'pagos' && (
+      {activeProjectTab === 'acreditaciones' && (
         <div className="fade-in">
           <div className="page-header">
             <div>
@@ -139,7 +135,7 @@ export default function ProyectosTab({
                     <div className="prog-wrap"><div className="prog-fill" style={{ width: `${pct}%`, backgroundColor: barColor === 'bg-[#c02020]' ? '#c02020' : barColor === 'bg-[#c08000]' ? '#c08000' : '#2a6a3a' }}></div></div>
                     <div className="mt-3 flex gap-2">
                       <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo"><Download size={14} /> Informe PDF [Demo]</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedContratista(c.id); setActiveTab('dashboard'); }}><Eye size={14} /> Ver docs</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedContratista(c.id); setActiveProjectTab('contratistas'); }}><Eye size={14} /> Ver acreditación</button>
                     </div>
                   </div>
                 );
@@ -150,14 +146,14 @@ export default function ProyectosTab({
       )}
 
       {/* Proyectos Tab */}
-      {activeProjectTab === 'proyectos' && (
+      {activeProjectTab === 'resumen' && (
         <div className="fade-in max-w-4xl">
           {proyectoSeleccionadoAjustes === null ? (
             <div className="fade-in">
               <div className="page-header">
                 <div>
-                  <h2 className="page-title">Ajustes del Proyecto</h2>
-                  <p className="page-sub">Selecciona el proyecto que deseas configurar</p>
+                  <h2 className="page-title">Proyectos</h2>
+                  <p className="page-sub">Selecciona un proyecto para ver su resumen o configurarlo</p>
                          <div className="card-grid">
                     {misProyectos.map(p => {
                       let imgUrl = "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=400";
@@ -559,9 +555,9 @@ export default function ProyectosTab({
             </>
           ) : selectedContratista ? (
             <>
-              <div className="text-[14px] font-medium text-black cursor-pointer mb-4 flex items-center gap-1.5 w-max hover:opacity-80 transition-opacity" onClick={() => { setSelectedContratista(null); setFiltroDoc(null); }}>
+              <button type="button" className="text-[14px] font-medium text-black cursor-pointer mb-4 flex items-center gap-1.5 w-max hover:opacity-80 transition-opacity" onClick={() => setSelectedContratista(null)}>
                 <ArrowLeft size={18} className="text-orange-500" /> Volver a contratistas
-              </div>
+              </button>
               {(() => {
                 const cObj = allContratistas.find(c => c.id === selectedContratista);
                 if (!cObj) return null;
@@ -570,7 +566,7 @@ export default function ProyectosTab({
                     tipo="empresa"
                     contratista={cObj}
                     proyectoId={vistaContratistas === 'todos' ? cObj.proyectos[0] || 'costanera' : vistaContratistas}
-                    onClose={() => { setSelectedContratista(null); setFiltroDoc(null); }}
+                    onClose={() => setSelectedContratista(null)}
                     rol="mandante"
                   />
                 );
@@ -578,9 +574,9 @@ export default function ProyectosTab({
             </>
           ) : (
             <>
-              <div className="text-[14px] font-medium text-black cursor-pointer mb-2 flex items-center gap-1.5 w-max hover:opacity-80 transition-opacity" onClick={() => { setVistaContratistas('proyectos'); setSelectedContratista(null); setFiltroDoc(null); }}>
+              <button type="button" className="text-[14px] font-medium text-black cursor-pointer mb-2 flex items-center gap-1.5 w-max hover:opacity-80 transition-opacity" onClick={() => { setVistaContratistas('proyectos'); setSelectedContratista(null); }}>
                 <ArrowLeft size={18} className="text-orange-500" /> Proyectos
-              </div>
+              </button>
               {(() => {
                 const proyectoActivoObj = misProyectos.find(p => p.id === vistaContratistas);
                 let badgeClass = 'b-green';
@@ -724,12 +720,12 @@ export default function ProyectosTab({
         </div>
       )}
 
-      {/* Checklist Tab (Matriz Documental) */}
-      {activeProjectTab === 'checklist' && (
+      {/* Requisitos del proyecto */}
+      {activeProjectTab === 'requisitos' && (
         <div className="fade-in">
           <div className="page-header">
             <div>
-              <h2 className="page-title">Matriz Documental (Checklist)</h2>
+              <h2 className="page-title">Requisitos del proyecto</h2>
               <p className="page-sub">Control detallado de requisitos y excepciones</p>
             </div>
             <button className="btn btn-primary cursor-not-allowed opacity-50" disabled title="No disponible en demo">Configurar Matriz [Demo]</button>

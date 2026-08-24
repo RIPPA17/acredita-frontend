@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Bell, LayoutDashboard, Folder, Users, ListChecks, Banknote, BarChart3, 
+  Bell, LayoutDashboard, Folder, Users,
   Settings, LogOut, AlertCircle, AlertTriangle, Info, Plus, ArrowRight,
   Eye, Download, FileText, CheckCircle, Calendar, ArrowLeft, UserPlus, XCircle, FileCheck, Send,
   Check, X, SlidersHorizontal, Table, Clock, ShieldCheck, Zap, Sparkles, TrendingUp,
@@ -11,10 +11,10 @@ import {
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion } from '../data/localStorageDb';
 import { Contratista } from '../types';
 import FichaAcreditacion from '../components/FichaAcreditacion';
-import ReportesTab from './mandante/ReportesTab';
 import ConfigTab from './mandante/ConfigTab';
 import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
+import ContratistasTab from './mandante/ContratistasTab';
 
 export default function MandantePortal() {
   const navigate = useNavigate();
@@ -31,8 +31,7 @@ export default function MandantePortal() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<'perfil' | 'equipo' | 'alertas' | 'api'>('perfil');
   const [showNotif, setShowNotif] = useState(false);
-  const [activeProjectTab, setActiveProjectTab] = useState('contratistas');
-  const [proyectosView, setProyectosView] = useState('lista_proyectos');
+  const [activeProjectTab, setActiveProjectTab] = useState('resumen');
   const [editingContractorId, setEditingContractorId] = useState<string | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -42,7 +41,6 @@ export default function MandantePortal() {
   const [fichaTrabajador, setFichaTrabajador] = useState<any>(undefined);
   const [filtroControl, setFiltroControl] = useState<'todos' | 'aprobados' | 'en_proceso' | 'bloqueados' | 'atencion'>('todos');
   const [dashboardSubTab, setDashboardSubTab] = useState<'contratistas' | 'trabajadores'>('contratistas');
-  const [filtroDoc, setFiltroDoc] = useState<string | null>(null);
   const [ajustesEditando, setAjustesEditando] = useState(false);
   const [proyectoArchivado, setProyectoArchivado] = useState(false);
   const [proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes] = useState<string | null>(null);
@@ -62,28 +60,14 @@ export default function MandantePortal() {
     badge: p.id === 'costanera' ? 'b-red' : p.id === 'mackenna' ? 'b-yellow' : 'b-green'
   }));
 
-  const DOCS_CONTRATISTAS: Record<string, any[]> = {};
-  allContratistas.forEach(c => {
-    DOCS_CONTRATISTAS[c.id] = c.documentos.map(d => ({
-      id: d.id,
-      nombre: d.nombre,
-      categoria: d.categoria,
-      estado: d.estado,
-      vencimiento: d.vencimiento,
-      motivo: d.motivo || d.observacion
-    }));
-  });
-
   const goToProject = (projectId: string) => {
     setSelectedProjectId(projectId);
     setActiveTab('proyectos');
-    setActiveProjectTab('contratistas');
+    setActiveProjectTab('resumen');
   };
   const [onboardingStep, setOnboardingStep] = useState<number | null>(() => {
     return misProyectos.length === 0 ? 1 : null;
   });
-
-  const [projectsData, setProjectsData] = useState([1, 2]);
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
     setToast({msg, type});
@@ -220,10 +204,10 @@ export default function MandantePortal() {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'proyectos', label: 'Proyectos', icon: Folder },
-    { id: 'reportes', label: 'Reportes', icon: BarChart3, section: 'Gestión' },
-    { id: 'config', label: 'Configuración', icon: Settings, section: 'Cuenta' },
+    { id: 'contratistas', label: 'Contratistas', icon: Building2 },
+    { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
   if (onboardingStep !== null) {
@@ -363,7 +347,6 @@ export default function MandantePortal() {
                       setActiveProjectTab('contratistas');
                       setVistaContratistas('costanera');
                       setSelectedContratista('constructora-velez');
-                      setFiltroDoc('rechazado');
                       setShowNotif(false);
                     }}
                     className="flex items-start gap-3 px-4 py-3 bg-red-50 hover:bg-red-100/60 transition-colors cursor-pointer text-left"
@@ -378,7 +361,7 @@ export default function MandantePortal() {
                   <div 
                     onClick={() => {
                       setActiveTab('proyectos');
-                      setActiveProjectTab('checklist');
+                      setActiveProjectTab('requisitos');
                       setShowNotif(false);
                     }}
                     className="flex items-start gap-3 px-4 py-3 bg-yellow-50 hover:bg-yellow-100/60 transition-colors cursor-pointer text-left"
@@ -396,7 +379,6 @@ export default function MandantePortal() {
                       setActiveProjectTab('contratistas');
                       setVistaContratistas('mackenna');
                       setSelectedContratista('electrica-sur');
-                      setFiltroDoc('aprobado');
                       setShowNotif(false);
                     }}
                     className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer text-left"
@@ -470,7 +452,6 @@ export default function MandantePortal() {
           <div className="sb-label">Principal</div>
           {menuItems.map(item => (
             <React.Fragment key={item.id}>
-              {item.section && <div className="sb-label mt-2">{item.section}</div>}
               <button 
                 onClick={() => setActiveTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
@@ -515,7 +496,6 @@ export default function MandantePortal() {
               <div className="sb-label">Principal</div>
               {menuItems.map(item => (
                 <React.Fragment key={item.id}>
-                  {item.section && <div className="sb-label mt-2">{item.section}</div>}
                   <button 
                     onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                     className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
@@ -565,7 +545,6 @@ export default function MandantePortal() {
               allContratistas={allContratistas}
               selectedContratista={selectedContratista}
               setSelectedContratista={setSelectedContratista}
-              setActiveTab={setActiveTab}
               proyectoSeleccionadoAjustes={proyectoSeleccionadoAjustes}
               setProyectoSeleccionadoAjustes={setProyectoSeleccionadoAjustes}
               PROYECTOS_AJUSTES={PROYECTOS_AJUSTES}
@@ -581,7 +560,6 @@ export default function MandantePortal() {
               selectedProjectId={selectedProjectId}
               setShowInvitarModal={setShowInvitarModal}
               contractorsData={contractorsData}
-              setFiltroDoc={setFiltroDoc}
               documentRequirements={documentRequirements}
               editingContractorId={editingContractorId}
               setEditingContractorId={setEditingContractorId}
@@ -591,9 +569,20 @@ export default function MandantePortal() {
             />
           )}
 
-          {/* REPORTES Y ANALÍTICA DE BENEFICIOS */}
-          {activeTab === 'reportes' && (
-            <ReportesTab contractorsData={contractorsData} allContratistas={allContratistas} activeProjectId={activeProjectId} misProyectos={misProyectos} />
+          {/* CONTRATISTAS DEL MANDANTE */}
+          {activeTab === 'contratistas' && (
+            <ContratistasTab
+              misProyectos={misProyectos}
+              allContratistas={allContratistas}
+              selectedContratista={selectedContratista}
+              setSelectedContratista={setSelectedContratista}
+              onOpenProject={projectId => {
+                setSelectedProjectId(projectId);
+                setVistaContratistas(projectId);
+                setActiveProjectTab('acreditaciones');
+                setActiveTab('proyectos');
+              }}
+            />
           )}
 
           {/* CONFIGURACIÓN Y PREFERENCIAS */}
@@ -760,7 +749,7 @@ export default function MandantePortal() {
         <>
           <div 
             className="fixed inset-0 bg-black/20 z-[399] transition-opacity duration-300"
-            onClick={() => { setClienteSeleccionado(null); setFiltroDoc(null); setFichaTrabajador(undefined); }}
+            onClick={() => { setClienteSeleccionado(null); setFichaTrabajador(undefined); }}
           />
           {(() => {
             const cObj = allContratistas.find(c => c.id === clienteSeleccionado.id);
@@ -771,7 +760,7 @@ export default function MandantePortal() {
                 contratista={cObj}
                 trabajador={fichaTrabajador}
                 proyectoId={activeProjectId}
-                onClose={() => { setClienteSeleccionado(null); setFiltroDoc(null); setFichaTrabajador(undefined); }}
+                onClose={() => { setClienteSeleccionado(null); setFichaTrabajador(undefined); }}
                 rol="mandante"
               />
             );
