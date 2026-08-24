@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '../data/supabaseAuth';
+import { prepareCoreDataForSession, startCoreDataAutoSync } from '../data/supabaseCoreData';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,17 +15,66 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   React.useEffect(() => {
     let active = true;
+    let stopCoreSync = () => {};
+    let refreshTimer: number | undefined;
 
-    restoreSupabaseSession()
-      .then((restored) => {
-        if (active) setSession(restored);
-      })
-      .finally(() => {
+    const loadSession = async () => {
+      try {
+        const restored = await restoreSupabaseSession();
+        if (!restored || !active) {
+          if (active) setSession(null);
+          return;
+        }
+
+        // Solo intentamos subir datos legacy si el navegador realmente tiene
+        // una base local completa previa. En una sesión nueva, Supabase debe
+        // hidratar primero el cache; ausencia de localStorage no significa
+        // que el usuario haya eliminado proyectos o requisitos.
+        const hasLegacyCoreData =
+          localStorage.getItem('acredita_db_initialized') === 'true'
+          && localStorage.getItem('acredita_proyectos') !== null
+          && localStorage.getItem('acredita_contratistas') !== null
+          && localStorage.getItem('acredita_requisitos') !== null;
+
+        if (!hasLegacyCoreData) {
+          localStorage.setItem(`acredita_core_supabase_migrated_v1:${restored.profileId}`, 'true');
+        }
+
+        await prepareCoreDataForSession(restored);
+        if (!active) return;
+
+        stopCoreSync = startCoreDataAutoSync(restored);
+        setSession(restored);
+
+        // Mantiene viva la sesión en portales que quedan abiertos durante
+        // jornadas largas. restoreSupabaseSession refresca el access token
+        // cuando corresponde; reiniciamos el watcher con ese token vigente.
+        refreshTimer = window.setInterval(async () => {
+          const refreshed = await restoreSupabaseSession();
+          if (!active) return;
+          if (!refreshed) {
+            stopCoreSync();
+            setSession(null);
+            return;
+          }
+          stopCoreSync();
+          stopCoreSync = startCoreDataAutoSync(refreshed);
+          setSession(refreshed);
+        }, 15 * 60 * 1000);
+      } catch (error) {
+        console.error('No fue posible preparar la sesión de Acredita.', error);
+        if (active) setSession(null);
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+
+    void loadSession();
 
     return () => {
       active = false;
+      stopCoreSync();
+      if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, []);
 
@@ -33,7 +83,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
       <div className="min-h-screen flex items-center justify-center bg-[#faf9f8] text-navy">
         <div className="text-center">
           <div className="text-[20px] font-semibold mb-2">Acredita</div>
-          <div className="text-[13px] text-gray-500">Verificando sesión segura…</div>
+          <div className="text-[13px] text-gray-500">Sincronizando datos seguros…</div>
         </div>
       </div>
     );
