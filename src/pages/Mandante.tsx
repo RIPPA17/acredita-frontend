@@ -560,6 +560,7 @@ export default function MandantePortal() {
               proyectoArchivado={proyectoArchivado}
               setProyectoArchivado={setProyectoArchivado}
               selectedProjectId={selectedProjectId}
+              setSelectedProjectId={setSelectedProjectId}
               setShowInvitarModal={setShowInvitarModal}
               contractorsData={contractorsData}
               documentRequirements={documentRequirements}
@@ -568,6 +569,12 @@ export default function MandantePortal() {
               handleCellEdit={handleCellEdit}
               handleAddRequirement={handleAddRequirement}
               setDocumentRequirements={setDocumentRequirements}
+              onOpenContractor={(projectId, contractorId) => {
+                setSelectedProjectId(projectId);
+                setSelectedContratista(contractorId);
+                setContractorFocus({ projectId });
+                setActiveTab('contratistas');
+              }}
             />
           )}
 
