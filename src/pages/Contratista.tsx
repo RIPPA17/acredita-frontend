@@ -13,7 +13,6 @@ import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMand
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
-import DocumentDetailPanel from './contratista/DocumentDetailPanel';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -53,7 +52,6 @@ export default function ContratistaPortal() {
   };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedDocumentForPanel, setSelectedDocumentForPanel] = useState<Documento | null>(null);
   const [showNotif, setShowNotif] = useState(false);
   const [invitacionAceptada, setInvitacionAceptada] = useState(false);
   const [tieneProyecto, setTieneProyecto] = useState(false);
@@ -145,7 +143,6 @@ export default function ContratistaPortal() {
   });
 
   const [documentosData, setDocumentosData] = useState<Documento[]>([]);
-  const [trabajadoresData, setTrabajadoresData] = useState<any[]>([]);
 
   React.useEffect(() => {
     const list = getContratistas();
@@ -154,8 +151,6 @@ export default function ContratistaPortal() {
       const filteredDocs = cObj.documentos.filter(d => d.proyectoId === selectedProyectoId);
       setDocumentosData(filteredDocs);
       
-      const projectWorkers = cObj.trabajadores?.filter(w => esTrabajadorAsignado(w, selectedProyectoId, misProyectos)) || [];
-      setTrabajadoresData(projectWorkers);
     }
   }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
 
@@ -175,106 +170,6 @@ export default function ContratistaPortal() {
       }
     }
   }, []);
-
-  const numProyectos = misProyectos.length;
-  const numAprobados = documentosData.filter(d => d.estado === 'aprobado').length;
-  const numPendientes = documentosData.filter(d => d.estado === 'pendiente').length;
-  const numRechazados = documentosData.filter(d => d.estado === 'rechazado').length;
-  const numPorVencer = documentosData.filter(d => d.estado === 'por_vencer').length;
-  const approvedWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t, selectedProyectoId) === 'aprobado').length;
-  const totalWorkers = trabajadoresData.length;
-  const pendingWorkers = trabajadoresData.filter(t => calcularEstadoTrabajador(t, selectedProyectoId) !== 'aprobado').length;
-
-  const handleUploadDocument = (docId: string, actionMsg: string = 'Documento subido correctamente', workerRut?: string) => {
-    const list = getContratistas();
-    const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
-    const today = new Date();
-    const day = today.getDate();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const todayStr = `${day} ${months[today.getMonth()]} ${today.getFullYear()}`;
-
-    let updated = false;
-    if (currentIdx !== -1) {
-      if (workerRut) {
-        const workerIdx = list[currentIdx].trabajadores?.findIndex(w => w.rut === workerRut);
-        if (workerIdx !== undefined && workerIdx !== -1) {
-          const docIdx = list[currentIdx].trabajadores![workerIdx].documentos?.findIndex(d => d.id === docId);
-          if (docIdx !== undefined && docIdx !== -1) {
-            const docObj = list[currentIdx].trabajadores![workerIdx].documentos![docIdx];
-            docObj.estado = 'revision';
-            docObj.subido = todayStr;
-            docObj.archivoReferencia = `mock_file_${docId}.pdf`;
-            delete docObj.motivoRechazo;
-            delete docObj.explicacionRechazo;
-            delete docObj.solucionRechazo;
-            delete docObj.motivo;
-            delete docObj.observacion;
-            
-            const workerObj = list[currentIdx].trabajadores![workerIdx];
-            workerObj.estado = calcularEstadoTrabajador(workerObj, selectedProyectoId);
-            
-            saveContratistas(list);
-            
-            const projectWorkers = list[currentIdx].trabajadores?.filter(w => 
-              w.documentos?.some(wd => wd.proyectoId === selectedProyectoId)
-            ) || [];
-            setTrabajadoresData(projectWorkers);
-            updated = true;
-          }
-        }
-      } else {
-        const docIdx = list[currentIdx].documentos.findIndex(d => d.id === docId);
-        if (docIdx !== -1) {
-          const docObj = list[currentIdx].documentos[docIdx];
-          docObj.estado = 'revision';
-          docObj.subido = todayStr;
-          docObj.archivoReferencia = `mock_file_${docId}.pdf`;
-          delete docObj.motivoRechazo;
-          delete docObj.explicacionRechazo;
-          delete docObj.solucionRechazo;
-          delete docObj.motivo;
-          delete docObj.observacion;
-          saveContratistas(list);
-          
-          setDocumentosData(list[currentIdx].documentos.filter(d => d.proyectoId === selectedProyectoId));
-          updated = true;
-        }
-      }
-    }
-    
-    if (!workerRut) {
-      setDocumentosData(prev => prev.map(d => {
-        if (d.id === docId) {
-          return { 
-            ...d, 
-            estado: 'revision', 
-            subido: todayStr,
-            motivoRechazo: undefined,
-            explicacionRechazo: undefined,
-            solucionRechazo: undefined,
-            motivo: undefined,
-            observacion: undefined
-          };
-        }
-        return d;
-      }));
-    }
-    
-    if (selectedDocumentForPanel && selectedDocumentForPanel.id === docId) {
-      setSelectedDocumentForPanel({ 
-        ...selectedDocumentForPanel, 
-        estado: 'revision', 
-        subido: todayStr,
-        motivoRechazo: undefined,
-        explicacionRechazo: undefined,
-        solucionRechazo: undefined,
-        motivo: undefined,
-        observacion: undefined
-      });
-    }
-
-    if (updated) showToast(actionMsg, 'success');
-  };
 
   const handleAddWorkerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,7 +218,6 @@ export default function ContratistaPortal() {
     }
 
     saveContratistas(list);
-    setTrabajadoresData(contratista.trabajadores.filter(w => esTrabajadorAsignado(w, selectedProyectoId, misProyectos)));
     setDataRevision(value => value + 1);
 
     setNewWorkerForm({
@@ -589,16 +483,7 @@ export default function ContratistaPortal() {
               showWelcomeAlert={showWelcomeAlert}
               setShowWelcomeAlert={setShowWelcomeAlert}
               documentosData={documentosData}
-              trabajadoresData={trabajadoresData}
-              numAprobados={numAprobados}
-              numRechazados={numRechazados}
-              numPendientes={numPendientes}
-              numPorVencer={numPorVencer}
-              approvedWorkers={approvedWorkers}
-              totalWorkers={totalWorkers}
-              pendingWorkers={pendingWorkers}
               setActiveTab={setActiveTab}
-              setSelectedDocumentForPanel={setSelectedDocumentForPanel}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
               setShowAddWorkerModal={setShowAddWorkerModal}
@@ -699,15 +584,6 @@ export default function ContratistaPortal() {
             setSelectedWorkerForDocs(trabajador);
             setActiveTab('trabajadores');
           }}
-        />
-      )}
-
-      {selectedDocumentForPanel && (
-        <DocumentDetailPanel 
-          doc={selectedDocumentForPanel} 
-          onClose={() => setSelectedDocumentForPanel(null)} 
-          onUpload={(docId, msg) => handleUploadDocument(docId, msg, selectedWorkerForDocs?.rut)}
-          showToast={showToast} 
         />
       )}
 

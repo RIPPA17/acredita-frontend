@@ -74,16 +74,7 @@ export default function DashboardTab({
   showWelcomeAlert: boolean;
   setShowWelcomeAlert: (value: boolean) => void;
   documentosData: Documento[];
-  trabajadoresData: Trabajador[];
-  numAprobados: number;
-  numRechazados: number;
-  numPendientes: number;
-  numPorVencer: number;
-  approvedWorkers: number;
-  totalWorkers: number;
-  pendingWorkers: number;
   setActiveTab: (tab: string) => void;
-  setSelectedDocumentForPanel: (documento: Documento | null) => void;
   setShowFichaAcreditacion: (value: boolean) => void;
   setSelectedWorkerForDocs: (trabajador: Trabajador | null) => void;
   setShowAddWorkerModal: (value: boolean) => void;
