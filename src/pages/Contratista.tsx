@@ -9,9 +9,10 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Documento } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion, getPreferenciasNotificacionesContratista } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
+import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
 import DocumentDetailPanel from './contratista/DocumentDetailPanel';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
@@ -19,6 +20,25 @@ import MisProyectosTab from './contratista/MisProyectosTab';
 import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
+import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
+
+const NOTIFICACIONES_LEIDAS_KEY = 'acredita_notificaciones_leidas_contratista';
+
+function getNotificacionesLeidas(contratistaId: string): Set<string> {
+  try {
+    const data = JSON.parse(localStorage.getItem(NOTIFICACIONES_LEIDAS_KEY) || '{}') as Record<string, string[]>;
+    return new Set(data[contratistaId] || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveNotificacionesLeidas(contratistaId: string, leidas: Set<string>): void {
+  let data: Record<string, string[]> = {};
+  try { data = JSON.parse(localStorage.getItem(NOTIFICACIONES_LEIDAS_KEY) || '{}'); } catch { data = {}; }
+  data[contratistaId] = [...leidas];
+  localStorage.setItem(NOTIFICACIONES_LEIDAS_KEY, JSON.stringify(data));
+}
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -75,7 +95,50 @@ export default function ContratistaPortal() {
 
   const session = getCurrentSession();
   const contratistaLogueado = allContratistas.find(c => c.id === session?.contratistaId) || allContratistas[0];
+  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(() => getNotificacionesLeidas(contratistaLogueado.id));
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
+  const notificaciones = buildNotificacionesContratista({
+    contratista: contratistaLogueado,
+    proyectos: misProyectos,
+    requisitos: getRequisitos(),
+    preferencias: getPreferenciasNotificacionesContratista(contratistaLogueado.id),
+  });
+  const notificacionesSinLeer = notificaciones.filter(item => !notificacionesLeidas.has(item.id)).length;
+
+  const marcarLeidas = (ids: string[]) => {
+    setNotificacionesLeidas(actual => {
+      const next = new Set<string>(actual);
+      ids.forEach(id => next.add(id));
+      saveNotificacionesLeidas(contratistaLogueado.id, next);
+      return next;
+    });
+  };
+
+  const abrirNotificaciones = () => {
+    setNotificacionesLeidas(getNotificacionesLeidas(contratistaLogueado.id));
+    setShowNotif(actual => !actual);
+  };
+
+  const navegarNotificacion = (notificacion: NotificacionContratista) => {
+    marcarLeidas([notificacion.id]);
+    setSelectedProyectoId(notificacion.proyectoId);
+    if (notificacion.destino.tipo === 'trabajador' && notificacion.destino.trabajador) {
+      setSelectedWorkerForDocs(notificacion.destino.trabajador);
+      setActiveTab('trabajadores');
+    } else if (notificacion.destino.tipo === 'acreditacion') {
+      setShowFichaAcreditacion(true);
+    } else {
+      setActiveTab('subir');
+    }
+    setShowNotif(false);
+  };
+
+  React.useEffect(() => {
+    if (!showNotif) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setShowNotif(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [showNotif]);
 
   const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
     return misProyectos[0]?.id || 'costanera';
@@ -372,78 +435,17 @@ export default function ContratistaPortal() {
         <div className="flex items-center gap-4">
           <div className="relative">
             <button 
-              onClick={() => setShowNotif(!showNotif)}
+              onClick={abrirNotificaciones}
+              aria-label={showNotif ? 'Cerrar notificaciones' : 'Abrir notificaciones'}
+              aria-expanded={showNotif}
               className="flex items-center justify-center relative w-8 h-8 rounded-md bg-white/10 text-cream hover:bg-white/20 transition-colors">
               <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#c03030] rounded-full border border-navy"></span>
+              {notificacionesSinLeer > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 flex items-center justify-center bg-[#c73b3b] text-white text-[8px] font-extrabold rounded-full border-2 border-navy">{notificacionesSinLeer}</span>}
             </button>
 
             {showNotif && <div className="fixed inset-0 z-[299]" onClick={() => setShowNotif(false)} />}
             
-            {showNotif && (
-              <div className="absolute top-11 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300] right-3 sm:right-0">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-cream3 text-left">
-                  <span className="font-semibold text-navy text-[15px]">Notificaciones</span>
-                  <span className="badge b-red">2 urgentes</span>
-                </div>
-
-                {/* Items */}
-                <div className="flex flex-col divide-y divide-cream3 max-h-[400px] overflow-y-auto w-full">
-                  <div 
-                    onClick={() => { setActiveTab('subir'); setShowNotif(false); }}
-                    className="flex items-start gap-3 px-4 py-3 bg-red-50 hover:bg-red-100/60 transition-colors cursor-pointer text-left"
-                  >
-                    <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-red-700">3 documentos sin revisar +24hrs</p>
-                      <p className="text-[12.5px] text-red-500 mt-0.5">Requieren atención urgente — cola de revisión</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 2 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => { setActiveTab('subir'); setShowNotif(false); }}
-                    className="flex items-start gap-3 px-4 py-3 bg-yellow-50 hover:bg-yellow-100/60 transition-colors cursor-pointer text-left"
-                  >
-                    <AlertTriangle size={18} className="text-yellow-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-yellow-800">Plantilla "F30 SII" desactualizada</p>
-                      <p className="text-[12.5px] text-yellow-700 mt-0.5">Revisar antes del 31 de mayo — Gestión de plantillas</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 5 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => { setActiveTab('subir'); setShowNotif(false); }}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer text-left"
-                  >
-                    <CheckCircle size={18} className="text-green-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">Eléctrica Sur aprobó contrato de trabajo</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 6 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => { setActiveTab('proyectos'); setShowNotif(false); }}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer text-left"
-                  >
-                    <Users size={18} className="text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">TécnicoSur SpA se registró en la plataforma</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 8 horas</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="px-4 py-2.5 border-t border-cream3 text-center">
-                  <button 
-                    onClick={() => setShowNotif(false)}
-                    className="text-[13px] text-brown hover:underline font-medium">
-                    Marcar todas como leídas
-                  </button>
-                </div>
-              </div>
-            )}
+            {showNotif && <ContratistaNotificaciones contratistaNombre={contratistaLogueado.nombre} notificaciones={notificaciones} leidas={notificacionesLeidas} onMarcarLeida={id => marcarLeidas([id])} onMarcarTodas={() => marcarLeidas(notificaciones.map(item => item.id))} onAbrir={navegarNotificacion} />}
           </div>
           <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">

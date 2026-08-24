@@ -519,6 +519,7 @@ const ACREDITA_DATA_KEYS = [
   'acredita_invitaciones',
   'acredita_audit_logs',
   'acredita_preferencias_notificaciones_contratista',
+  'acredita_notificaciones_leidas_contratista',
 ];
 
 const DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA: PreferenciasNotificacionesContratista = {
