@@ -1,5 +1,6 @@
 import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES } from './mockData';
 import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador, PreferenciasNotificacionesContratista } from '../types';
+import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -585,6 +586,7 @@ export function savePreferenciasNotificacionesContratista(
 // a re-sembrar todo desde cero, exactamente como en el primer arranque.
 // Mantiene la sesión activa: es un reinicio de los datos, no un logout.
 export function resetDemoData(): void {
+  clearDerivedStateCache();
   if (typeof window === 'undefined') return;
   ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
   initDb();
@@ -595,6 +597,7 @@ export function resetDemoData(): void {
 // no vuelve a sembrar nada automáticamente (initDb() lo hará en el próximo
 // arranque de la app).
 export function limpiarDatosLocales(): void {
+  clearDerivedStateCache();
   if (typeof window === 'undefined') return;
   ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
   localStorage.removeItem('acredita_session');
@@ -733,6 +736,12 @@ export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito):
 }
 
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
+  const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
+  if (backendState) {
+    if (backendState.status === 'aprobado') return backendState.nearExpiryCount > 0 ? 'por_vencer' : 'aprobado';
+    if (backendState.status === 'vencido_bloqueado') return 'rechazado';
+    return 'pendiente';
+  }
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
   const documentos = w.documentos || [];
 
@@ -794,10 +803,13 @@ export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyecto
 }
 
 export function esTrabajadorAcreditado(w: Trabajador, proyectoId: string): boolean {
-  return calcularEstadoTrabajador(w, proyectoId) === 'aprobado';
+  const estado = calcularEstadoTrabajador(w, proyectoId);
+  return estado === 'aprobado' || estado === 'por_vencer';
 }
 
 export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
+  const backendState = getBackendAccreditationState(c.id, proyectoId);
+  if (backendState) return backendAccreditationLabel(backendState);
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -950,6 +962,25 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
   pagoPendiente: boolean;
   motivoPago?: string;
 } {
+  const backendState = getBackendAccreditationState(c.id, proyectoId);
+  if (backendState) {
+    const bloqueado = backendState.status === 'vencido_bloqueado';
+    const accesoPendiente = !backendState.accessAllowed && !bloqueado;
+    const pagoPendiente = !backendState.paymentAllowed && !bloqueado;
+    const motivo = bloqueado
+      ? 'Acreditación vencida o bloqueada según el estado oficial de Supabase'
+      : 'La acreditación todavía no está aprobada según el estado oficial de Supabase';
+    return {
+      accesoEstado: backendState.accessAllowed ? 'habilitado' : bloqueado ? 'bloqueado' : 'pendiente',
+      accesoBloqueado: bloqueado,
+      accesoPendiente,
+      motivoAcceso: backendState.accessAllowed ? undefined : motivo,
+      pagoEstado: backendState.paymentAllowed ? 'habilitado' : bloqueado ? 'bloqueado' : 'pendiente',
+      pagoBloqueado: bloqueado,
+      pagoPendiente,
+      motivoPago: backendState.paymentAllowed ? undefined : motivo,
+    };
+  }
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -1430,6 +1461,7 @@ export function loginUser(email: string, password: string, role: 'admin' | 'mand
 }
 
 export function logoutUser(): void {
+  clearDerivedStateCache();
   const session = getCurrentSession();
   if (session) {
     registrarAuditoria({

@@ -56,6 +56,7 @@ import AuditoriaTab from './admin/AuditoriaTab';
 import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import DocumentoDetailModal from './admin/DocumentoDetailModal';
+import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -190,40 +191,33 @@ export default function AdminPortal() {
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
 
-  const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>(() => {
-    const dbLogs = getAuditLogs().map(log => ({
-      ...log,
-      id: log.id,
-      accion: log.accion,
-      actor: log.actor || log.usuarioId,
-      rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'sistema' ? 'Sistema Automático' : 'Desconocido',
-      empresa: log.empresa || 'N/A',
-      proyecto: log.proyecto || '',
-      detalle: log.detalle || '',
-      fecha: log.fecha || '',
-      resultado: log.resultado || 'informativo'
-    }));
+  const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>([]);
 
-    // Historial ilustrativo del equipo interno (no hay múltiples cuentas de
-    // revisor en el demo), usando el vocabulario real de acciones y
-    // contratistas/proyectos reales de la plataforma.
-    const haceMin = (n: number) => new Date(Date.now() - n * 60000).toISOString();
-    const mockLogs = [
-      { id: 'AUD-00018452', accion: 'aprobacion_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Servicios Norte', proyecto: 'Costanera Norte', detalle: 'Certificado de Antecedentes', fecha: haceMin(8), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
-      { id: 'AUD-00018451', accion: 'desbloqueo_pago', actor: 'Felipe Muñoz', rol: 'Revisor' as const, empresa: 'Servicios Norte', proyecto: 'Costanera Norte', detalle: 'Liberación de pago autorizada', fecha: haceMin(14), resultado: 'exitoso' as const, estadoAnterior: 'Listo', estadoNuevo: 'Liberado' },
-      { id: 'AUD-00018450', accion: 'rechazo_documento', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Eléctrica Sur', proyecto: 'Torre Mackenna', detalle: 'Registro Mutual ACHS', fecha: haceMin(26), resultado: 'bloqueado' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Rechazado' },
-      { id: 'AUD-00018449', accion: 'rechazo_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Constructora Vélez', proyecto: 'Costanera Norte', detalle: 'F30 SII (mes vigente)', fecha: haceMin(42), resultado: 'bloqueado' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Rechazado' },
-      { id: 'AUD-00018448', accion: 'cambios_relevantes_acreditacion', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'TécnicoSur SpA', proyecto: 'Bodega Logística Sur', detalle: 'Falta firma en Contrato de Trabajo', fecha: haceMin(58), resultado: 'informativo' as const, estadoAnterior: 'Rechazado', estadoNuevo: 'Corrección solicitada' },
-      { id: 'AUD-00018447', accion: 'aceptacion_invitacion', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Lagos y Cía', proyecto: '', detalle: 'Se actualizó correo de contacto del responsable documental', fecha: haceMin(75), resultado: 'exitoso' as const, estadoAnterior: 'contacto@lagoscia.cl', estadoNuevo: 'documentos@lagoscia.cl' },
-      { id: 'AUD-00018446', accion: 'desbloqueo_acceso', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'TécnicoSur SpA', proyecto: 'Ampliación Planta Solar', detalle: 'Proyecto habilitado para revisión de contratistas', fecha: haceMin(96), resultado: 'exitoso' as const, estadoAnterior: 'En preparación', estadoNuevo: 'Activo' },
-      { id: 'AUD-00018445', accion: 'creacion_invitacion', actor: 'Felipe Muñoz', rol: 'Revisor' as const, empresa: 'Constructora Vélez', proyecto: 'Costanera Norte', detalle: 'Contratista incorporado y enviado al flujo de acreditación', fecha: haceMin(130), resultado: 'exitoso' as const, estadoAnterior: 'No existe', estadoNuevo: 'Activo' },
-      { id: 'AUD-00018444', accion: 'aprobacion_documento', actor: 'Carlos Soto', rol: 'Revisor' as const, empresa: 'Lagos y Cía', proyecto: 'Costanera Norte', detalle: 'ODI 2026', fecha: haceMin(150), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
-      { id: 'AUD-00018443', accion: 'aprobacion_documento', actor: 'María González', rol: 'Revisor' as const, empresa: 'Eléctrica Sur', proyecto: 'Torre Mackenna', detalle: 'Contrato de Trabajo', fecha: haceMin(175), resultado: 'exitoso' as const, estadoAnterior: 'Pendiente de revisión', estadoNuevo: 'Aprobado' },
-      { id: 'AUD-00018442', accion: 'login_exitoso', actor: 'Ana Ruiz', rol: 'Revisor' as const, empresa: 'N/A', proyecto: '', detalle: 'Inicio de sesión en el panel de administración', fecha: haceMin(200), resultado: 'exitoso' as const, ip: '190.16.22.4' },
-    ];
-
-    return [...dbLogs, ...mockLogs];
-  });
+  useEffect(() => {
+    if (activeTab !== "auditoria") return;
+    let cancelled = false;
+    loadSupabaseAuditLogs()
+      .then((logs) => {
+        if (!cancelled) setAuditoriaLogs(logs);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const legacy = getAuditLogs().map(log => ({
+          ...log,
+          id: log.id,
+          accion: log.accion,
+          actor: log.actor || log.usuarioId,
+          rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'mandante' ? 'Mandante' : 'Sistema Automático',
+          empresa: log.empresa || 'N/A',
+          proyecto: log.proyecto || '',
+          detalle: log.detalle || '',
+          fecha: log.fecha || '',
+          resultado: log.resultado || 'informativo',
+        }));
+        setAuditoriaLogs(legacy);
+      });
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
   const [invitacionEnviada, setInvitacionEnviada] = useState(false);

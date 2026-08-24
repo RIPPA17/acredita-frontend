@@ -117,6 +117,17 @@ export function getBackendWorkerState(
   return cache?.workers?.[`${contratistaId}:${proyectoId}:${normalizeRut(trabajadorRut)}`] || null;
 }
 
+export function getBackendWorkerStateForProject(
+  proyectoId: string,
+  trabajadorRut: string,
+): DerivedWorkerState | null {
+  const cache = readCache();
+  if (!cache) return null;
+  const suffix = `:${proyectoId}:${normalizeRut(trabajadorRut)}`;
+  const match = Object.entries(cache.workers || {}).find(([key]) => key.endsWith(suffix));
+  return match?.[1] || null;
+}
+
 export async function refreshDerivedStateCache(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
   const token = session._supabase.accessToken;

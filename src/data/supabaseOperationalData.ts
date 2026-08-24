@@ -7,6 +7,7 @@ import type {
   Trabajador,
 } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
+import { refreshDerivedStateCache } from './supabaseDerivedState';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
@@ -686,6 +687,7 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
       : contractor.trabajadores,
   }));
   writeContractors(next);
+  await refreshDerivedStateCache(session);
 }
 
 export async function prepareOperationalDataForSession(session: SupabaseUserSession): Promise<void> {
