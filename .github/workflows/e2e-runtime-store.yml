@@ -61,7 +61,6 @@ jobs:
               const leakedBefore = forbidden.filter(k => keysBefore.includes(k));
               if (leakedBefore.length) throw new Error(`${user.role}: claves de negocio persistidas antes de recarga: ${leakedBefore.join(', ')}`);
               if (!keysBefore.includes('acredita_session')) throw new Error(`${user.role}: falta sesión persistida`);
-
               await page.reload({ waitUntil: 'networkidle' });
               await page.waitForURL(url => url.pathname.startsWith(expected[user.role]), { timeout: 30000 });
               const secondText = (await page.locator('body').innerText()).trim();
