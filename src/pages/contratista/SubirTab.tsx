@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   esTrabajadorAsignado,
   getRequisitos,
   obtenerDiasRestantes,
 } from '../../data/localStorageDb';
+import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { Contratista, Mandante, Proyecto } from '../../types';
 import { DocEstado } from '../admin/acreditacionUtils';
 import {
@@ -13,7 +14,7 @@ import {
   normalizarNombreDocumento,
   RequisitoConDoc,
 } from './inicio/inicioUtils';
-import { getEstadoDocumentoEfectivo, subirDocumentoRequisito } from './documentosUtils';
+import { getEstadoDocumentoEfectivo } from './documentosUtils';
 
 // Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
 // reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
@@ -52,9 +53,6 @@ function accionDoc(item: Row): { label: string; cls: string } {
   return { label: 'Ver', cls: 'doc-btn-ghost' };
 }
 
-// Texto de estado (info-box superior): genérico por estado, igual criterio
-// que usa el resto del portal para no pedir "corregir" cuando en realidad
-// el documento está en revisión o simplemente no se ha subido todavía.
 function stateCopy(item: RequisitoConDoc): string {
   switch (item.estado) {
     case 'Pendiente':
@@ -120,6 +118,9 @@ export default function SubirTab({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<Row | null>(null);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const proyectoActual = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
   const requisitosAll = getRequisitos();
@@ -187,21 +188,49 @@ export default function SubirTab({
     setSelectedKey(null);
   };
 
-  const subirDocumento = (item: Row) => {
-    if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado)) return;
+  const contextoDocumento = (item: Row) => ({
+    contratistaId: contratistaLogueado.id,
+    proyectoId: selectedProyectoId,
+    requisito: {
+      id: item.requisito.id,
+      nombre: item.requisito.nombre,
+      destino: item.requisito.destino,
+    },
+    trabajadorRut: item.worker?.rut,
+  });
 
-    const result = subirDocumentoRequisito({
-      contratistaId: contratistaLogueado.id,
-      proyectoId: selectedProyectoId,
-      requisito: item.requisito,
-      trabajadorRut: item.worker?.rut,
-    });
-    if (!result.success) {
-      showToast(result.error || 'No fue posible actualizar el documento.', 'error');
-      return;
+  const seleccionarArchivo = (item: Row) => {
+    if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado) || uploadingKey) return;
+    setUploadTarget(item);
+    setSelectedKey(item.key);
+    fileInputRef.current?.click();
+  };
+
+  const procesarArchivo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const target = uploadTarget;
+    setUploadTarget(null);
+    if (!file || !target) return;
+
+    setUploadingKey(target.key);
+    try {
+      const result = await uploadDocumentFile(contextoDocumento(target), file);
+      onDataChanged();
+      showToast(`${result.filename} enviado a revisión (versión ${result.version}).`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible subir el archivo.', 'error');
+    } finally {
+      setUploadingKey(null);
     }
-    onDataChanged();
-    showToast('Documento enviado a revisión por Acredita.', 'success');
+  };
+
+  const verDocumento = async (item: Row) => {
+    try {
+      await openDocumentFile(contextoDocumento(item));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible abrir el documento.', 'error');
+    }
   };
 
   if (!proyectoActual) {
@@ -214,6 +243,14 @@ export default function SubirTab({
 
   return (
     <div className="doc-page">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+        style={{ display: 'none' }}
+        onChange={procesarArchivo}
+      />
+
       <section className="doc-hero">
         <div className="doc-hero-grid">
           <div>
@@ -312,6 +349,7 @@ export default function SubirTab({
                   </div>
                   {rows.map(item => {
                     const { label, cls } = accionDoc(item);
+                    const isUploading = uploadingKey === item.key;
                     return (
                       <div
                         key={item.key}
@@ -348,13 +386,15 @@ export default function SubirTab({
                         </div>
                         <button
                           className={`doc-btn ${cls}`}
+                          disabled={isUploading}
                           onClick={e => {
                             e.stopPropagation();
                             setSelectedKey(item.key);
-                            if (label !== 'Ver') subirDocumento(item);
+                            if (label === 'Ver') void verDocumento(item);
+                            else seleccionarArchivo(item);
                           }}
                         >
-                          {label}
+                          {isUploading ? 'Subiendo…' : label}
                         </button>
                       </div>
                     );
@@ -374,6 +414,7 @@ export default function SubirTab({
             ) : (() => {
               const { label, cls } = accionDoc(selected);
               const historial = selected.doc?.historial || [];
+              const isUploading = uploadingKey === selected.key;
               return (
                 <>
                   <div className="doc-detail-head">
@@ -424,9 +465,9 @@ export default function SubirTab({
                       <div className="doc-mini"><span>Consecuencia</span><b>{impactoLabel(selected.requisito)}</b></div>
                     </div>
 
-                    {selected.doc ? (
+                    {selected.doc?.archivoReferencia ? (
                       <div className="doc-upload-box">
-                        <strong>{selected.doc.archivoReferencia || 'Documento cargado'}</strong>
+                        <strong>{selected.doc.archivoReferencia}</strong>
                         {selected.doc.subido ? `Última carga: ${selected.doc.subido}` : 'Archivo asociado actualmente'}
                       </div>
                     ) : (
@@ -468,12 +509,17 @@ export default function SubirTab({
                       <button className="doc-btn doc-btn-ghost" onClick={() => setSelectedKey(null)}>Cerrar</button>
                       <button
                         className={`doc-btn ${cls}`}
+                        disabled={isUploading}
                         onClick={() => {
-                          if (label !== 'Ver') subirDocumento(selected);
-                          else if (selected.doc?.archivoReferencia) showToast(`Archivo actual: ${selected.doc.archivoReferencia}`, 'success');
+                          if (label === 'Ver') void verDocumento(selected);
+                          else seleccionarArchivo(selected);
                         }}
                       >
-                        {selected.estado === 'En revisión' || selected.estado === 'Aprobado' ? 'Ver documento' : label}
+                        {isUploading
+                          ? 'Subiendo…'
+                          : selected.estado === 'En revisión' || selected.estado === 'Aprobado'
+                            ? 'Ver documento'
+                            : label}
                       </button>
                     </div>
                   </div>
