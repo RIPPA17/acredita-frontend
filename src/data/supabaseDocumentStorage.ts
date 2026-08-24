@@ -324,3 +324,79 @@ export async function loadDocumentFileObjectUrl(context: DocumentStorageContext)
     mimeType: file.mimeType,
   };
 }
+
+
+export interface DocumentReviewDecision {
+  action: 'approve' | 'reject';
+  reviewerName?: string;
+  reason?: string;
+  explanation?: string;
+  solution?: string;
+}
+
+export async function reviewLatestDocumentVersion(
+  context: DocumentStorageContext,
+  decision: DocumentReviewDecision,
+): Promise<{ version: number; status: 'aprobado' | 'rechazado' }> {
+  const session = await restoreSupabaseSession();
+  if (!session) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+  if (session.role !== 'admin') throw new Error('Solo Acredita puede aprobar o rechazar documentos.');
+
+  const token = session._supabase.accessToken;
+  const { document } = await resolveDocumentContext(token, context, false);
+  type ReviewableVersion = {
+    id: string;
+    version_number: number;
+    workflow_status: 'pendiente' | 'revision' | 'aprobado' | 'rechazado' | 'reemplazado';
+    metadata: Record<string, unknown> | null;
+  };
+
+  const versions = await selectRows<ReviewableVersion>('document_versions', token, {
+    select: 'id,version_number,workflow_status,metadata',
+    document_id: `eq.${document.id}`,
+    order: 'version_number.desc',
+    limit: '1',
+  });
+  const latest = versions[0];
+  if (!latest) throw new Error('Este documento no tiene una versión para revisar.');
+  if (latest.workflow_status !== 'revision') throw new Error('La versión más reciente ya no está en revisión.');
+  if (decision.action === 'reject' && !decision.reason?.trim()) {
+    throw new Error('Debes indicar un motivo de rechazo.');
+  }
+
+  const nextStatus = decision.action === 'approve' ? 'aprobado' : 'rechazado';
+  const reviewedAt = new Date().toISOString();
+  const patch = {
+    workflow_status: nextStatus,
+    reviewed_by: session.profileId,
+    reviewed_at: reviewedAt,
+    rejection_reason: decision.action === 'reject' ? decision.reason?.trim() : null,
+    rejection_explanation: decision.action === 'reject'
+      ? (decision.explanation?.trim() || decision.reason?.trim())
+      : null,
+    rejection_solution: decision.action === 'reject'
+      ? (decision.solution?.trim() || decision.explanation?.trim() || null)
+      : null,
+    metadata: {
+      ...(latest.metadata || {}),
+      reviewer_name: decision.reviewerName || session.nombre || session.email,
+      frontend_reviewed_text: reviewedAt,
+      backend_review_decision: true,
+    },
+  };
+
+  const url = new URL(`${SUPABASE_URL}/rest/v1/document_versions`);
+  url.searchParams.set('id', `eq.${latest.id}`);
+  const response = await fetch(url.toString(), {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), Prefer: 'return=representation' },
+    body: JSON.stringify(patch),
+  });
+  const updated = await assertResponse(response, 'No fue posible guardar la revisión en Supabase.') as unknown[];
+  if (!Array.isArray(updated) || updated.length !== 1) {
+    throw new Error('La versión cambió mientras la revisabas. Recarga la cola.');
+  }
+
+  await hydrateOperationalDataFromSupabase(session);
+  return { version: latest.version_number, status: nextStatus };
+}
