@@ -2,6 +2,7 @@ import {
   getRequisitos,
   esDocumentoCumplido,
   esVencidoPorFecha,
+  esPorVencerPorFecha,
   esTrabajadorAsignado,
   calcularEstadoAcreditacion,
 } from '../../data/localStorageDb';
@@ -53,19 +54,20 @@ export interface AcredRow {
   workerList: Array<{ nombre: string; rut: string; estado: DocEstado }>;
 }
 
+const normalizarNombre = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 const matchDoc = (docs: Documento[] | undefined, proyectoId: string, reqNombre: string) =>
   (docs || []).find(d =>
     d.proyectoId === proyectoId &&
-    (d.nombre.toLowerCase().includes(reqNombre.toLowerCase()) || reqNombre.toLowerCase().includes(d.nombre.toLowerCase()))
+    normalizarNombre(d.nombre) === normalizarNombre(reqNombre)
   );
 
-export const docEstadoLabel = (doc: Documento | undefined): DocEstado => {
+export const docEstadoLabel = (doc: Documento | undefined, requisito?: Requisito): DocEstado => {
   if (!doc) return 'Pendiente';
   if (doc.estado === 'pendiente') return 'Pendiente';
   if (doc.estado === 'revision') return 'En revisión';
   if (doc.estado === 'rechazado') return 'Rechazado';
   if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
-  if (doc.estado === 'por_vencer') return 'Por vencer';
+  if (doc.estado === 'por_vencer' || (requisito && esPorVencerPorFecha(doc.vencimiento, requisito.alertaDias))) return 'Por vencer';
   return 'Aprobado';
 };
 
@@ -119,7 +121,7 @@ export function buildAcreditacionRows(
       // Empresa marcado "Opcional", pero nunca baja el score ni bloquea.
       const companyDocsFull = companyReqs.map(req => {
         const doc = matchDoc(c.documentos, proyectoId, req.nombre);
-        return { req, doc, nombre: req.nombre, estado: docEstadoLabel(doc), obligatorio: req.obligatorio, cumplido: esDocumentoCumplido(doc, req) };
+        return { req, doc, nombre: req.nombre, estado: docEstadoLabel(doc, req), obligatorio: req.obligatorio, cumplido: esDocumentoCumplido(doc, req) };
       });
       const mandatoryCompanyDocs = companyDocsFull.filter(d => d.obligatorio);
       const companyOk = mandatoryCompanyDocs.filter(d => d.cumplido).length;
@@ -142,7 +144,7 @@ export function buildAcreditacionRows(
       projectWorkers.forEach(w => {
         const wDocs = workerReqs.map(req => {
           const doc = matchDoc(w.documentos, proyectoId, req.nombre);
-          return { req, doc, estado: docEstadoLabel(doc), cumplido: esDocumentoCumplido(doc, req) };
+          return { req, doc, estado: docEstadoLabel(doc, req), cumplido: esDocumentoCumplido(doc, req) };
         });
         const mandatory = wDocs.filter(d => d.req.obligatorio);
 

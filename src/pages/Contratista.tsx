@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Documento } from '../types';
+import { Documento, Trabajador } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion, getPreferenciasNotificacionesContratista } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
@@ -59,7 +59,7 @@ export default function ContratistaPortal() {
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
-  const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<any | null>(null);
+  const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<Trabajador | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
   const [newWorkerForm, setNewWorkerForm] = useState({
     nombre: '',
@@ -210,7 +210,7 @@ export default function ContratistaPortal() {
         nombre: newWorkerForm.nombre,
         rut: newWorkerForm.rut,
         estado: 'pendiente',
-        cargo: newWorkerForm.cargo || 'Operario',
+        cargo: newWorkerForm.cargo || undefined,
         faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
         cumplimiento: 0,
         documentos: workerDocs,

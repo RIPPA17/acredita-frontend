@@ -655,8 +655,7 @@ export function esRequisitoObligatorio(docNombre: string, proyectoId?: string): 
   const reqs = getRequisitos();
   const rule = reqs.find(r => 
     (!proyectoId || r.proyectoId === proyectoId) && 
-    (docNombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
-     r.nombre.toLowerCase().includes(docNombre.toLowerCase()))
+    nombresDocumentoCoinciden(docNombre, r.nombre)
   );
   if (!rule) return true;
   return rule.obligatorio;
@@ -666,19 +665,21 @@ export function esReglaBloqueante(docNombre: string, proyectoId?: string): boole
   const reqs = getRequisitos();
   const rule = reqs.find(r => 
     (!proyectoId || r.proyectoId === proyectoId) && 
-    (docNombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
-     r.nombre.toLowerCase().includes(docNombre.toLowerCase()))
+    nombresDocumentoCoinciden(docNombre, r.nombre)
   );
   if (!rule) return false;
   return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago' || rule.criticidad === 'bloquea_ambas';
 }
 
+function nombresDocumentoCoinciden(a: string, b: string): boolean {
+  const normalizar = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalizar(a) === normalizar(b);
+}
+
 export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito): boolean {
   if (!doc) return false;
   
-  const matchNombre = doc.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-                      req.nombre.toLowerCase().includes(doc.nombre.toLowerCase());
-  if (!matchNombre) return false;
+  if (!nombresDocumentoCoinciden(doc.nombre, req.nombre)) return false;
   
   if (doc.proyectoId !== req.proyectoId) return false;
 
@@ -710,8 +711,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId?: string): 'a
   reqs.forEach(req => {
     const doc = documentos.find(d => 
       d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      nombresDocumentoCoinciden(d.nombre, req.nombre)
     );
 
     if (!doc) {
@@ -729,7 +729,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId?: string): 'a
       } else {
         hasPendiente = true;
       }
-    } else if (cumplido && req.obligatorio && doc.estado === 'por_vencer') {
+    } else if (cumplido && req.obligatorio && (doc.estado === 'por_vencer' || esPorVencerPorFecha(doc.vencimiento, req.alertaDias))) {
       hasPorVencer = true;
     }
   });
@@ -784,8 +784,7 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string):
   reqs.forEach(req => {
     const doc = documentos.find(d => 
       d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      nombresDocumentoCoinciden(d.nombre, req.nombre)
     );
     if (!doc) {
       if (req.obligatorio) {
@@ -824,8 +823,7 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string):
   const uploadedCompanyMandatory = mandatoryCompanyReqs.filter(req => 
     documentos.some(d => 
       d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      nombresDocumentoCoinciden(d.nombre, req.nombre)
     )
   );
   const noneUploaded = mandatoryCompanyReqs.length > 0 && uploadedCompanyMandatory.length === 0;
@@ -849,8 +847,7 @@ export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Nor
     const reqs = getRequisitos();
     rule = reqs.find(reg => 
       (!d.proyectoId || reg.proyectoId === d.proyectoId) && 
-      (d.nombre.toLowerCase().includes(reg.nombre.toLowerCase()) || 
-       reg.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+      nombresDocumentoCoinciden(d.nombre, reg.nombre)
     );
   }
 
@@ -945,8 +942,7 @@ export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
       wkReqs.forEach(req => {
         const doc = (w.documentos || []).find(d => 
           d.proyectoId === proyectoId &&
-          (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-           req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+          nombresDocumentoCoinciden(d.nombre, req.nombre)
         );
         const cumplido = esDocumentoCumplido(doc, req);
         if (req.obligatorio && !cumplido) {
@@ -1075,8 +1071,7 @@ export function evaluarHabilitacionCompuerta(
     .forEach(d => {
       const req = gateReqs.find(r => 
         r.destino === 'empresa' &&
-        (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
-         r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+        nombresDocumentoCoinciden(d.nombre, r.nombre)
       );
       if (req) {
         const dias = obtenerDiasRestantes(d.vencimiento);
@@ -1102,8 +1097,7 @@ export function evaluarHabilitacionCompuerta(
         .forEach(d => {
           const req = gateReqs.find(r => 
             r.destino === 'trabajador' &&
-            (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || 
-             r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+            nombresDocumentoCoinciden(d.nombre, r.nombre)
           );
           if (req) {
             const dias = obtenerDiasRestantes(d.vencimiento);

@@ -172,7 +172,7 @@ export default function TrabajadoresTab({
             <div className="tw-avatar">{iniciales(selected.trabajador.nombre)}</div>
             <div className="tw-min-0">
               <h2>{selected.trabajador.nombre}</h2>
-              <p>{selected.trabajador.rut} · {selected.trabajador.cargo || 'Operario'} · {proyecto.nombre}</p>
+              <p>{selected.trabajador.rut} · {selected.trabajador.cargo || 'Sin cargo'} · {proyecto.nombre}</p>
             </div>
           </div>
           <div className="tw-detail-actions">
@@ -286,7 +286,7 @@ export default function TrabajadoresTab({
             return (
               <div className="tw-table-row" key={item.trabajador.rut}>
                 <div className="tw-person"><div className="tw-avatar">{iniciales(item.trabajador.nombre)}</div><div className="tw-min-0"><strong>{item.trabajador.nombre}</strong><small>{item.trabajador.rut}</small></div></div>
-                <div className="tw-cargo">{item.trabajador.cargo || 'Operario'}</div>
+                <div className="tw-cargo">{item.trabajador.cargo || 'Sin cargo'}</div>
                 <div><span className={`tw-badge ${ESTADO_UI[item.estado].badge}`}>{ESTADO_UI[item.estado].label}</span></div>
                 <div className="tw-progress-cell"><div><span>{item.vigentes}/{item.totalObligatorios} vigentes</span><b>{item.porcentaje}%</b></div><div className="tw-progress"><i style={{ width: `${item.porcentaje}%` }} /></div></div>
                 <div><strong className={acceso ? 'tw-access-ok' : 'tw-access-no'}>{acceso ? 'Habilitado' : 'No habilitado'}</strong><small>{item.estado === 'por_vencer' ? 'Válido hasta su vencimiento.' : item.estado === 'pendiente' ? 'Faltan requisitos obligatorios.' : motivo || 'Sin bloqueos.'}</small></div>

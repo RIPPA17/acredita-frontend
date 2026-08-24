@@ -34,7 +34,7 @@ export function buildRequisitosEmpresa(
     .filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false)
     .map(requisito => {
       const doc = matchDocumentoRequisito(contratista.documentos, proyectoId, requisito.nombre);
-      return { requisito, doc, estado: docEstadoLabel(doc), cumplido: esDocumentoCumplido(doc, requisito) };
+      return { requisito, doc, estado: docEstadoLabel(doc, requisito), cumplido: esDocumentoCumplido(doc, requisito) };
     });
 }
 
@@ -47,7 +47,7 @@ export function buildRequisitosTrabajador(
     .filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false)
     .map(requisito => {
       const doc = matchDocumentoRequisito(worker.documentos, proyectoId, requisito.nombre);
-      return { requisito, doc, estado: docEstadoLabel(doc), cumplido: esDocumentoCumplido(doc, requisito), worker };
+      return { requisito, doc, estado: docEstadoLabel(doc, requisito), cumplido: esDocumentoCumplido(doc, requisito), worker };
     });
 }
 
