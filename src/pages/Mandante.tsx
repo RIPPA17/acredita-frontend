@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion } from '../data/localStorageDb';
 import { Contratista } from '../types';
-import FichaAcreditacion from '../components/FichaAcreditacion';
 import ConfigTab from './mandante/ConfigTab';
 import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
@@ -37,10 +36,7 @@ export default function MandantePortal() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [vistaContratistas, setVistaContratistas] = useState<'proyectos' | string>('proyectos');
   const [selectedContratista, setSelectedContratista] = useState<string | null>(null);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
-  const [fichaTrabajador, setFichaTrabajador] = useState<any>(undefined);
-  const [filtroControl, setFiltroControl] = useState<'todos' | 'aprobados' | 'en_proceso' | 'bloqueados' | 'atencion'>('todos');
-  const [dashboardSubTab, setDashboardSubTab] = useState<'contratistas' | 'trabajadores'>('contratistas');
+  const [contractorFocus, setContractorFocus] = useState<{ projectId: string; workerRut?: string } | null>(null);
   const [ajustesEditando, setAjustesEditando] = useState(false);
   const [proyectoArchivado, setProyectoArchivado] = useState(false);
   const [proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes] = useState<string | null>(null);
@@ -62,6 +58,7 @@ export default function MandantePortal() {
 
   const goToProject = (projectId: string) => {
     setSelectedProjectId(projectId);
+    setProyectoSeleccionadoAjustes(projectId);
     setActiveTab('proyectos');
     setActiveProjectTab('resumen');
   };
@@ -521,16 +518,21 @@ export default function MandantePortal() {
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
             <DashboardTab
-              activeProjectId={activeProjectId}
               allContratistas={allContratistas}
               misProyectos={misProyectos}
-              filtroControl={filtroControl}
-              setFiltroControl={setFiltroControl}
-              setSelectedProjectId={setSelectedProjectId}
-              setClienteSeleccionado={setClienteSeleccionado}
-              dashboardSubTab={dashboardSubTab}
-              setDashboardSubTab={setDashboardSubTab}
-              setFichaTrabajador={setFichaTrabajador}
+              onOpenProject={goToProject}
+              onOpenContractor={(projectId, contractorId) => {
+                setSelectedProjectId(projectId);
+                setSelectedContratista(contractorId);
+                setContractorFocus({ projectId });
+                setActiveTab('contratistas');
+              }}
+              onOpenWorker={(projectId, contractorId, workerRut) => {
+                setSelectedProjectId(projectId);
+                setSelectedContratista(contractorId);
+                setContractorFocus({ projectId, workerRut });
+                setActiveTab('contratistas');
+              }}
             />
           )}
 
@@ -576,6 +578,8 @@ export default function MandantePortal() {
               allContratistas={allContratistas}
               selectedContratista={selectedContratista}
               setSelectedContratista={setSelectedContratista}
+              focus={contractorFocus}
+              onClearFocus={() => setContractorFocus(null)}
               onOpenProject={projectId => {
                 setSelectedProjectId(projectId);
                 setVistaContratistas(projectId);
@@ -743,29 +747,6 @@ export default function MandantePortal() {
             </div>
           </div>
         </div>
-      )}
-      {/* Sliding Side Drawer for Contractor Details */}
-      {clienteSeleccionado && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black/20 z-[399] transition-opacity duration-300"
-            onClick={() => { setClienteSeleccionado(null); setFichaTrabajador(undefined); }}
-          />
-          {(() => {
-            const cObj = allContratistas.find(c => c.id === clienteSeleccionado.id);
-            if (!cObj) return null;
-            return (
-              <FichaAcreditacion
-                tipo={fichaTrabajador ? "trabajador" : "empresa"}
-                contratista={cObj}
-                trabajador={fichaTrabajador}
-                proyectoId={activeProjectId}
-                onClose={() => { setClienteSeleccionado(null); setFichaTrabajador(undefined); }}
-                rol="mandante"
-              />
-            );
-          })()}
-        </>
       )}
     </div>
   );

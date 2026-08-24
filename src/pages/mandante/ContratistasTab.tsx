@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Building2, FileText, Folder, ShieldCheck, Users } from 'lucide-react';
-import { calcularAccesoPago, calcularEstadoAcreditacion, esTrabajadorAsignado } from '../../data/localStorageDb';
+import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, esTrabajadorAsignado } from '../../data/localStorageDb';
 import { Contratista, Proyecto } from '../../types';
 
 type ContractorTab = 'resumen' | 'acreditaciones' | 'trabajadores' | 'documentos';
@@ -16,12 +16,16 @@ export default function ContratistasTab({
   allContratistas,
   selectedContratista,
   setSelectedContratista,
+  focus,
+  onClearFocus,
   onOpenProject,
 }: {
   misProyectos: Proyecto[];
   allContratistas: Contratista[];
   selectedContratista: string | null;
   setSelectedContratista: (id: string | null) => void;
+  focus?: { projectId: string; workerRut?: string } | null;
+  onClearFocus: () => void;
   onOpenProject: (projectId: string) => void;
 }) {
   const [activeContractorTab, setActiveContractorTab] = useState<ContractorTab>('resumen');
@@ -30,9 +34,14 @@ export default function ContratistasTab({
   const selected = contratistasMandante.find(contratista => contratista.id === selectedContratista);
 
   const selectContractor = (id: string) => {
+    onClearFocus();
     setSelectedContratista(id);
     setActiveContractorTab('resumen');
   };
+
+  useEffect(() => {
+    if (focus) setActiveContractorTab(focus.workerRut ? 'trabajadores' : 'acreditaciones');
+  }, [focus]);
 
   if (!selected) {
     return (
@@ -61,7 +70,8 @@ export default function ContratistasTab({
     );
   }
 
-  const proyectos = misProyectos.filter(project => project.contratistas.includes(selected.id));
+  const proyectosAsociados = misProyectos.filter(project => project.contratistas.includes(selected.id));
+  const proyectos = focus ? proyectosAsociados.filter(project => project.id === focus.projectId) : proyectosAsociados;
   const tabs: Array<{ id: ContractorTab; label: string; icon: typeof Building2 }> = [
     { id: 'resumen', label: 'Resumen', icon: Building2 },
     { id: 'acreditaciones', label: 'Acreditaciones', icon: ShieldCheck },
@@ -71,7 +81,7 @@ export default function ContratistasTab({
 
   return (
     <div className="fade-in">
-      <button type="button" className="btn btn-ghost mb-4" onClick={() => setSelectedContratista(null)}><ArrowLeft size={16} /> Volver a contratistas</button>
+      <button type="button" className="btn btn-ghost mb-4" onClick={() => { onClearFocus(); setSelectedContratista(null); }}><ArrowLeft size={16} /> Volver a contratistas</button>
       <div className="page-header"><div><h2 className="page-title">{selected.nombre}</h2><p className="page-sub">RUT {selected.rut} · {proyectos.length} proyecto{proyectos.length === 1 ? '' : 's'} asociado{proyectos.length === 1 ? '' : 's'}</p></div></div>
       <div className="tab-bar mb-6 grid grid-cols-4 w-full sm:flex sm:w-max">
         {tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={`tab min-w-0 justify-center px-1 text-[11px] sm:px-4 sm:text-[13px] ${activeContractorTab === id ? 'active' : ''}`} onClick={() => setActiveContractorTab(id)}><Icon size={15} className="hidden sm:block" /> {label}</button>)}
@@ -87,7 +97,7 @@ export default function ContratistasTab({
         </div>
       )}
 
-      {activeContractorTab === 'trabajadores' && <div className="card"><div className="table-wrap"><table><thead><tr><th>Trabajador</th><th>RUT</th><th>Proyecto</th><th>Estado</th></tr></thead><tbody>{proyectos.flatMap(project => (selected.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, project.id)).map(worker => <tr key={`${project.id}:${worker.rut}`}><td>{worker.nombre}</td><td>{worker.rut}</td><td>{project.nombre}</td><td>{worker.estado}</td></tr>))}</tbody></table></div></div>}
+      {activeContractorTab === 'trabajadores' && <div className="card"><div className="table-wrap"><table><thead><tr><th>Trabajador</th><th>RUT</th><th>Proyecto</th><th>Estado</th></tr></thead><tbody>{proyectos.flatMap(project => (selected.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, project.id)).map(worker => <tr key={`${project.id}:${worker.rut}`} className={worker.rut === focus?.workerRut ? 'bg-yellow-50' : undefined}><td>{worker.nombre}</td><td>{worker.rut}</td><td>{project.nombre}</td><td>{calcularEstadoTrabajador(worker, project.id)}</td></tr>))}</tbody></table></div></div>}
 
       {activeContractorTab === 'documentos' && <div className="card"><div className="table-wrap"><table><thead><tr><th>Documento</th><th>Proyecto</th><th>Estado</th><th>Vencimiento</th></tr></thead><tbody>{selected.documentos.filter(doc => proyectos.some(project => project.id === doc.proyectoId)).map(doc => <tr key={doc.id}><td>{doc.nombre}</td><td>{proyectos.find(project => project.id === doc.proyectoId)?.nombre || '—'}</td><td>{doc.estado}</td><td>{doc.vencimiento}</td></tr>)}</tbody></table></div></div>}
     </div>
