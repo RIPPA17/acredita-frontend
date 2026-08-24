@@ -11,6 +11,7 @@ import {
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion } from '../data/localStorageDb';
 import { Contratista } from '../types';
 import ConfigTab from './mandante/ConfigTab';
+import type { ConfigTabId } from './mandante/config/configUtils';
 import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
 import ContratistasTab from './mandante/ContratistasTab';
@@ -28,7 +29,8 @@ export default function MandantePortal() {
   };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeConfigTab, setActiveConfigTab] = useState<'perfil' | 'equipo' | 'alertas' | 'api'>('perfil');
+  const [activeConfigTab, setActiveConfigTab] = useState<ConfigTabId>('empresa');
+  const [configHasUnsavedChanges, setConfigHasUnsavedChanges] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [activeProjectTab, setActiveProjectTab] = useState('resumen');
   const [editingContractorId, setEditingContractorId] = useState<string | null>(null);
@@ -69,6 +71,15 @@ export default function MandantePortal() {
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
     setToast({msg, type});
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const changeMainTab = (nextTab: string) => {
+    if (activeTab === 'config' && nextTab !== 'config' && configHasUnsavedChanges) {
+      const shouldLeave = window.confirm('Tienes cambios sin guardar. ¿Quieres salir sin guardar?');
+      if (!shouldLeave) return false;
+    }
+    setActiveTab(nextTab);
+    return true;
   };
 
   const handleCellEdit = () => {
@@ -450,7 +461,7 @@ export default function MandantePortal() {
           {menuItems.map(item => (
             <React.Fragment key={item.id}>
               <button 
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => changeMainTab(item.id)}
                 className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
                 title={sidebarCollapsed ? item.label : undefined}
               >
@@ -494,7 +505,7 @@ export default function MandantePortal() {
               {menuItems.map(item => (
                 <React.Fragment key={item.id}>
                   <button 
-                    onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                    onClick={() => { if (changeMainTab(item.id)) setMobileMenuOpen(false); }}
                     className={`sb-item w-full flex text-left ${activeTab === item.id ? 'active' : ''}`}
                   >
                     <item.icon size={18} className="shrink-0" /> 
@@ -599,13 +610,13 @@ export default function MandantePortal() {
 
           {/* CONFIGURACIÓN Y PREFERENCIAS */}
           {activeTab === 'config' && (
-            <ConfigTab activeConfigTab={activeConfigTab} setActiveConfigTab={setActiveConfigTab} showToast={showToast} />
+            <ConfigTab activeConfigTab={activeConfigTab} setActiveConfigTab={setActiveConfigTab} showToast={showToast} misProyectos={misProyectos} mandante={mandanteLogueado} onDirtyChange={setConfigHasUnsavedChanges} />
           )}
 
           {/* MOBILE NAVBAR */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-50">
             {menuItems.map(item => (
-              <button key={item.id} onClick={() => setActiveTab(item.id)}
+              <button key={item.id} onClick={() => changeMainTab(item.id)}
                 className={`flex-1 flex flex-col items-center py-3 text-[11px] gap-1
                   ${activeTab === item.id ? 'text-brown font-semibold' : 'text-gray-400'}`}>
                 <item.icon size={20} />

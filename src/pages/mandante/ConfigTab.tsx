@@ -1,171 +1,46 @@
-import { Save, Building2, Users, Bell, Plug, ToggleRight } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bell, Building2, Settings, Upload, Users } from 'lucide-react';
+import type { Mandante, Proyecto } from '../../types';
+import { clone, ConfigTabId, ConfigUser, initials, loadSettings, MandanteSettings, saveSettings, UserRole, UserStatus, validEmail } from './config/configUtils';
+import './ConfigTab.css';
 
-type ConfigSubTab = 'perfil' | 'equipo' | 'alertas' | 'api';
+interface Props { activeConfigTab:ConfigTabId; setActiveConfigTab:(tab:ConfigTabId)=>void; showToast:(message:string,type?:'success'|'error'|'warning')=>void; misProyectos:Proyecto[]; mandante:Mandante; onDirtyChange?:(dirty:boolean)=>void }
+const ROLES:UserRole[]=['Administrador','Operaciones / Prevención','Finanzas','Solo lectura'];
+const ROLE_TEXT:Record<UserRole,string>={'Administrador':'Configuración, equipo y acceso completo a los proyectos asignados.','Operaciones / Prevención':'Contratistas, trabajadores, documentos, alertas de acceso y consulta operacional.','Finanzas':'Acreditaciones, retenciones de pago, contratistas y consulta documental.','Solo lectura':'Consulta sin cambios de configuración.'};
+const EMPTY={name:'',email:'',role:'Solo lectura' as UserRole,access:'all' as 'all'|'selected',projectIds:[] as string[]};
 
-export default function ConfigTab({
-  activeConfigTab,
-  setActiveConfigTab,
-  showToast,
-}: {
-  activeConfigTab: ConfigSubTab;
-  setActiveConfigTab: (tab: ConfigSubTab) => void;
-  showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
-}) {
-  return (
-    <div className="fade-in">
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Configuración de la Cuenta</h2>
-          <p className="page-sub">Preferencias de la empresa, equipo y conexiones del sistema</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => showToast('Configuración guardada')}>
-          <Save size={16} className="mr-2" /> Guardar Cambios
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-
-        {/* Menú lateral de configuración interno */}
-        <div className="lg:col-span-1 flex flex-col gap-1.5">
-          <button
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'perfil' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
-            onClick={() => setActiveConfigTab('perfil')}
-          >
-            <Building2 size={18} className="text-brown" /> Perfil de Empresa
-          </button>
-          <button
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'equipo' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
-            onClick={() => setActiveConfigTab('equipo')}
-          >
-            <Users size={18} /> Equipo y Accesos
-          </button>
-          <button
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'alertas' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
-            onClick={() => setActiveConfigTab('alertas')}
-          >
-            <Bell size={18} /> Alertas Automáticas
-          </button>
-          <button
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-[14.3px] transition ${activeConfigTab === 'api' ? 'bg-white border border-cream3 text-navy shadow-sm' : 'text-gray-500 hover:bg-cream hover:text-navy'}`}
-            onClick={() => setActiveConfigTab('api')}
-          >
-            <Plug size={18} /> Integraciones / API
-          </button>
-        </div>
-
-        {/* Contenido de Configuración */}
-        <div className="lg:col-span-3 flex flex-col gap-4">
-
-          {/* BLOQUE 1: DATOS DE LA EMPRESA */}
-          {activeConfigTab === 'perfil' && (
-            <div className="card">
-              <h3 className="section-title mb-4">Datos Legales y de Facturación</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="form-group">
-                  <label className="form-label">Razón Social</label>
-                  <input className="form-input" defaultValue="Constructora Andina SA" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">RUT Empresa</label>
-                  <input className="form-input" defaultValue="96.123.456-K" disabled />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Giro / Actividad Económica</label>
-                  <input className="form-input" defaultValue="Construcción de edificios" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Representante Legal</label>
-                  <input className="form-input" defaultValue="Carlos Araya" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* BLOQUE 2: EQUIPO Y ACCESOS */}
-          {activeConfigTab === 'equipo' && (
-            <div className="card">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="section-title mb-0">Gestión de Usuarios Internos</h3>
-                <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo">Añadir Usuario [Demo]</button>
-              </div>
-              <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-                <table className="table w-full text-left min-w-[600px]">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Nombre</th>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Correo</th>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Rol de Acceso</th>
-                    <th className="px-4 py-3 border-b border-cream3 text-[13.2px] text-gray-600 bg-cream2 font-medium">Proyectos Asignados</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-gray-50 border-b border-cream">
-                    <td className="px-4 py-3 font-medium text-[14.3px]">Cristóbal Araya</td>
-                    <td className="px-4 py-3 text-[14.3px] text-gray-500">caraya@andina.cl</td>
-                    <td className="px-4 py-3"><span className="badge border border-brown text-brown">Administrador</span></td>
-                    <td className="px-4 py-3 text-[13.2px]">Todos</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50 border-b border-cream">
-                    <td className="px-4 py-3 font-medium text-[14.3px]">Jorge Morales</td>
-                    <td className="px-4 py-3 text-[14.3px] text-gray-500">jmorales@andina.cl</td>
-                    <td className="px-4 py-3"><span className="badge b-gray">Prevencionista</span></td>
-                    <td className="px-4 py-3 text-[13.2px]">Hospital Regional</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50 border-b border-cream">
-                    <td className="px-4 py-3 font-medium text-[14.3px]">Andrea Silva</td>
-                    <td className="px-4 py-3 text-[14.3px] text-gray-500">asilva@andina.cl</td>
-                    <td className="px-4 py-3"><span className="badge b-blue">Finanzas / Pagos</span></td>
-                    <td className="px-4 py-3 text-[13.2px]">Todos</td>
-                  </tr>
-                </tbody>
-              </table>
-              </div>
-            </div>
-          )}
-
-          {/* BLOQUE 3: ALERTAS AUTOMÁTICAS MOCK */}
-          {activeConfigTab === 'alertas' && (
-            <div className="card">
-              <h3 className="section-title mb-4">Alertas Automáticas</h3>
-              <p className="text-[13.2px] text-gray-500 mb-4">Configura las alertas y notificaciones automáticas que envía el sistema a los contratistas.</p>
-              <div className="flex flex-col gap-3">
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <div className="text-[14px] font-semibold text-navy">Notificación de Vencimiento Próximo</div>
-                    <div className="text-[12px] text-gray-500">Enviar aviso automático 15 días antes del vencimiento.</div>
-                  </div>
-                  <ToggleRight size={28} className="text-[#2a6a3a] cursor-pointer" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* BLOQUE 4: INTEGRACIONES DESTACADAS */}
-          {activeConfigTab === 'api' && (
-            <div className="card border-l-4 border-l-brown">
-              <div className="flex flex-col sm:flex-row items-start gap-4">
-                <div className="w-12 h-12 bg-cream rounded-xl flex items-center justify-center shrink-0">
-                  <Plug className="text-brown" size={24} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="text-[16.5px] font-medium text-navy">Integración de Control de Acceso (Torniquetes)</h3>
-                    <span className="badge b-yellow">Inactivo</span>
-                  </div>
-                  <p className="text-[13.2px] text-gray-500 mb-3 leading-relaxed">
-                    Conecta Acredita con tu sistema físico de ingreso. Si un trabajador de una empresa contratista tiene sus documentos de seguridad vencidos (ej. ODI o Examen de Altura), la barrera bloqueará su acceso automáticamente.
-                  </p>
-                  <div className="flex gap-2">
-                    <button className="btn btn-secondary btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo">Generar API Key [Demo]</button>
-                    <button className="btn btn-ghost btn-sm cursor-not-allowed opacity-50 font-medium" disabled title="No disponible en demo">Ver Documentación [Demo]</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
+export default function ConfigTab({activeConfigTab,setActiveConfigTab,showToast,misProyectos,mandante,onDirtyChange}:Props){
+ const [saved,setSaved]=useState(()=>loadSettings(mandante,misProyectos)); const [settings,setSettings]=useState(()=>clone(saved)); const [dirty,setDirty]=useState(false); const [error,setError]=useState(''); const [notice,setNotice]=useState(''); const [invite,setInvite]=useState(EMPTY); const [inviting,setInviting]=useState(false); const [editing,setEditing]=useState<ConfigUser|null>(null); const fileRef=useRef<HTMLInputElement>(null);
+ const update=(next:MandanteSettings)=>{setSettings(next);setDirty(true);setError('');setNotice('')};
+ useEffect(()=>onDirtyChange?.(dirty),[dirty,onDirtyChange]);
+ useEffect(()=>{const fn=(e:BeforeUnloadEvent)=>{if(dirty)e.preventDefault()};window.addEventListener('beforeunload',fn);return()=>window.removeEventListener('beforeunload',fn)},[dirty]);
+ const eventKeys:(keyof MandanteSettings['notifications'])[]=['workerLosesAccess','paymentRetained','accreditationBlocked','requiredDocumentRejected','accreditationRecovered','documentsExpiring','accreditationsPending'];
+ const activeEvents=eventKeys.some(k=>Boolean(settings.notifications[k])); const admins=settings.users.filter(u=>u.role==='Administrador'&&u.status==='Activo').length;
+ const projectName=(id:string)=>misProyectos.find(p=>p.id===id)?.nombre||id; const projectsText=(u:ConfigUser)=>!misProyectos.length?'Sin proyectos disponibles':u.projectIds.length===misProyectos.length?'Todos los proyectos':u.projectIds.map(projectName).join(', ')||'Sin asignar';
+ const validate=()=>{if(!settings.company.legalName.trim())return'La razón social es obligatoria.';if(!settings.company.legalRepresentative.trim())return'El representante legal es obligatorio.';if(settings.company.corporateEmail&&!validEmail(settings.company.corporateEmail))return'Ingresa un correo corporativo válido.';const mails=settings.users.map(u=>u.email.toLowerCase().trim());if(new Set(mails).size!==mails.length)return'Los correos del equipo deben ser únicos.';if(!settings.users.some(u=>u.role==='Administrador'&&u.status==='Activo'))return'Debe existir al menos un Administrador activo.';if(misProyectos.length&&settings.users.some(u=>u.status==='Activo'&&!u.projectIds.length))return'Cada usuario activo debe tener al menos un proyecto asignado.';if(activeEvents&&!settings.notifications.inApp&&!settings.notifications.email)return'Selecciona al menos un canal para recibir notificaciones.';return''};
+ const save=()=>{const x=validate();if(x){setError(x);showToast(x,'error');return}saveSettings(settings);setSaved(clone(settings));setDirty(false);setError('');setNotice('');showToast('Cambios guardados correctamente')};
+ const discard=()=>{setSettings(clone(saved));setDirty(false);setError('');setNotice('');setInviting(false);setEditing(null);showToast('Cambios descartados','warning')};
+ const company=(key:keyof MandanteSettings['company'],value:string)=>update({...settings,company:{...settings.company,[key]:value}});
+ const logo=(e:React.ChangeEvent<HTMLInputElement>)=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return setError('Selecciona un archivo de imagen válido.');if(f.size>500*1024)return setError('La imagen no puede superar 500 KB.');const r=new FileReader();r.onload=()=>update({...settings,logo:String(r.result)});r.readAsDataURL(f);e.target.value=''};
+ const submitInvite=()=>{if(!invite.name.trim())return setError('Ingresa el nombre del usuario.');if(!validEmail(invite.email))return setError('Ingresa un correo válido.');if(settings.users.some(u=>u.email.toLowerCase()===invite.email.trim().toLowerCase()))return setError('Ya existe un usuario con ese correo.');const ids=invite.access==='all'?misProyectos.map(p=>p.id):invite.projectIds;if(misProyectos.length&&!ids.length)return setError('Selecciona al menos un proyecto.');update({...settings,users:[...settings.users,{id:`user-${Date.now()}`,name:invite.name.trim(),email:invite.email.trim(),role:invite.role,status:'Invitación pendiente',projectIds:ids}]});setInvite(EMPTY);setInviting(false);setNotice('Invitación agregada. Guarda los cambios para confirmarla.')};
+ const saveUser=()=>{if(!editing)return;if(!editing.name.trim())return setError('El nombre es obligatorio.');if(editing.status==='Activo'&&misProyectos.length&&!editing.projectIds.length)return setError('Un usuario activo debe tener al menos un proyecto asignado.');const old=settings.users.find(u=>u.id===editing.id);if(old?.role==='Administrador'&&old.status==='Activo'&&admins===1&&(editing.role!=='Administrador'||editing.status!=='Activo'))return setError('No puedes quitar o desactivar al último Administrador.');update({...settings,users:settings.users.map(u=>u.id===editing.id?editing:u)});setEditing(null)};
+ const deactivate=()=>{if(!editing||!window.confirm(`¿Desactivar a ${editing.name}?`))return;if(editing.role==='Administrador'&&editing.status==='Activo'&&admins===1)return setError('No puedes quitar o desactivar al último Administrador.');setEditing({...editing,status:'Desactivado'})};
+ const toggleNotification=(key:keyof MandanteSettings['notifications'])=>{if((key==='inApp'||key==='email')&&settings.notifications[key]){const other=key==='inApp'?settings.notifications.email:settings.notifications.inApp;if(!other&&activeEvents)return setError('Debes mantener al menos un canal activo mientras existan notificaciones habilitadas.')}update({...settings,notifications:{...settings.notifications,[key]:!settings.notifications[key]}})};
+ const checks=(ids:string[],onChange:(x:string[])=>void)=>!misProyectos.length?<p className="mandante-config-muted">No hay proyectos disponibles para asignar.</p>:<div className="mandante-config-checks">{misProyectos.map(p=><label className="mandante-config-check" key={p.id}><input type="checkbox" checked={ids.includes(p.id)} onChange={()=>onChange(ids.includes(p.id)?ids.filter(x=>x!==p.id):[...ids,p.id])}/>{p.nombre}</label>)}</div>;
+ const notification=(key:keyof MandanteSettings['notifications'],title:string,text:string)=><Toggle title={title} text={text} value={Boolean(settings.notifications[key])} onClick={()=>toggleNotification(key)}/>;
+ return <div className="mandante-config fade-in"><header className="mandante-config-head"><h2>Configuración</h2><p>Administra tu organización y adapta Acredita a la forma en que trabaja tu equipo.</p></header><div className="mandante-config-layout"><nav className="mandante-config-menu" aria-label="Secciones de configuración">{([['empresa',Building2,'Mi empresa'],['equipo',Users,'Equipo y permisos'],['notificaciones',Bell,'Notificaciones'],['preferencias',Settings,'Preferencias']] as const).map(([id,Icon,label])=><button type="button" key={id} className={activeConfigTab===id?'active':''} onClick={()=>setActiveConfigTab(id)}><Icon size={18}/>{label}</button>)}</nav><main className="mandante-config-content">{error&&<div className="mandante-config-error" role="alert">{error}</div>}{notice&&<div className="mandante-config-notice">{notice}</div>}
+ {activeConfigTab==='empresa'&&<><Card title="Logo de la empresa" subtitle="Identifica a tu organización dentro del portal."><div className="mandante-config-logo"><div className="mandante-config-avatar">{settings.logo?<img src={settings.logo} alt="Logo de la empresa"/>:initials(settings.company.legalName)}</div><div><input ref={fileRef} hidden type="file" accept="image/*" onChange={logo}/><button type="button" className="mandante-config-btn secondary" onClick={()=>fileRef.current?.click()}><Upload size={16}/>Cambiar logo</button><p className="mandante-config-help">Máximo 500 KB. Se almacena solo en este navegador.</p></div></div></Card><Card title="Información legal"><div className="mandante-config-grid"><Field id="legalName" label="Razón social" value={settings.company.legalName} onChange={v=>company('legalName',v)}/><Field id="rut" label="RUT empresa" value={settings.company.rut} disabled help="El RUT no puede modificarse desde el portal."/><Field id="activity" label="Giro / actividad económica" value={settings.company.businessActivity} onChange={v=>company('businessActivity',v)}/><Field id="representative" label="Representante legal" value={settings.company.legalRepresentative} onChange={v=>company('legalRepresentative',v)}/></div></Card><Card title="Información de contacto"><div className="mandante-config-grid"><Field id="email" type="email" label="Correo corporativo" value={settings.company.corporateEmail} onChange={v=>company('corporateEmail',v)}/><Field id="phone" label="Teléfono" value={settings.company.phone} onChange={v=>company('phone',v)}/><Field id="address" label="Dirección" value={settings.company.address} onChange={v=>company('address',v)}/><Field id="region" label="Comuna / Región" value={settings.company.communeRegion} onChange={v=>company('communeRegion',v)}/></div></Card></>}
+ {activeConfigTab==='equipo'&&<><section className="mandante-config-card"><div className="mandante-config-title"><div><h3>Equipo y permisos</h3><p>Controla quién puede acceder al portal y qué proyectos puede consultar.</p></div><button type="button" className="mandante-config-btn" onClick={()=>{setInviting(true);setEditing(null);setError('')}}><Users size={16}/>Invitar usuario</button></div>{inviting&&<div className="mandante-config-form"><h3>Invitar usuario</h3><div className="mandante-config-grid"><Field id="inviteName" label="Nombre" value={invite.name} onChange={v=>setInvite({...invite,name:v})}/><Field id="inviteEmail" type="email" label="Correo" value={invite.email} onChange={v=>setInvite({...invite,email:v})}/><Select id="inviteRole" label="Rol" value={invite.role} onChange={v=>setInvite({...invite,role:v as UserRole})} options={ROLES.map(v=>[v,v])}/><Select id="access" label="Acceso inicial" value={invite.access} onChange={v=>setInvite({...invite,access:v as 'all'|'selected'})} options={[["all","Todos los proyectos"],["selected","Elegir proyectos"]]}/></div>{invite.access==='selected'&&checks(invite.projectIds,ids=>setInvite({...invite,projectIds:ids}))}<Actions cancel={()=>{setInviting(false);setInvite(EMPTY);setError('')}} accept={submitInvite} acceptLabel="Agregar invitación"/></div>}{editing&&<div className="mandante-config-form"><h3>Editar {editing.name}</h3><div className="mandante-config-grid"><Field id="editName" label="Nombre" value={editing.name} onChange={v=>setEditing({...editing,name:v})}/><Select id="editRole" label="Rol" value={editing.role} onChange={v=>setEditing({...editing,role:v as UserRole})} options={ROLES.map(v=>[v,v])}/><Select id="editStatus" label="Estado" value={editing.status} onChange={v=>setEditing({...editing,status:v as UserStatus})} options={[["Activo","Activo"],["Desactivado","Desactivado"],["Invitación pendiente","Invitación pendiente"]]}/></div><div className="mandante-config-label" style={{marginTop:14}}>Proyectos asignados</div>{checks(editing.projectIds,ids=>setEditing({...editing,projectIds:ids}))}<div className="mandante-config-actions" style={{justifyContent:'space-between'}}><button type="button" className="mandante-config-btn danger" onClick={deactivate}>Desactivar usuario</button><span><button type="button" className="mandante-config-btn secondary" onClick={()=>{setEditing(null);setError('')}}>Cancelar</button> <button type="button" className="mandante-config-btn" onClick={saveUser}>Guardar usuario</button></span></div></div>}{!settings.users.length?<p className="mandante-config-muted">No hay usuarios configurados.</p>:<div className="mandante-config-table-wrap"><table className={`mandante-config-table ${settings.preferences.tableDensity==='compact'?'compact':''}`}><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Proyectos asignados</th><th>Estado</th><th/></tr></thead><tbody>{settings.users.map(u=><tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td>{u.role}</td><td>{projectsText(u)}</td><td><span className={`mandante-config-badge ${u.status==='Activo'?'active':u.status==='Desactivado'?'inactive':'pending'}`}>{u.status}</span></td><td><button type="button" className="mandante-config-link" onClick={()=>{setEditing({...u,projectIds:[...u.projectIds]});setInviting(false);setError('')}}>Editar</button></td></tr>)}</tbody></table></div>}</section><Card title="Roles disponibles"><div className="mandante-config-cards">{ROLES.map(r=><Info key={r} title={r} text={ROLE_TEXT[r]}/>)}</div></Card></>}
+ {activeConfigTab==='notificaciones'&&<><Card title="Alertas críticas" subtitle="Recibe solo los avisos que realmente necesitas para operar.">{notification('workerLosesAccess','Trabajador pierde acceso','Aviso cuando deja de estar habilitado.')}{notification('paymentRetained','Pago de contratista retenido','Aviso cuando una acreditación bloquea el pago.')}{notification('accreditationBlocked','Acreditación bloqueada','Aviso al pasar a Vencido/Bloqueado.')}{notification('requiredDocumentRejected','Documento obligatorio rechazado','Aviso si afecta acceso o pago.')}{notification('accreditationRecovered','Acreditación vuelve a estar OK','Aviso cuando se resuelve un bloqueo.')}</Card><Card title="Avisos preventivos">{notification('documentsExpiring','Documentos próximos a vencer','Advertencia preventiva; no implica bloqueo todavía.')}{notification('accreditationsPending','Acreditaciones con pendientes','Resumen de casos aún incompletos.')}</Card><Card title="Cómo avisarme"><div className="mandante-config-checks"><label className="mandante-config-check"><input type="checkbox" checked={settings.notifications.inApp} onChange={()=>toggleNotification('inApp')}/>Dentro de Acredita</label><label className="mandante-config-check"><input type="checkbox" checked={settings.notifications.email} onChange={()=>toggleNotification('email')}/>Correo electrónico</label></div><h3 style={{marginTop:20}}>Resumen de actividad</h3><div className="mandante-config-checks">{([['none','Sin resumen'],['daily','Diario'],['weekly','Semanal']] as const).map(([v,l])=><label className="mandante-config-check" key={v}><input type="radio" name="digest" checked={settings.notifications.digest===v} onChange={()=>update({...settings,notifications:{...settings.notifications,digest:v}})}/>{l}</label>)}</div></Card></>}
+ {activeConfigTab==='preferencias'&&<><Card title="Preferencias de uso" subtitle="Pequeños ajustes para que el portal se adapte a tu rutina diaria."><Pref title="Proyecto predeterminado" text="Proyecto seleccionado al entrar a vistas con filtro." value={settings.preferences.defaultProjectId||''} onChange={v=>update({...settings,preferences:{...settings.preferences,defaultProjectId:v||null}})} options={[["","Todos los proyectos"],...misProyectos.map(p=>[p.id,p.nombre] as [string,string])]}/><Pref title="Al ingresar a Acredita" text="Pantalla inicial del Portal Mandante." value={settings.preferences.landingPage} onChange={v=>update({...settings,preferences:{...settings.preferences,landingPage:v as typeof settings.preferences.landingPage}})} options={[["dashboard","Inicio"],["proyectos","Proyectos"],["contratistas","Contratistas"]]}/><Pref title="Mostrar proyectos" text="Qué proyectos se ven por defecto." value={settings.preferences.projectVisibility} onChange={v=>update({...settings,preferences:{...settings.preferences,projectVisibility:v as 'active'|'all'}})} options={[["active","Solo proyectos activos"],["all","Todos los proyectos"]]}/><Pref title="Densidad de tablas" text="Se refleja en la tabla de equipo de esta configuración." value={settings.preferences.tableDensity} onChange={v=>update({...settings,preferences:{...settings.preferences,tableDensity:v as 'comfortable'|'compact'}})} options={[["comfortable","Cómoda"],["compact","Compacta"]]}/><Toggle title="Abrir problemas críticos primero" text="Preferencia disponible para futuras vistas operativas." value={settings.preferences.criticalFirst} onClick={()=>update({...settings,preferences:{...settings.preferences,criticalFirst:!settings.preferences.criticalFirst}})}/><Toggle title="Recordar mis últimos filtros" text="Conserva esta preferencia entre visitas." value={settings.preferences.rememberFilters} onClick={()=>update({...settings,preferences:{...settings.preferences,rememberFilters:!settings.preferences.rememberFilters}})}/></Card><Card title="Integraciones" subtitle="Funciones futuras fuera del alcance operativo del MVP."><div className="mandante-config-cards"><Info title="Control de acceso" text="Torniquetes y sistemas físicos de ingreso." soon/><Info title="ERP / Estados de pago" text="Sincronización con procesos financieros." soon/></div></Card></>}
+ </main></div>{dirty&&<div className="mandante-config-save"><div><strong>Tienes cambios sin guardar</strong><br/><small>Guarda antes de salir de esta sección.</small></div><div className="mandante-config-actions"><button type="button" className="mandante-config-btn secondary" onClick={discard}>Descartar</button><button type="button" className="mandante-config-btn" onClick={save}>Guardar cambios</button></div></div>}</div>
 }
+
+type Opt=readonly [string,string];
+function Card({title,subtitle,children}:{title:string;subtitle?:string;children:React.ReactNode}){return <section className="mandante-config-card"><div className="mandante-config-title"><div><h3>{title}</h3>{subtitle&&<p>{subtitle}</p>}</div></div>{children}</section>}
+function Field({id,label,value,onChange,disabled,type='text',help}:{id:string;label:string;value:string;onChange?:(v:string)=>void;disabled?:boolean;type?:string;help?:string}){return <div className="mandante-config-field"><label htmlFor={id}>{label}</label><input id={id} type={type} value={value} disabled={disabled} onChange={e=>onChange?.(e.target.value)}/>{help&&<small className="mandante-config-help">{help}</small>}</div>}
+function Select({id,label,value,onChange,options}:{id:string;label:string;value:string;onChange:(v:string)=>void;options:Opt[]}){return <div className="mandante-config-field"><label htmlFor={id}>{label}</label><select id={id} value={value} onChange={e=>onChange(e.target.value)}>{options.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>}
+function Actions({cancel,accept,acceptLabel}:{cancel:()=>void;accept:()=>void;acceptLabel:string}){return <div className="mandante-config-actions"><button type="button" className="mandante-config-btn secondary" onClick={cancel}>Cancelar</button><button type="button" className="mandante-config-btn" onClick={accept}>{acceptLabel}</button></div>}
+function Toggle({title,text,value,onClick}:{title:string;text:string;value:boolean;onClick:()=>void}){return <div className="mandante-config-row"><div><strong>{title}</strong><small>{text}</small></div><button type="button" className={`mandante-config-toggle ${value?'on':''}`} aria-label={title} aria-pressed={value} onClick={onClick}><span/></button></div>}
+function Pref({title,text,value,onChange,options}:{title:string;text:string;value:string;onChange:(v:string)=>void;options:Opt[]}){return <div className="mandante-config-row"><div><strong>{title}</strong><small>{text}</small></div><select className="mandante-config-select" style={{maxWidth:270}} value={value} onChange={e=>onChange(e.target.value)}>{options.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>}
+function Info({title,text,soon}:{title:string;text:string;soon?:boolean;key?:React.Key}){return <div className="mandante-config-info"><strong>{title}</strong><small>{text}</small>{soon&&<span className="mandante-config-soon">Próximamente</span>}</div>}
