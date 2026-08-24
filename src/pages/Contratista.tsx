@@ -603,6 +603,7 @@ export default function ContratistaPortal() {
               setFichaTrabajador={setFichaTrabajador}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
+              setShowAddWorkerModal={setShowAddWorkerModal}
             />
           )}
 
