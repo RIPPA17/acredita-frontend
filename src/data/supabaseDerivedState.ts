@@ -124,8 +124,8 @@ export function getBackendWorkerStateForProject(
   const cache = readCache();
   if (!cache) return null;
   const suffix = `:${proyectoId}:${normalizeRut(trabajadorRut)}`;
-  const match = Object.entries(cache.workers || {}).find(([key]) => key.endsWith(suffix));
-  return match?.[1] || null;
+  const matches = Object.entries(cache.workers || {}).filter(([key]) => key.endsWith(suffix));
+  return matches.length === 1 ? matches[0][1] : null;
 }
 
 export async function refreshDerivedStateCache(session: SupabaseUserSession): Promise<void> {
