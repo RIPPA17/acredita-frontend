@@ -1,0 +1,38 @@
+name: Run runtime store patch
+
+on:
+  push:
+    branches:
+      - 'feat/remove-business-localstorage'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/remove-business-localstorage
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Extract and run patch
+        shell: bash
+        run: |
+          sed -n "/python - <<'PY'/,/^          PY$/p" .github/workflows/patch-runtime-store.yml | sed '1d;$d;s/^          //' > /tmp/runtime_patch.py
+          python /tmp/runtime_patch.py
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Commit validated migration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/patch-runtime-store.yml .github/workflows/run-runtime-store-patch.yml
+          git add src/data/runtimeDataStore.ts src/data/localStorageDb.ts src/data/supabaseCoreData.ts src/data/supabaseOperationalData.ts src/components/ProtectedRoute.tsx
+          git commit -m "Elimina localStorage como fuente de negocio"
+          git push origin feat/remove-business-localstorage
