@@ -453,7 +453,9 @@ async function syncVersions(
     const status = payload.workflow_status as BackendVersion['workflow_status'];
     const existing = versions.find(v => v.document_id === backendDocument.id && v.version_number === versionNumber);
     if (existing) {
-      if (session.role === 'admin') {
+      // Una decisión tomada directamente en Supabase es autoridad definitiva.
+      // La capa legacy puede hidratarla, pero nunca volver a sobrescribirla.
+      if (session.role === 'admin' && existing.metadata?.backend_review_decision !== true) {
         const { document_id: _documentId, version_number: _version, ...patch } = payload;
         await patchRows('document_versions', token, { id: `eq.${existing.id}` }, patch);
       }

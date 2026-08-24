@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle, XCircle, Search, AlertTriangle, History, ArrowUpRight, X } from "lucide-react";
-import { getContratistas, getProyectos, getMandantes, actualizarEstadoDocumento, simularNuevaVersion, sembrarDocumentosEjemplo, getVerificadorActual, getSupervisorActual, registrarActividadVerificador } from "../../data/localStorageDb";
+import { getContratistas, getProyectos, getMandantes, simularNuevaVersion, sembrarDocumentosEjemplo, getVerificadorActual, getSupervisorActual, registrarActividadVerificador } from "../../data/localStorageDb";
+import { reviewLatestDocumentVersion } from "../../data/supabaseDocumentStorage";
 import { buildColaDocs, buildCorrectionDocs } from "./colaUtils";
 import { pruneClaimsRevision } from "./verificadorUtils";
 import { Verificador, ClaimRevision } from "../../types";
@@ -236,10 +237,7 @@ export default function ColaRevisionTab({
     showToast(`Documento tomado por ${currentVerificador.nombre}`);
   };
 
-  const aprobar = () => {
-    // Un documento tomado por otro verificador nunca puede aprobarse desde
-    // aquí, sin importar el estado de los botones en la UI — la validación
-    // de propiedad vive también dentro de la función, no solo en `disabled`.
+  const aprobar = async () => {
     if (!current || !currentClaim || !currentVerificador || currentClaim.verificadorId !== currentVerificador.id) return;
     if (!(checks.legible && checks.datos && checks.vigencia)) {
       showToast("Para aprobar, completa el chequeo mínimo", "warning");
@@ -247,36 +245,69 @@ export default function ColaRevisionTab({
     }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
+    if (!cObj || !current.proyectoId) {
+      showToast("No fue posible resolver el documento en Supabase.", "error");
+      return;
+    }
     const verificadorId = currentVerificador.id;
-    if (cObj) {
-      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "approve", { verificador: nombreVerificador(verificadorId) });
+    try {
+      await reviewLatestDocumentVersion({
+        contratistaId: cObj.id,
+        proyectoId: current.proyectoId,
+        requisito: {
+          id: current.docId,
+          nombre: current.title,
+          destino: current.origen === "Trabajador" ? "trabajador" : "empresa",
+        },
+        trabajadorRut: current.trabajadorRut,
+      }, {
+        action: "approve",
+        reviewerName: nombreVerificador(verificadorId),
+      });
       setAprobadosHoy(a => a + 1);
       registrarActividadVerificador(verificadorId, current.key, "aprobado");
+      showToast(`Documento aprobado: ${current.title}`);
+      refreshAndAdvance("pending");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No fue posible aprobar el documento.", "error");
     }
-    showToast(`Documento aprobado: ${current.title}`);
-    refreshAndAdvance("pending");
   };
 
-  const rechazar = () => {
-    // Misma protección de propiedad que aprobar(): nunca confiar solo en
-    // que el botón esté habilitado.
+  const rechazar = async () => {
     if (!current || !currentClaim || !currentVerificador || currentClaim.verificadorId !== currentVerificador.id) return;
     if (!reason) { showToast("Selecciona un motivo de rechazo", "warning"); return; }
     if (!note.trim()) { showToast("Indica brevemente qué debe corregir el contratista", "warning"); return; }
     const list = getContratistas();
     const cObj = list.find(c => c.nombre === current.emp || c.rut === current.rut);
+    if (!cObj || !current.proyectoId) {
+      showToast("No fue posible resolver el documento en Supabase.", "error");
+      return;
+    }
     const verificadorId = currentVerificador.id;
-    if (cObj) {
-      actualizarEstadoDocumento(cObj.id, current.proyectoId, current.docId, "reject", {
-        motivoRechazo: reason,
-        explicacionRechazo: note,
-        verificador: nombreVerificador(verificadorId),
+    try {
+      await reviewLatestDocumentVersion({
+        contratistaId: cObj.id,
+        proyectoId: current.proyectoId,
+        requisito: {
+          id: current.docId,
+          nombre: current.title,
+          destino: current.origen === "Trabajador" ? "trabajador" : "empresa",
+        },
+        trabajadorRut: current.trabajadorRut,
+      }, {
+        action: "reject",
+        reviewerName: nombreVerificador(verificadorId),
+        reason,
+        explanation: note,
+        solution: note,
       });
       setRechazadosHoy(r => r + 1);
       registrarActividadVerificador(verificadorId, current.key, "rechazado");
+      showToast(`Documento rechazado: ${current.title}`, "warning");
+      refreshAndAdvance("pending");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No fue posible rechazar el documento.", "error");
     }
-    showToast(`Documento rechazado: ${current.title}`, "warning");
-    refreshAndAdvance("pending");
   };
 
   const siguienteDocumento = () => {
