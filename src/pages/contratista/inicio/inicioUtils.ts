@@ -139,7 +139,7 @@ export function encontrarProximoVencimiento(items: RequisitoConDoc[]): ProximoVe
 }
 
 export interface EstadoAccesoProyecto {
-  estado: 'habilitado' | 'parcial' | 'bloqueado';
+  estado: 'habilitado' | 'parcial' | 'pendiente' | 'bloqueado';
   label: string;
   trabajadoresNoHabilitados: number;
   totalTrabajadores: number;
@@ -170,18 +170,26 @@ export function getEstadoAccesoProyecto(
   const rechazados = noHabilitados.filter(x => x.estado === 'rechazado').length;
   const pendientes = noHabilitados.filter(x => x.estado === 'pendiente').length;
 
-  let estado: 'habilitado' | 'parcial' | 'bloqueado';
-  if (accesoPago.accesoBloqueado) {
+  let estado: 'habilitado' | 'parcial' | 'pendiente' | 'bloqueado';
+  if (accesoPago.accesoEstado === 'bloqueado') {
     estado = 'bloqueado';
+  } else if (accesoPago.accesoEstado === 'pendiente') {
+    estado = 'pendiente';
   } else if (totalTrabajadores > 0 && noHabilitados.length === totalTrabajadores) {
-    estado = 'bloqueado';
+    estado = rechazados > 0 ? 'bloqueado' : 'pendiente';
   } else if (noHabilitados.length > 0) {
     estado = 'parcial';
   } else {
     estado = 'habilitado';
   }
 
-  const label = estado === 'habilitado' ? 'Acceso habilitado' : estado === 'bloqueado' ? 'Acceso bloqueado' : 'Acceso parcialmente bloqueado';
+  const label = estado === 'habilitado'
+    ? 'Acceso habilitado'
+    : estado === 'bloqueado'
+      ? 'Acceso bloqueado'
+      : estado === 'pendiente'
+        ? 'Acceso pendiente'
+        : 'Acceso parcial';
 
   let detalle: string | undefined;
   if (noHabilitados.length > 0) {

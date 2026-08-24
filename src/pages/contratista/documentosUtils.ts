@@ -1,6 +1,6 @@
 import {
   calcularEstadoTrabajador,
-  DEMO_TODAY,
+  getBusinessToday,
   esPorVencerPorFecha,
   esVencidoPorFecha,
   getContratistas,
@@ -35,9 +35,9 @@ export function getEstadoDocumentoEfectivo(
 ): DocEstado {
   if (!doc || doc.estado === 'pendiente') return 'Pendiente';
   if (doc.estado === 'rechazado') return 'Rechazado';
+  if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
   if (doc.estado === 'revision') return 'En revisión';
   if (doc.estado === 'por_vencer') return 'Por vencer';
-  if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
   if (esPorVencerPorFecha(doc.vencimiento, requisito.alertaDias)) return 'Por vencer';
   return 'Aprobado';
 }
@@ -56,7 +56,7 @@ function fechaCargaDemo(): string {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(DEMO_TODAY);
+  }).format(getBusinessToday());
 }
 
 function idDocumento(

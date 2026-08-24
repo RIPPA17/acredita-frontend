@@ -234,7 +234,7 @@ function runMigrations(): void {
 export function getContratistas(): Contratista[] {
   initDb();
   if (typeof window === 'undefined') return CONTRATISTAS;
-  return JSON.parse(localStorage.getItem('acredita_contratistas') || '[]');
+  return safeParseStorageArray<Contratista>('acredita_contratistas', []);
 }
 
 function snapshotContractorStates(contratistas: Contratista[]): Record<string, { acreditacion: string; accesoBloqueado: boolean; pagoBloqueado: boolean }> {
@@ -340,7 +340,7 @@ export function saveContratistas(data: Contratista[]) {
 export function getProyectos(): Proyecto[] {
   initDb();
   if (typeof window === 'undefined') return PROYECTOS;
-  return JSON.parse(localStorage.getItem('acredita_proyectos') || '[]');
+  return safeParseStorageArray<Proyecto>('acredita_proyectos', []);
 }
 
 export function saveProyectos(data: Proyecto[]) {
@@ -352,7 +352,7 @@ export function saveProyectos(data: Proyecto[]) {
 export function getMandantes(): Mandante[] {
   initDb();
   if (typeof window === 'undefined') return MANDANTES;
-  return JSON.parse(localStorage.getItem('acredita_mandantes') || '[]');
+  return safeParseStorageArray<Mandante>('acredita_mandantes', []);
 }
 
 export function saveMandantes(data: Mandante[]) {
@@ -364,7 +364,7 @@ export function saveMandantes(data: Mandante[]) {
 export function getPlantillas(): any[] {
   initDb();
   if (typeof window === 'undefined') return PLANTILLA_DOCUMENTOS;
-  return JSON.parse(localStorage.getItem('acredita_plantillas') || '[]');
+  return safeParseStorageArray<any>('acredita_plantillas', []);
 }
 
 export function savePlantillas(data: any[]) {
@@ -376,7 +376,7 @@ export function savePlantillas(data: any[]) {
 export function getRequisitos(): Requisito[] {
   initDb();
   if (typeof window === 'undefined') return [];
-  return JSON.parse(localStorage.getItem('acredita_requisitos') || '[]');
+  return safeParseStorageArray<Requisito>('acredita_requisitos', []);
 }
 
 export function saveRequisitos(data: Requisito[]) {
@@ -388,7 +388,7 @@ export function saveRequisitos(data: Requisito[]) {
 export function getReglas(): any[] {
   initDb();
   if (typeof window === 'undefined') return REGLAS_DEFAULT;
-  return JSON.parse(localStorage.getItem('acredita_reglas') || JSON.stringify(REGLAS_DEFAULT));
+  return safeParseStorageArray<any>('acredita_reglas', REGLAS_DEFAULT);
 }
 
 export function saveReglas(data: any[]) {
@@ -400,7 +400,7 @@ export function saveReglas(data: any[]) {
 export function getVerificadores(): Verificador[] {
   initDb();
   if (typeof window === 'undefined') return VERIFICADORES;
-  return JSON.parse(localStorage.getItem('acredita_verificadores') || '[]');
+  return safeParseStorageArray<Verificador>('acredita_verificadores', []);
 }
 
 export function saveVerificadores(data: Verificador[]) {
@@ -415,8 +415,7 @@ export function saveVerificadores(data: Verificador[]) {
 export function getVerificadorActualId(): string | null {
   initDb();
   if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem('acredita_verificador_actual');
-  return raw ? JSON.parse(raw) : null;
+  return safeParseStorageValue<string | null>('acredita_verificador_actual', null, value => typeof value === 'string');
 }
 
 export function setVerificadorActual(id: string) {
@@ -449,7 +448,7 @@ export function getSupervisorActual(): Verificador | null {
 
 export function getClaimsRevision(): ClaimRevision[] {
   if (typeof window === 'undefined') return [];
-  return JSON.parse(localStorage.getItem('acredita_claims_revision') || '[]');
+  return safeParseStorageArray<ClaimRevision>('acredita_claims_revision', []);
 }
 
 export function saveClaimsRevision(data: ClaimRevision[]) {
@@ -460,7 +459,7 @@ export function saveClaimsRevision(data: ClaimRevision[]) {
 
 export function getActividadVerificadores(): ActividadVerificador[] {
   if (typeof window === 'undefined') return [];
-  return JSON.parse(localStorage.getItem('acredita_actividad_verificadores') || '[]');
+  return safeParseStorageArray<ActividadVerificador>('acredita_actividad_verificadores', []);
 }
 
 export function saveActividadVerificadores(data: ActividadVerificador[]) {
@@ -531,10 +530,34 @@ const DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA: PreferenciasNotificacione
 
 const PREFERENCIAS_CONTRATISTA_KEY = 'acredita_preferencias_notificaciones_contratista';
 
+function safeParseStorageValue<T>(key: string, fallback: T, isValid: (value: unknown) => boolean): T {
+  if (typeof window === 'undefined') return fallback;
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isValid(parsed)) return parsed as T;
+  } catch {
+    // Se conserva el valor para permitir recuperación manual.
+  }
+  console.warn(`[Acredita] Se ignoró contenido inválido en localStorage: ${key}`);
+  return fallback;
+}
+
+function safeParseStorageArray<T>(key: string, fallback: T[]): T[] {
+  return safeParseStorageValue<T[]>(key, fallback, Array.isArray);
+}
+
+function safeParseStorageObject<T extends object>(key: string, fallback: T): T {
+  return safeParseStorageValue<T>(key, fallback, value =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  );
+}
+
 export function getPreferenciasNotificacionesContratista(contratistaId: string): PreferenciasNotificacionesContratista {
   if (typeof window === 'undefined') return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
   try {
-    const todas = JSON.parse(localStorage.getItem(PREFERENCIAS_CONTRATISTA_KEY) || '{}') as Record<string, Partial<PreferenciasNotificacionesContratista>>;
+    const todas = safeParseStorageObject<Record<string, Partial<PreferenciasNotificacionesContratista>>>(PREFERENCIAS_CONTRATISTA_KEY, {});
     return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA, ...(todas[contratistaId] || {}) };
   } catch {
     return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
@@ -577,7 +600,23 @@ export function limpiarDatosLocales(): void {
   localStorage.removeItem('acredita_session');
 }
 
-export const DEMO_TODAY = new Date(2026, 7, 22); // 22 de Agosto, 2026
+const BUSINESS_TODAY_OVERRIDE_KEY = 'acredita_business_today_override';
+
+export function getBusinessToday(): Date {
+  const now = new Date();
+  if (typeof window !== 'undefined') {
+    const override = localStorage.getItem(BUSINESS_TODAY_OVERRIDE_KEY);
+    const parsedOverride = override ? parseVencimientoDate(override) : null;
+    if (parsedOverride) return parsedOverride;
+  }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function createCalendarDate(year: number, month: number, day: number): Date | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const date = new Date(year, month, day);
+  return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
+}
 
 export function parseVencimientoDate(vencimientoStr: string): Date | null {
   if (!vencimientoStr || vencimientoStr === '—') return null;
@@ -589,14 +628,14 @@ export function parseVencimientoDate(vencimientoStr: string): Date | null {
         const year = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
         const day = parseInt(parts[2]);
-        return new Date(year, month, day);
+        return createCalendarDate(year, month, day);
       }
       // DD-MM-YYYY
       else {
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
         const year = parseInt(parts[2]);
-        return new Date(year, month, day);
+        return createCalendarDate(year, month, day);
       }
     }
   }
@@ -608,14 +647,14 @@ export function parseVencimientoDate(vencimientoStr: string): Date | null {
         const year = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
         const day = parseInt(parts[2]);
-        return new Date(year, month, day);
+        return createCalendarDate(year, month, day);
       }
       // DD/MM/YYYY
       else {
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
         const year = parseInt(parts[2]);
-        return new Date(year, month, day);
+        return createCalendarDate(year, month, day);
       }
     }
   }
@@ -628,20 +667,21 @@ export function parseVencimientoDate(vencimientoStr: string): Date | null {
     'jul': 6, 'ago': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dic': 11
   };
   const monthStr = parts[1].substring(0, 3).toLowerCase();
-  const month = months[monthStr] !== undefined ? months[monthStr] : 0;
-  return new Date(year, month, day);
+  const month = months[monthStr];
+  if (month === undefined) return null;
+  return createCalendarDate(year, month, day);
 }
 
 export function esVencidoPorFecha(vencimientoStr: string): boolean {
   const vDate = parseVencimientoDate(vencimientoStr);
   if (!vDate) return false;
-  return vDate < DEMO_TODAY;
+  return vDate < getBusinessToday();
 }
 
 export function obtenerDiasRestantes(vencimientoStr: string): number {
   const vDate = parseVencimientoDate(vencimientoStr);
   if (!vDate) return 99999;
-  const diffTime = vDate.getTime() - DEMO_TODAY.getTime();
+  const diffTime = vDate.getTime() - getBusinessToday().getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays;
 }
@@ -671,7 +711,7 @@ export function esReglaBloqueante(docNombre: string, proyectoId?: string): boole
   return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago' || rule.criticidad === 'bloquea_ambas';
 }
 
-function nombresDocumentoCoinciden(a: string, b: string): boolean {
+export function nombresDocumentoCoinciden(a: string, b: string): boolean {
   const normalizar = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
   return normalizar(a) === normalizar(b);
 }
@@ -692,13 +732,7 @@ export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito):
   return true;
 }
 
-export function calcularEstadoTrabajador(w: Trabajador, proyectoId?: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
-  if (!proyectoId) {
-    const allC = getContratistas();
-    const parentC = allC.find(c => c.trabajadores?.some(worker => worker.rut === w.rut));
-    proyectoId = parentC?.proyectos[0] || 'costanera';
-  }
-
+export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
   const documentos = w.documentos || [];
 
@@ -759,15 +793,11 @@ export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyecto
   );
 }
 
-export function esTrabajadorAcreditado(w: Trabajador, proyectoId?: string): boolean {
+export function esTrabajadorAcreditado(w: Trabajador, proyectoId: string): boolean {
   return calcularEstadoTrabajador(w, proyectoId) === 'aprobado';
 }
 
-export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
-  if (!proyectoId) {
-    proyectoId = c.proyectos[0] || 'costanera';
-  }
-
+export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -813,9 +843,9 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string):
     esTrabajadorAsignado(w, proyectoId, proyectos)
   );
 
-  // Prioridad 2: No Acreditado / En proceso
+  // Prioridad 2: toda aprobación obligatoria faltante o pendiente está En proceso.
   if (projectWorkers.length === 0) {
-    return hasRePendiente ? 'No acreditado' : 'En proceso';
+    return 'En proceso';
   }
 
   // Si tiene trabajadores asignados, pero la empresa no ha subido NINGÚN documento obligatorio:
@@ -829,7 +859,7 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId?: string):
   const noneUploaded = mandatoryCompanyReqs.length > 0 && uploadedCompanyMandatory.length === 0;
 
   if (noneUploaded) {
-    return 'No acreditado';
+    return 'En proceso';
   }
 
   const tieneTrabajadorPendiente = projectWorkers.some(w => calcularEstadoTrabajador(w, proyectoId) === 'pendiente');
@@ -868,7 +898,7 @@ export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Nor
       const monthStr = parts[1].substring(0, 3).toLowerCase();
       const month = months[monthStr] !== undefined ? months[monthStr] : 0;
       const uploadDate = new Date(year, month, day);
-      const diffTime = Math.abs(DEMO_TODAY.getTime() - uploadDate.getTime());
+      const diffTime = Math.abs(getBusinessToday().getTime() - uploadDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       if (diffDays >= 3) {
         esAntiguo = true;
@@ -885,16 +915,41 @@ export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Nor
   return 'Baja';
 }
 
-export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
+function estadoBloqueanteRequisito(req: Requisito, doc: Documento | undefined): 'Rechazado' | 'Vencido' | null {
+  if (!req.obligatorio || !doc) return null;
+  if (doc.estado === 'rechazado') return 'Rechazado';
+  if (esVencidoPorFecha(doc.vencimiento)) return 'Vencido';
+  return null;
+}
+
+type EstadoCompuerta = 'habilitado' | 'pendiente' | 'bloqueado';
+
+function estadoRequisitoCompuerta(req: Requisito, doc: Documento | undefined): EstadoCompuerta | null {
+  if (!req.obligatorio) return null;
+  if (!doc) return 'pendiente';
+  if (estadoBloqueanteRequisito(req, doc)) return 'bloqueado';
+  if (doc.estado === 'aprobado' || doc.estado === 'por_vencer') return 'habilitado';
+  return 'pendiente';
+}
+
+function requisitoAplicaACompuerta(req: Requisito, compuerta: 'acceso' | 'pago'): boolean {
+  return req.criticidad === 'bloquea_ambas' || req.criticidad === `bloquea_${compuerta}`;
+}
+
+function buscarDocumentoRequisito(documentos: Documento[], req: Requisito, proyectoId: string): Documento | undefined {
+  return documentos.find(doc => doc.proyectoId === proyectoId && nombresDocumentoCoinciden(doc.nombre, req.nombre));
+}
+
+export function calcularAccesoPago(c: Contratista, proyectoId: string): {
+  accesoEstado: EstadoCompuerta;
   accesoBloqueado: boolean;
+  accesoPendiente: boolean;
   motivoAcceso?: string;
+  pagoEstado: EstadoCompuerta;
   pagoBloqueado: boolean;
+  pagoPendiente: boolean;
   motivoPago?: string;
 } {
-  if (!proyectoId) {
-    proyectoId = c.proyectos[0] || 'costanera';
-  }
-
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -902,29 +957,34 @@ export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
 
   let accesoBloqueado = false;
   let pagoBloqueado = false;
+  let accesoPendiente = false;
+  let pagoPendiente = false;
   const motivosAcceso: string[] = [];
   const motivosPago: string[] = [];
 
   // 1. Evaluar requisitos de empresa
   reqs.filter(r => r.destino === 'empresa').forEach(req => {
-    const doc = documentos.find(d => 
-      d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-    );
+    const doc = buscarDocumentoRequisito(documentos, req, proyectoId);
+    const estadoBloqueante = estadoBloqueanteRequisito(req, doc);
+    const estadoRequisito = estadoRequisitoCompuerta(req, doc);
 
-    const cumplido = esDocumentoCumplido(doc, req);
-
-    if (req.obligatorio && !cumplido) {
-      const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
-      const subMotivo = !doc ? 'No cargado' : isVencido ? 'Vencido' : doc.estado === 'rechazado' ? 'Rechazado' : 'Pendiente';
-      
-      if (req.criticidad === 'bloquea_acceso' || req.criticidad === 'bloquea_ambas') {
+    if (estadoBloqueante) {
+      if (requisitoAplicaACompuerta(req, 'acceso')) {
         accesoBloqueado = true;
+        motivosAcceso.push(`Requisito de empresa "${req.nombre}" ${estadoBloqueante}`);
+      }
+      if (requisitoAplicaACompuerta(req, 'pago')) {
+        pagoBloqueado = true;
+        motivosPago.push(`Requisito de empresa "${req.nombre}" ${estadoBloqueante}`);
+      }
+    } else if (estadoRequisito === 'pendiente') {
+      const subMotivo = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión' : 'pendiente de aprobación';
+      if (requisitoAplicaACompuerta(req, 'acceso')) {
+        accesoPendiente = true;
         motivosAcceso.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
       }
-      if (req.criticidad === 'bloquea_pago' || req.criticidad === 'bloquea_ambas') {
-        pagoBloqueado = true;
+      if (requisitoAplicaACompuerta(req, 'pago')) {
+        pagoPendiente = true;
         motivosPago.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
       }
     }
@@ -944,26 +1004,28 @@ export function calcularAccesoPago(c: Contratista, proyectoId?: string): {
           d.proyectoId === proyectoId &&
           nombresDocumentoCoinciden(d.nombre, req.nombre)
         );
-        const cumplido = esDocumentoCumplido(doc, req);
-        if (req.obligatorio && !cumplido) {
-          const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
-          const subMotivo = !doc ? 'No cargado' : isVencido ? 'Vencido' : doc.estado === 'rechazado' ? 'Rechazado' : 'Pendiente';
-          motivosAcceso.push(`Trabajador "${w.nombre}" inhabilitado: Requisito "${req.nombre}" ${subMotivo}`);
+        const estadoBloqueante = estadoBloqueanteRequisito(req, doc);
+        if (estadoBloqueante) {
+          motivosAcceso.push(`Trabajador "${w.nombre}" inhabilitado: Requisito "${req.nombre}" ${estadoBloqueante}`);
         }
       });
     }
   });
 
   return {
+    accesoEstado: accesoBloqueado ? 'bloqueado' : accesoPendiente ? 'pendiente' : 'habilitado',
     accesoBloqueado,
+    accesoPendiente,
     motivoAcceso: motivosAcceso.length > 0 ? motivosAcceso.join('; ') : undefined,
+    pagoEstado: pagoBloqueado ? 'bloqueado' : pagoPendiente ? 'pendiente' : 'habilitado',
     pagoBloqueado,
+    pagoPendiente,
     motivoPago: motivosPago.length > 0 ? motivosPago.join('; ') : undefined
   };
 }
 
 export interface HabilitacionResultado {
-  estado: 'bloqueado' | 'habilitado';
+  estado: EstadoCompuerta;
   motivo?: string;
   responsable?: 'interno' | 'contratista';
   proximoVencimiento?: {
@@ -985,43 +1047,28 @@ export function evaluarHabilitacionCompuerta(
   const trabajadores = c.trabajadores || [];
   const proyectos = getProyectos();
 
-  let estado: 'bloqueado' | 'habilitado' = 'habilitado';
+  let estado: EstadoCompuerta = 'habilitado';
   const motivos: string[] = [];
   let responsable: 'interno' | 'contratista' | undefined = undefined;
 
   // Filter requirements matching the gate
-  const gateReqs = reqs.filter(r => {
-    if (compuerta === 'acceso') {
-      return r.criticidad === 'bloquea_acceso' || r.criticidad === 'bloquea_ambas';
-    } else {
-      return r.criticidad === 'bloquea_pago' || r.criticidad === 'bloquea_ambas';
-    }
-  });
+  const gateReqs = reqs.filter(r => requisitoAplicaACompuerta(r, compuerta));
 
   // Evaluate company requirements
   gateReqs.filter(r => r.destino === 'empresa').forEach(req => {
-    const doc = documentos.find(d => 
-      d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-    );
+    const doc = buscarDocumentoRequisito(documentos, req, proyectoId);
+    const estadoBloqueante = estadoBloqueanteRequisito(req, doc);
+    const estadoRequisito = estadoRequisitoCompuerta(req, doc);
 
-    const cumplido = esDocumentoCumplido(doc, req);
-
-    if (req.obligatorio && !cumplido) {
+    if (estadoBloqueante) {
       estado = 'bloqueado';
-      const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
-      const subMotivo = !doc ? 'no cargado' : isVencido ? 'vencido' : doc.estado === 'rechazado' ? 'rechazado' : 'pendiente de revisión';
+      motivos.push(`Requisito de empresa "${req.nombre}" ${estadoBloqueante.toLowerCase()}`);
+      responsable = 'contratista';
+    } else if (estadoRequisito === 'pendiente' && estado !== 'bloqueado') {
+      estado = 'pendiente';
+      const subMotivo = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión' : 'pendiente de aprobación';
       motivos.push(`Requisito de empresa "${req.nombre}" ${subMotivo}`);
-
-      // Set responsibility
-      if (doc && doc.estado === 'revision') {
-        if (responsable !== 'contratista') {
-          responsable = 'interno';
-        }
-      } else {
-        responsable = 'contratista';
-      }
+      responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
     }
   });
 
@@ -1036,25 +1083,11 @@ export function evaluarHabilitacionCompuerta(
       if (wState === 'rechazado') {
         const wkReqs = reqs.filter(r => r.destino === 'trabajador');
         wkReqs.forEach(req => {
-          const doc = (w.documentos || []).find(d => 
-            d.proyectoId === proyectoId &&
-            (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-             req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-          );
-          const cumplido = esDocumentoCumplido(doc, req);
-          if (req.obligatorio && !cumplido) {
-            const isVencido = doc ? esVencidoPorFecha(doc.vencimiento) : false;
-            const subMotivo = !doc ? 'no cargado' : isVencido ? 'vencido' : doc.estado === 'rechazado' ? 'rechazado' : 'pendiente de revisión';
-            motivos.push(`Trabajador "${w.nombre}" inhabilitado: "${req.nombre}" ${subMotivo}`);
-            
-            // Set responsibility
-            if (doc && doc.estado === 'revision') {
-              if (responsable !== 'contratista') {
-                responsable = 'interno';
-              }
-            } else {
-              responsable = 'contratista';
-            }
+          const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
+          const estadoBloqueante = estadoBloqueanteRequisito(req, doc);
+          if (estadoBloqueante) {
+            motivos.push(`Trabajador "${w.nombre}" inhabilitado: "${req.nombre}" ${estadoBloqueante.toLowerCase()}`);
+            responsable = 'contratista';
           }
         });
       }
@@ -1155,11 +1188,7 @@ export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
       const companyReqs = requisitos.filter(r => r.proyectoId === pId && r.destino === 'empresa');
 
       companyReqs.forEach(req => {
-        const doc = companyDocs.find(d => 
-          d.proyectoId === pId &&
-          (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-           req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-        );
+        const doc = buscarDocumentoRequisito(companyDocs, req, pId);
         if (!doc) return;
 
         const isVencido = esVencidoPorFecha(doc.vencimiento);
@@ -1212,11 +1241,7 @@ export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
         if (!hasProjDocs) return;
 
         workerReqs.forEach(req => {
-          const doc = w.documentos?.find(d => 
-            d.proyectoId === pId &&
-            (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-             req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-          );
+          const doc = buscarDocumentoRequisito(w.documentos || [], req, pId);
           if (!doc) return;
 
           const isVencido = esVencidoPorFecha(doc.vencimiento);
@@ -1275,11 +1300,7 @@ export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): s
   
   let result = '';
   reqs.forEach(req => {
-    const doc = docs.find(d => 
-      d.proyectoId === proyectoId &&
-      (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-       req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
-    );
+    const doc = buscarDocumentoRequisito(docs, req, proyectoId);
     if (!doc) {
       if (req.obligatorio) {
         result = `${req.nombre} pendiente`;
@@ -1301,12 +1322,7 @@ export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): s
 }
 
 export function getInvitaciones(): Invitacion[] {
-  try {
-    const raw = localStorage.getItem('acredita_invitaciones');
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
+  return safeParseStorageArray<Invitacion>('acredita_invitaciones', []);
 }
 
 export function saveInvitaciones(list: Invitacion[]): void {
@@ -1323,13 +1339,11 @@ export interface UserSession {
 
 export function getCurrentSession(): UserSession | null {
   if (typeof window === 'undefined') return null;
-  const data = localStorage.getItem('acredita_session');
-  if (!data) return null;
-  try {
-    return JSON.parse(data);
-  } catch (e) {
-    return null;
-  }
+  return safeParseStorageValue<UserSession | null>('acredita_session', null, value => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const session = value as Partial<UserSession>;
+    return typeof session.email === 'string' && ['admin', 'mandante', 'contratista'].includes(session.role || '');
+  });
 }
 
 export function loginUser(email: string, password: string, role: 'admin' | 'mandante' | 'contratista'): boolean {
@@ -2003,12 +2017,7 @@ export interface AuditLog {
 }
 
 export function getAuditLogs(): AuditLog[] {
-  try {
-    const raw = localStorage.getItem('acredita_audit_logs');
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
+  return safeParseStorageArray<AuditLog>('acredita_audit_logs', []);
 }
 
 export function saveAuditLogs(list: AuditLog[]): void {

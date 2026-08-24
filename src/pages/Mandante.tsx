@@ -8,8 +8,8 @@ import {
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
   Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu, ChevronLeft
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion } from '../data/localStorageDb';
-import { Contratista } from '../types';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion, getCurrentSession, nombresDocumentoCoinciden } from '../data/localStorageDb';
+import { Contratista, Mandante } from '../types';
 import ConfigTab from './mandante/ConfigTab';
 import type { ConfigTabId } from './mandante/config/configUtils';
 import DashboardTab from './mandante/DashboardTab';
@@ -17,6 +17,24 @@ import ProyectosTab from './mandante/ProyectosTab';
 import ContratistasTab from './mandante/ContratistasTab';
 
 export default function MandantePortal() {
+  const session = getCurrentSession();
+  const mandanteLogueado = session?.role === 'mandante' && session.mandanteId
+    ? getMandantes().find(m => m.id === session.mandanteId)
+    : undefined;
+  return mandanteLogueado
+    ? <MandantePortalContent mandanteLogueado={mandanteLogueado} />
+    : <InvalidMandanteSession />;
+}
+
+function InvalidMandanteSession() {
+  React.useEffect(() => {
+    logoutUser();
+    window.location.replace('/');
+  }, []);
+  return null;
+}
+
+function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandante }) {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
@@ -43,12 +61,10 @@ export default function MandantePortal() {
   const [proyectoArchivado, setProyectoArchivado] = useState(false);
   const [proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes] = useState<string | null>(null);
 
-  const allMandantes = getMandantes();
   const allProyectos = getProyectos();
   const allContratistas = getContratistas();
   const allPlantillas = getPlantillas();
 
-  const mandanteLogueado = allMandantes.find(m => m.id === 'andina') || allMandantes[0];
   const misProyectos = allProyectos.filter(p => p.mandanteId === mandanteLogueado.id);
 
   const PROYECTOS_AJUSTES = misProyectos.map(p => ({
@@ -93,7 +109,7 @@ export default function MandantePortal() {
   const [formInvitacion, setFormInvitacion] = useState({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
   const [documentRequirements, setDocumentRequirements] = useState<any[]>([]);
 
-  const activeProjectId = selectedProjectId || misProyectos[0]?.id || 'costanera';
+  const activeProjectId = selectedProjectId || misProyectos[0]?.id || '';
 
   React.useEffect(() => {
     const reqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
@@ -122,9 +138,8 @@ export default function MandantePortal() {
       projReqs.forEach(req => {
         reqs[req.id] = req.obligatorio;
         if (req.destino === 'empresa') {
-          const doc = c.documentos.find(d => 
-            d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-            req.nombre.toLowerCase().includes(d.nombre.toLowerCase())
+          const doc = c.documentos.find(d =>
+            d.proyectoId === projId && nombresDocumentoCoinciden(d.nombre, req.nombre)
           );
           status[req.id] = doc ? (doc.estado === 'aprobado' ? 'ok' : doc.estado === 'por_vencer' ? 'warn' : doc.estado === 'rechazado' ? 'error' : 'pending') : 'na';
         } else {
@@ -137,9 +152,8 @@ export default function MandantePortal() {
             let hasWarn = false;
             
             workers.forEach(w => {
-              const doc = w.documentos?.find(d => 
-                d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-                req.nombre.toLowerCase().includes(d.nombre.toLowerCase())
+              const doc = w.documentos?.find(d =>
+                d.proyectoId === projId && nombresDocumentoCoinciden(d.nombre, req.nombre)
               );
               if (!doc) {
                 if (req.obligatorio) hasPending = true;
@@ -246,7 +260,7 @@ export default function MandantePortal() {
                 </div>
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Nombre Empresa</label>
-                  <input type="text" className="form-input w-full" placeholder="Constructora Andina SA" />
+                  <input type="text" className="form-input w-full" placeholder={mandanteLogueado.nombre} />
                 </div>
               </div>
               <button 
@@ -288,7 +302,6 @@ export default function MandantePortal() {
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Email del contratista</label>
                   <div className="flex gap-2">
                     <input type="email" className="form-input w-full" placeholder="contacto@empresa.cl" />
-                    <button className="btn btn-secondary whitespace-nowrap cursor-not-allowed opacity-55" disabled title="No disponible en demo">Enviar invitación [Demo]</button>
                   </div>
                 </div>
               </div>
@@ -427,8 +440,8 @@ export default function MandantePortal() {
             )}
           </div>
           <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
-            <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">CA</div>
-            <span className="text-[14.3px] text-cream hidden md:block">Constructora Andina SA</span>
+            <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">{mandanteLogueado.nombre.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase()}</div>
+            <span className="text-[14.3px] text-cream hidden md:block">{mandanteLogueado.nombre}</span>
           </div>
         </div>
       </div>
@@ -439,7 +452,7 @@ export default function MandantePortal() {
           <div className={`sb-org flex ${sidebarCollapsed ? 'flex-col items-center gap-2' : 'justify-between items-center'} px-4 py-3 border-b border-white/5`}>
             {!sidebarCollapsed && (
               <div className="truncate flex-1">
-                <div className="sb-org-name truncate">Constructora Andina SA</div>
+                <div className="sb-org-name truncate">{mandanteLogueado.nombre}</div>
                 <div className="sb-org-sub truncate">Plan Pro · 3 proyectos</div>
               </div>
             )}
@@ -493,7 +506,7 @@ export default function MandantePortal() {
             <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-navy z-[999] md:hidden flex flex-col pt-4 overflow-y-auto text-left shadow-2xl animate-slide-right">
               <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
                 <div>
-                  <div className="sb-org-name">Constructora Andina SA</div>
+                  <div className="sb-org-name">{mandanteLogueado.nombre}</div>
                   <div className="sb-org-sub">Plan Pro · 3 proyectos activos</div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">

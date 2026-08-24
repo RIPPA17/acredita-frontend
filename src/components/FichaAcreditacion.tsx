@@ -9,7 +9,8 @@ import {
   calcularAccesoPago, 
   getRequisitos,
   esVencidoPorFecha,
-  esPorVencerPorFecha
+  esPorVencerPorFecha,
+  nombresDocumentoCoinciden
 } from '../data/localStorageDb';
 import { Contratista, Trabajador, Requisito, Documento } from '../types';
 import { Mandante, Proyecto } from '../types';
@@ -60,6 +61,8 @@ function LegacyFichaAcreditacion({
   // Habilitaciones
   let accesoBloqueado = false;
   let pagoBloqueado = false;
+  let accesoEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
+  let pagoEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
   let motivoAccesoStr = '';
   let motivoPagoStr = '';
 
@@ -84,8 +87,7 @@ function LegacyFichaAcreditacion({
     wkReqs.forEach(req => {
       const doc = currentTrabajador.documentos?.find(d => 
         d.proyectoId === proyectoId &&
-        (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-         req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+        nombresDocumentoCoinciden(d.nombre, req.nombre)
       );
 
       docListToDisplay.push({ requirement: req, document: doc });
@@ -154,8 +156,7 @@ function LegacyFichaAcreditacion({
     empReqs.forEach(req => {
       const doc = contratista.documentos?.find(d => 
         d.proyectoId === proyectoId &&
-        (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-         req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+        nombresDocumentoCoinciden(d.nombre, req.nombre)
       );
 
       docListToDisplay.push({ requirement: req, document: doc });
@@ -211,8 +212,7 @@ function LegacyFichaAcreditacion({
         wkReqs.forEach(req => {
           const doc = w.documentos?.find(d => 
             d.proyectoId === proyectoId &&
-            (d.nombre.toLowerCase().includes(req.nombre.toLowerCase()) || 
-             req.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
+            nombresDocumentoCoinciden(d.nombre, req.nombre)
           );
           if (doc) {
             const isVencido = esVencidoPorFecha(doc.vencimiento);
@@ -237,18 +237,26 @@ function LegacyFichaAcreditacion({
       : '';
 
   if (currentTipo === 'trabajador') {
-    const isAprobado = statusText === 'Acreditado';
-    accesoBloqueado = !isAprobado;
-    pagoBloqueado = false;
-    motivoAccesoStr = !isAprobado ? motivoTexto : '';
-    motivoPagoStr = '';
+    accesoEstado = statusText === 'Acreditado' ? 'habilitado' : statusText === 'Vencido/Bloqueado' ? 'bloqueado' : 'pendiente';
+    pagoEstado = accesoEstado;
+    accesoBloqueado = accesoEstado === 'bloqueado';
+    pagoBloqueado = pagoEstado === 'bloqueado';
+    motivoAccesoStr = accesoEstado !== 'habilitado' ? motivoTexto : '';
+    motivoPagoStr = pagoEstado !== 'habilitado' ? motivoTexto : '';
   } else {
     const accPago = calcularAccesoPago(contratista, proyectoId);
+    accesoEstado = accPago.accesoEstado;
+    pagoEstado = accPago.pagoEstado;
     accesoBloqueado = accPago.accesoBloqueado;
     pagoBloqueado = accPago.pagoBloqueado;
-    motivoAccesoStr = accPago.accesoBloqueado ? (accPago.motivoAcceso || motivoTexto) : '';
-    motivoPagoStr = accPago.pagoBloqueado ? (accPago.motivoPago || motivoTexto) : '';
+    motivoAccesoStr = accPago.accesoEstado !== 'habilitado' ? (accPago.motivoAcceso || motivoTexto) : '';
+    motivoPagoStr = accPago.pagoEstado !== 'habilitado' ? (accPago.motivoPago || motivoTexto) : '';
   }
+
+  const accesoTone = accesoEstado === 'bloqueado' ? 'bg-red-50/40 border-red-200 text-red-900' : accesoEstado === 'pendiente' ? 'bg-amber-50/40 border-amber-200 text-amber-900' : 'bg-green-50/40 border-green-200 text-green-900';
+  const pagoTone = pagoEstado === 'bloqueado' ? 'bg-red-50/40 border-red-200 text-red-900' : pagoEstado === 'pendiente' ? 'bg-amber-50/40 border-amber-200 text-amber-900' : 'bg-green-50/40 border-green-200 text-green-900';
+  const accesoLabel = accesoEstado === 'bloqueado' ? '✗ Bloqueado' : accesoEstado === 'pendiente' ? '⏳ Pendiente' : '✓ Habilitado';
+  const pagoLabel = pagoEstado === 'bloqueado' ? '✗ Retenido' : pagoEstado === 'pendiente' ? '⏳ Pendiente' : '✓ Habilitado';
 
   // Filtrar trabajadores asignados al proyecto para mostrarlos si es Empresa
   const projectWorkersList = (contratista.trabajadores || []).filter(w => 
@@ -389,46 +397,46 @@ function LegacyFichaAcreditacion({
             <h4 className="text-[12px] font-bold uppercase tracking-wider text-gray-400">Habilitaciones Operativas</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px]">
               
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoBloqueado ? 'bg-red-50/40 border-red-200 text-red-900' : 'bg-green-50/40 border-green-200 text-green-900'}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoTone}`}>
                 <div className="flex items-center gap-2">
-                  <Key size={16} className={accesoBloqueado ? 'text-red-500' : 'text-green-600'} />
+                  <Key size={16} className={accesoEstado === 'bloqueado' ? 'text-red-500' : accesoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Ingresar a faena</span>
-                    {accesoBloqueado && motivoAccesoStr && <div className="text-[10.5px] text-red-600 font-sans mt-0.5">Bloqueo por: {motivoAccesoStr}</div>}
+                    {accesoEstado !== 'habilitado' && motivoAccesoStr && <div className="text-[10.5px] font-sans mt-0.5">{accesoEstado === 'bloqueado' ? 'Bloqueo por' : 'Pendiente por'}: {motivoAccesoStr}</div>}
                   </div>
                 </div>
-                <span className="font-bold">{accesoBloqueado ? '✗ Bloqueado' : '✓ Habilitado'}</span>
+                <span className="font-bold">{accesoLabel}</span>
               </div>
 
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoBloqueado ? 'bg-red-50/40 border-red-200 text-red-900' : 'bg-green-50/40 border-green-200 text-green-900'}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoTone}`}>
                 <div className="flex items-center gap-2">
-                  <Briefcase size={16} className={accesoBloqueado ? 'text-red-500' : 'text-green-600'} />
+                  <Briefcase size={16} className={accesoEstado === 'bloqueado' ? 'text-red-500' : accesoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Trabajar en faena</span>
                   </div>
                 </div>
-                <span className="font-bold">{accesoBloqueado ? '✗ Bloqueado' : '✓ Habilitado'}</span>
+                <span className="font-bold">{accesoLabel}</span>
               </div>
 
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoBloqueado ? 'bg-red-50/40 border-red-200 text-red-900' : 'bg-green-50/40 border-green-200 text-green-900'}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoTone}`}>
                 <div className="flex items-center gap-2">
-                  <CheckCircle size={16} className={accesoBloqueado ? 'text-red-500' : 'text-green-600'} />
+                  <CheckCircle size={16} className={accesoEstado === 'bloqueado' ? 'text-red-500' : accesoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Asignación a obra</span>
                   </div>
                 </div>
-                <span className="font-bold">{accesoBloqueado ? '✗ Bloqueado' : '✓ Habilitado'}</span>
+                <span className="font-bold">{accesoLabel}</span>
               </div>
 
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${pagoBloqueado ? 'bg-red-50/40 border-red-200 text-red-900' : 'bg-green-50/40 border-green-200 text-green-900'}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${pagoTone}`}>
                 <div className="flex items-center gap-2">
-                  <Banknote size={16} className={pagoBloqueado ? 'text-red-500' : 'text-green-600'} />
+                  <Banknote size={16} className={pagoEstado === 'bloqueado' ? 'text-red-500' : pagoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Recibir pago</span>
-                    {pagoBloqueado && motivoPagoStr && <div className="text-[10.5px] text-red-600 font-sans mt-0.5">Retenido por: {motivoPagoStr}</div>}
+                    {pagoEstado !== 'habilitado' && motivoPagoStr && <div className="text-[10.5px] font-sans mt-0.5">{pagoEstado === 'bloqueado' ? 'Retenido por' : 'Pendiente por'}: {motivoPagoStr}</div>}
                   </div>
                 </div>
-                <span className="font-bold">{pagoBloqueado ? '✗ Retenido' : '✓ Habilitado'}</span>
+                <span className="font-bold">{pagoLabel}</span>
               </div>
 
             </div>
@@ -438,21 +446,21 @@ function LegacyFichaAcreditacion({
           <div className="flex flex-col gap-3">
             <h4 className="text-[12px] font-bold uppercase tracking-wider text-gray-400">Estado operativo</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px] font-medium">
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
                 <span>Asignación</span>
-                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
                 <span>Ingreso</span>
-                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!accesoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
                 <span>Trabajo</span>
-                <span className="font-bold text-[14px]">{!accesoBloqueado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${!pagoBloqueado ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-800/10 border-red-200 text-red-800'}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${pagoTone}`}>
                 <span>Pago</span>
-                <span className="font-bold text-[14px]">{!pagoBloqueado ? '✓' : '✕'}</span>
+                <span className="font-bold text-[14px]">{pagoEstado === 'habilitado' ? '✓' : pagoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
             </div>
           </div>

@@ -136,8 +136,9 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div>
-                <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Email</label>
+                <label htmlFor="login-email" className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Email</label>
                 <input 
+                  id="login-email"
                   type="email" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -147,8 +148,9 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contraseña</label>
+                <label htmlFor="login-password" className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contraseña</label>
                 <input 
+                  id="login-password"
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -158,7 +160,7 @@ export default function LoginPage() {
                 />
               </div>
               <div className="flex justify-end mb-2">
-                <span className="text-[13.2px] text-gray-400 font-medium cursor-not-allowed" title="No disponible en demo">¿Olvidaste tu contraseña? [Demo]</span>
+                <span className="text-[13.2px] text-gray-400 font-medium">Recuperación de contraseña disponible al conectar autenticación.</span>
               </div>
 
               {errorMsg && (

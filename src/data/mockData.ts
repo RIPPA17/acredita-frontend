@@ -305,7 +305,7 @@ export const CONTRATISTAS: Contratista[] = [
       },
     ],
     documentos: [
-      // Costanera — F30 en revisión (pago retenido, sin pedir "corregir") +
+      // Costanera — F30 en revisión (pago pendiente, sin pedir "corregir") +
       // Mutual aprobado (mantiene el acceso solo "parcial", gobernado por
       // los trabajadores, no totalmente bloqueado por la empresa).
       {

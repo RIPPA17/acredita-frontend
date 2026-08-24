@@ -507,7 +507,7 @@ export default function AdminPortal() {
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <div className="relative">
             <button
               onClick={() => setShowNotif(!showNotif)}
@@ -595,11 +595,11 @@ export default function AdminPortal() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+          <div className="flex min-w-0 max-w-[55vw] items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
               {topbarVerificador ? iniciales(topbarVerificador.nombre) : "?"}
             </div>
-            <span className="text-[14.3px] text-cream">
+            <span className="hidden min-w-0 truncate text-[14.3px] text-cream sm:block">
               {topbarVerificador
                 ? `${topbarVerificador.rol === 'supervisor' ? 'Supervisor' : 'Verificador'} · ${topbarVerificador.nombre}`
                 : "Usuario operativo no disponible"}
@@ -1292,12 +1292,12 @@ export default function AdminPortal() {
         setActividadSeleccionada={setActividadSeleccionada}
       />
 
-      {selectedAcreditacionContratista && (
+      {selectedAcreditacionContratista && selectedAcreditacionContratista._fichaProyectoId && (
         <FichaAcreditacion
           tipo={selectedAcreditacionContratista._fichaTrabajador ? 'trabajador' : 'empresa'}
           trabajador={selectedAcreditacionContratista._fichaTrabajador}
           contratista={selectedAcreditacionContratista}
-          proyectoId={selectedAcreditacionContratista._fichaProyectoId || selectedAcreditacionContratista.proyectos[0] || 'costanera'}
+          proyectoId={selectedAcreditacionContratista._fichaProyectoId}
           onClose={() => setSelectedAcreditacionContratista(null)}
           rol="admin"
           onRevisarDocumento={(doc) => {

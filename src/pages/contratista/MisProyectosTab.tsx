@@ -54,15 +54,17 @@ const BAR_COLOR_TRABAJADORES: Record<EstadoUI, string> = {
   'En proceso': '#2a8040',
   Acreditado: '#2a8040',
 };
-const ACCESO_LABEL_CORTO: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
+const ACCESO_LABEL_CORTO: Record<'habilitado' | 'parcial' | 'pendiente' | 'bloqueado', string> = {
   habilitado: 'Habilitado',
   parcial: 'Parcial',
+  pendiente: 'Pendiente',
   bloqueado: 'Bloqueado',
 };
 // Mismos tonos de texto que usan los badges (.mp-badge-green/yellow/red).
-const ACCESO_COLOR: Record<'habilitado' | 'parcial' | 'bloqueado', string> = {
+const ACCESO_COLOR: Record<'habilitado' | 'parcial' | 'pendiente' | 'bloqueado', string> = {
   habilitado: '#1a6030',
   parcial: '#7a5800',
+  pendiente: '#7a5800',
   bloqueado: '#9a2020',
 };
 const DOC_ESTADO_BADGE: Record<DocEstado, string> = {
@@ -188,7 +190,7 @@ function DetalleProyecto({
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Pago</div>
-                <div className="mp-mini-value" style={{ color: accesoPago.pagoBloqueado ? '#9a2020' : '#1a6030' }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
+                <div className="mp-mini-value" style={{ color: accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030' }}>{accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</div>
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Próximo vencimiento</div>
@@ -516,7 +518,7 @@ export default function MisProyectosTab({
           <div className="mp-grid mp-grid-3">
             {proyectosFiltrados.map(info => {
               const { proyecto: p, mandante, estadoUI, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
-              const pagoColor = accesoPago.pagoBloqueado ? '#9a2020' : '#1a6030';
+              const pagoColor = accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030';
 
               return (
                 <article key={p.id} className={`mp-project-card state-${STATE_KEY[estadoUI]}`}>
@@ -541,7 +543,7 @@ export default function MisProyectosTab({
                       </div>
                       <div className="mp-mini">
                         <div className="mp-mini-label">Pago</div>
-                        <div className="mp-mini-value" style={{ color: pagoColor }}>{accesoPago.pagoBloqueado ? 'Retenido' : 'Habilitado'}</div>
+                        <div className="mp-mini-value" style={{ color: pagoColor }}>{accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</div>
                       </div>
                     </div>
 

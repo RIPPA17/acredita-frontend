@@ -29,8 +29,8 @@ export interface ProjectPresentation {
   contractors: Contratista[];
   workers: Array<{ contractor: Contratista; worker: Trabajador }>;
   workersEnabled: number;
-  access: 'Habilitado' | 'Con bloqueos';
-  payment: 'Habilitado' | 'Con retenciones';
+  access: 'Habilitado' | 'Pendiente' | 'Con bloqueos';
+  payment: 'Habilitado' | 'Pendiente' | 'Con retenciones';
   obligations: ProjectObligations;
   approvedAccreditations: number;
   blockedAccreditations: number;
@@ -120,8 +120,8 @@ export function buildProjectPresentations(
         const state = calcularEstadoTrabajador(worker, project.id);
         return state === 'aprobado' || state === 'por_vencer';
       }).length,
-      access: accessPayment.some(item => item.accesoBloqueado) ? 'Con bloqueos' : 'Habilitado',
-      payment: accessPayment.some(item => item.pagoBloqueado) ? 'Con retenciones' : 'Habilitado',
+      access: accessPayment.some(item => item.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayment.some(item => item.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
+      payment: accessPayment.some(item => item.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayment.some(item => item.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       obligations,
       approvedAccreditations: accreditationStates.filter(state => state === 'Aprobado').length,
       blockedAccreditations: accreditationStates.filter(state => state === 'Vencido/Bloqueado').length,

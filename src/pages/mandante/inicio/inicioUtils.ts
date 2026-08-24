@@ -31,8 +31,8 @@ export interface MandanteProjectSummary {
   contractors: Contratista[];
   workersEnabled: number;
   workersTotal: number;
-  access: 'Habilitado' | 'Con bloqueos';
-  payment: 'Habilitado' | 'Con retenciones';
+  access: 'Habilitado' | 'Pendiente' | 'Con bloqueos';
+  payment: 'Habilitado' | 'Pendiente' | 'Con retenciones';
   attentionCount: number;
   priorities: MandantePriority[];
   blockedAccreditations: number;
@@ -174,8 +174,8 @@ export function buildMandanteProjectSummaries(
         return state === 'aprobado' || state === 'por_vencer';
       }).length,
       workersTotal: assignedWorkers.length,
-      access: accessPayments.some(result => result.accesoBloqueado) ? 'Con bloqueos' : 'Habilitado',
-      payment: accessPayments.some(result => result.pagoBloqueado) ? 'Con retenciones' : 'Habilitado',
+      access: accessPayments.some(result => result.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayments.some(result => result.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
+      payment: accessPayments.some(result => result.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayments.some(result => result.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       attentionCount: priorities.length,
       priorities,
       blockedAccreditations: accessPayments.filter(result => result.accesoBloqueado).length,

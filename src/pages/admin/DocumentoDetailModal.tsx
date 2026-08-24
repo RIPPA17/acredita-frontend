@@ -1,4 +1,4 @@
-import { FileText, Download, X, XCircle } from 'lucide-react';
+import { FileText, X, XCircle } from 'lucide-react';
 
 export default function DocumentoDetailModal({
   actividadSeleccionada,
@@ -43,10 +43,7 @@ export default function DocumentoDetailModal({
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="flex items-center gap-1.5 text-[13px] text-gray-500 cursor-not-allowed opacity-50 font-medium" disabled title="Descargar deshabilitado en demo">
-              <Download size={14} /> Descargar [Demo]
-            </button>
-            <button onClick={() => setActividadSeleccionada(null)} className="text-gray-500 hover:text-white transition-colors">
+            <button aria-label="Cerrar detalle de documento" onClick={() => setActividadSeleccionada(null)} className="text-gray-500 hover:text-white transition-colors">
               <X size={16} />
             </button>
           </div>

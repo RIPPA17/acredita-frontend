@@ -185,6 +185,24 @@ export default function AuditoriaTab({
   const selectedInfo = selected ? describeEvent(selected) : null;
   const selectedFecha = selected ? formatFecha(selected.fecha) : null;
 
+  const exportarCsv = () => {
+    if (!filtrados.length) return;
+    const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const header = ['ID', 'Fecha', 'Acción', 'Tipo', 'Actor', 'Rol', 'Empresa', 'Proyecto', 'Detalle', 'Resultado'];
+    const rows = filtrados.map(({ log, info }) => [
+      log.id, log.fecha, info.label, info.tipo, log.actor, log.rol,
+      log.empresa, log.proyecto, log.detalle, info.resultado,
+    ]);
+    const csv = [header, ...rows].map(row => row.map(escapeCsv).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `auditoria-acredita-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Vista filtrada exportada a CSV');
+  };
+
   return (
     <div className="fade-in relative">
       <div className="flex justify-between items-start gap-5 mb-4.5 flex-wrap">
@@ -197,7 +215,9 @@ export default function AuditoriaTab({
         </div>
         <div className="flex gap-2 shrink-0">
           <button
-            onClick={() => showToast('En el MVP: exportar la vista filtrada a CSV', 'warning')}
+            onClick={exportarCsv}
+            disabled={!filtrados.length}
+            title={!filtrados.length ? 'No hay registros para exportar' : undefined}
             className="btn btn-ghost border border-cream3"
           >
             <Download size={14} /> Exportar

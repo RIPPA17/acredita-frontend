@@ -177,12 +177,12 @@ export default function AcreditacionesTab({
         <div>
           <div className="eyebrow">Estado operacional · Acredita</div>
           <div className="title">Acreditaciones</div>
-          <p className="sub">Vista consolidada por contratista, mandante y proyecto. Permite detectar rápidamente qué acreditaciones están aprobadas, en proceso o bloqueadas y entrar directo al problema.</p>
+          <p className="sub">Vista consolidada por contratista, mandante y proyecto. Permite detectar rápidamente qué acreditaciones están acreditadas, en proceso o bloqueadas y entrar directo al problema.</p>
         </div>
       </div>
 
       <div className="kpis">
-        <div className="kpi good"><div className="k">Aprobadas</div><div className="v">{countAprobadas}</div><div className="n">Habilitadas para operar</div></div>
+        <div className="kpi good"><div className="k">Acreditadas</div><div className="v">{countAprobadas}</div><div className="n">Habilitadas para operar</div></div>
         <div className="kpi warn"><div className="k">En proceso</div><div className="v">{countEnProceso}</div><div className="n">Con documentos pendientes</div></div>
         <div className="kpi danger"><div className="k">Bloqueadas</div><div className="v">{countBloqueadas}</div><div className="n">Con rechazo o vencimiento</div></div>
         <div className="kpi blue"><div className="k">Total</div><div className="v">{countTotal}</div><div className="n">Contratista + proyecto</div></div>
@@ -198,7 +198,7 @@ export default function AcreditacionesTab({
           />
           <select className="filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="">Todos los estados</option>
-            <option>Aprobado</option>
+            <option value="Aprobado">Acreditado</option>
             <option>En proceso</option>
             <option>Vencido/Bloqueado</option>
           </select>
@@ -257,7 +257,7 @@ export default function AcreditacionesTab({
                         <div className="name">{r.workers.ok}/{r.workers.total}</div>
                         <div className={`progress ${r.workersVisual === 'danger' ? 'red' : r.workersVisual === 'warn' ? 'warn' : ''}`}><div style={{ width: `${wp}%` }} /></div>
                       </td>
-                      <td><span className={`badge ${badgeClass(r.estado)}`} title={r.estado}>{r.estado === 'Vencido/Bloqueado' ? 'Bloqueado' : r.estado}</span></td>
+                      <td><span className={`badge ${badgeClass(r.estado)}`} title={r.estado}>{r.estado === 'Aprobado' ? 'Acreditado' : r.estado === 'Vencido/Bloqueado' ? 'Bloqueado' : r.estado}</span></td>
                       <td>
                         {r.blockers.length ? (
                           <span className={`badge ${r.estado === 'Vencido/Bloqueado' ? 'red' : 'amber'}`}>{r.blockers.length} prob.</span>
@@ -289,7 +289,7 @@ export default function AcreditacionesTab({
                     <h2>{current.entity}</h2>
                     <p>RUT {current.rut}</p>
                   </div>
-                  <span className={`badge ${badgeClass(current.estado)}`}>{current.estado}</span>
+                  <span className={`badge ${badgeClass(current.estado)}`}>{current.estado === 'Aprobado' ? 'Acreditado' : current.estado === 'Vencido/Bloqueado' ? 'Bloqueado' : current.estado}</span>
                 </div>
                 <div className="context">
                   <div className="context-item"><label>Mandante</label><strong>{current.mandanteNombre}</strong></div>
@@ -341,7 +341,7 @@ export default function AcreditacionesTab({
                         <b>Sin bloqueos</b>
                         <p>Empresa y trabajadores cumplen los requisitos obligatorios.</p>
                       </div>
-                      <span className="badge green">Aprobado</span>
+                      <span className="badge green">Acreditado</span>
                     </div>
                   </div>
                 )}

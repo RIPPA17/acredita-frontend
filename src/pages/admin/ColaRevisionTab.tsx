@@ -544,12 +544,6 @@ export default function ColaRevisionTab({
                     <button onClick={() => setHistorialOpen(true)} className="flex items-center gap-1 text-[9.5px] font-bold text-gray-600 bg-white border border-cream3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-cream2">
                       <History size={11} /> Ver historial
                     </button>
-                    <button onClick={() => showToast("Vista ampliada disponible como siguiente etapa", "warning")} className="text-[9.5px] font-bold text-gray-600 bg-white border border-cream3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-cream2">
-                      Ampliar
-                    </button>
-                    <button onClick={() => showToast("En el MVP esto abriría el archivo original", "warning")} className="text-[9.5px] font-bold text-gray-600 bg-white border border-cream3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-cream2">
-                      Original
-                    </button>
                   </div>
                   <DocumentPreview item={current} />
                 </div>
