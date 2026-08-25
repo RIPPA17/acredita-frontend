@@ -6,7 +6,6 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import LandingPage from './pages/Landing';
 import AdminPortal from './pages/Admin';
-import MandantePortal from './pages/Mandante';
 import ContratistaPortal from './pages/Contratista';
 import LoginPage from './pages/Login';
 import RegistroPage from './pages/Registro';
@@ -14,6 +13,7 @@ import ActivacionPage from './pages/Activacion';
 import InvitacionPage from './pages/Invitacion';
 import NotFoundPage from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
+import MandanteRoute from './components/MandanteRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
@@ -38,7 +38,7 @@ export default function App() {
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/activacion" element={<ActivacionPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
-          
+
           <Route path="/admin/*" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminPortal />
@@ -46,7 +46,7 @@ export default function App() {
           } />
           <Route path="/mandante/*" element={
             <ProtectedRoute allowedRoles={['mandante']}>
-              <MandantePortal />
+              <MandanteRoute />
             </ProtectedRoute>
           } />
           <Route path="/contratista/*" element={
