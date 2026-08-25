@@ -148,7 +148,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
               <div className="flex justify-between items-end mb-6 shrink-0 relative z-20">
                 <div>
                   <h3 className="text-white/90 text-[15.4px] font-medium">Dashboard Mandante</h3>
-                  <p className="text-white/40 text-[12.1px] mt-1">Vista general de cumplimiento, 18 de mayo 2026</p>
+                  <p className="text-white/40 text-[12.1px] mt-1">Vista de ejemplo · datos ilustrativos</p>
                 </div>
                 <div className="flex gap-2">
                   <div className="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-[12.1px] text-white/60">Exportar PDF</div>
@@ -183,23 +183,23 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                 </div>
                 <div className="flex-1 px-3 py-1 flex flex-col gap-1">
                   <div className="flex items-center py-2.5 border-b border-white/5">
-                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-red-400"></div> Servicios Integrales Lagos</div>
-                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Proyecto Costanera Norte</div>
+                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-red-400"></div> Contratista A</div>
+                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Proyecto 1</div>
                     <div className="text-right w-[120px]"><span className="text-[9.9px] bg-red-500/20 text-red-300 border border-red-500/20 px-2 py-0.5 rounded-lg font-medium tracking-wide">PAGO RETENIDO</span></div>
                   </div>
                   <div className="flex items-center py-2.5 border-b border-white/5">
-                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-400"></div> Constructora Andrade Ltda</div>
-                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Bodega Logística Sur</div>
+                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-400"></div> Contratista B</div>
+                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Proyecto 2</div>
                     <div className="text-right w-[120px]"><span className="text-[9.9px] bg-green-500/20 text-green-300 border border-green-500/20 px-2 py-0.5 rounded-lg font-medium tracking-wide">AL DÍA</span></div>
                   </div>
                   <div className="flex items-center py-2.5 border-b border-white/5">
-                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-yellow-400"></div> Servicios Norte Ltda.</div>
-                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Torre Mackenna</div>
+                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-yellow-400"></div> Contratista C</div>
+                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Proyecto 3</div>
                     <div className="text-right w-[120px]"><span className="text-[9.9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-medium tracking-wide">PENDIENTE</span></div>
                   </div>
                   <div className="flex items-center py-2.5">
-                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-400"></div> Eléctrica Sur SpA</div>
-                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Bodega Logística Sur</div>
+                    <div className="text-[12.7px] text-white/80 font-medium w-[200px] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-400"></div> Contratista D</div>
+                    <div className="text-[12.7px] text-white/50 flex-1 truncate">Proyecto 2</div>
                     <div className="text-right w-[120px]"><span className="text-[9.9px] bg-green-500/20 text-green-300 border border-green-500/20 px-2 py-0.5 rounded-lg font-medium tracking-wide">AL DÍA</span></div>
                   </div>
                 </div>
@@ -288,45 +288,30 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
         </div>
       </div>
 
-      {/* TESTIMONIOS */}
+      {/* CAPACIDADES DEL PRODUCTO */}
       <div className="bg-white py-20 px-12">
         <div className="text-center max-w-[700px] mx-auto">
-          <div className="inline-block bg-cream text-brown text-[12.7px] font-semibold tracking-[1.5px] uppercase py-1 px-3 rounded-md mb-4">Testimonios</div>
-          <div className="text-[33px] font-medium leading-[1.2]">Lo que dicen nuestros clientes</div>
+          <div className="inline-block bg-cream text-brown text-[12.7px] font-semibold tracking-[1.5px] uppercase py-1 px-3 rounded-md mb-4">Qué permite Acredita</div>
+          <div className="text-[33px] font-medium leading-[1.2]">Capacidades reales del producto</div>
+          <p className="text-[16px] text-[#7a7a6a] leading-relaxed mt-4">
+            Sin testimonios ni resultados atribuidos a clientes ficticios. Estas son funciones disponibles en la plataforma para gestionar acreditaciones.
+          </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6 max-w-[1000px] mx-auto mt-12">
           <div className="bg-cream2 rounded-xl p-8 border border-cream3">
-            <div className="text-brown text-[15.4px] tracking-[2px] mb-4">★★★★★</div>
-            <div className="text-[15.4px] text-[#5a5a4a] leading-relaxed italic mb-6">"Antes perdíamos 2 días al mes persiguiendo documentos por correo. Con Acredita todo llega solo y validado. No volvería atrás."</div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-navy text-cream flex items-center justify-center text-[14.3px] font-semibold shrink-0">JM</div>
-              <div>
-                <div className="text-[14.9px] font-medium">Jorge Morales</div>
-                <div className="text-[13.2px] text-[#9a9a8a]">Jefe de Contratos · Constructora Andina SA</div>
-              </div>
-            </div>
+            <ShieldCheck size={24} className="text-brown mb-4" />
+            <div className="text-[17px] font-medium text-navy mb-2">Trazabilidad por proyecto</div>
+            <div className="text-[15px] text-[#5a5a4a] leading-relaxed">Consulta el estado de acreditación de empresas y trabajadores dentro de cada proyecto, con sus requisitos y bloqueos asociados.</div>
           </div>
           <div className="bg-cream2 rounded-xl p-8 border border-cream3">
-            <div className="text-brown text-[15.4px] tracking-[2px] mb-4">★★★★★</div>
-            <div className="text-[15.4px] text-[#5a5a4a] leading-relaxed italic mb-6">"Como contratista, ya no me toman por sorpresa los vencimientos. Las alertas llegan justo a tiempo y el equipo experto me ahorra horas de papeleo."</div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-navy text-cream flex items-center justify-center text-[14.3px] font-semibold shrink-0">PR</div>
-              <div>
-                <div className="text-[14.9px] font-medium">Patricia Rojas</div>
-                <div className="text-[13.2px] text-[#9a9a8a]">Gerente · Servicios Norte Ltda.</div>
-              </div>
-            </div>
+            <Bell size={24} className="text-brown mb-4" />
+            <div className="text-[17px] font-medium text-navy mb-2">Vigencias y alertas</div>
+            <div className="text-[15px] text-[#5a5a4a] leading-relaxed">Controla documentos mensuales, por proyecto o con vigencias definidas y detecta requisitos próximos a vencer o bloqueados.</div>
           </div>
           <div className="bg-cream2 rounded-xl p-8 border border-cream3">
-            <div className="text-brown text-[15.4px] tracking-[2px] mb-4">★★★★★</div>
-            <div className="text-[15.4px] text-[#5a5a4a] leading-relaxed italic mb-6">"Implementamos Acredita en 3 proyectos simultáneos con más de 40 contratistas. El dashboard nos da control total sin contratar más personal."</div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-navy text-cream flex items-center justify-center text-[14.3px] font-semibold shrink-0">CA</div>
-              <div>
-                <div className="text-[14.9px] font-medium">Cristóbal Araya</div>
-                <div className="text-[13.2px] text-[#9a9a8a]">Director de Operaciones · Minera Los Andes</div>
-              </div>
-            </div>
+            <FileText size={24} className="text-brown mb-4" />
+            <div className="text-[17px] font-medium text-navy mb-2">Revisión con historial</div>
+            <div className="text-[15px] text-[#5a5a4a] leading-relaxed">Registra aprobaciones, rechazos, correcciones y nuevas versiones para que el proceso documental quede visible y auditable.</div>
           </div>
         </div>
       </div>
@@ -362,7 +347,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                   <label className="form-label text-[15.4px]">Nombre completo</label>
                   <input
                     className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
-                    placeholder="Jorge Morales"
+                    placeholder="Tu nombre"
                     value={demoForm.nombre}
                     onChange={(e) => setDemoForm({ ...demoForm, nombre: e.target.value })}
                     required
@@ -402,7 +387,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                   <input
                     type="email"
                     className="form-input w-full p-2.5 rounded-lg border !border-white/10 !bg-white/5 !text-white"
-                    placeholder="jorge@empresa.cl"
+                    placeholder="nombre@empresa.cl"
                     value={demoForm.correo}
                     onChange={(e) => setDemoForm({ ...demoForm, correo: e.target.value })}
                     required
