@@ -93,14 +93,6 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
     if (session?.profileId) void markNotificationKeysRead(session.profileId, ids, session).catch(() => undefined);
   };
 
-
-  const PROYECTOS_AJUSTES = misProyectos.map(p => ({
-    id: p.id,
-    nombre: p.nombre,
-    estado: p.estado,
-    badge: p.id === 'costanera' ? 'b-red' : p.id === 'mackenna' ? 'b-yellow' : 'b-green'
-  }));
-
   const goToProject = (projectId: string) => {
     setSelectedProjectId(projectId);
     setProyectoSeleccionadoAjustes(projectId);
@@ -312,12 +304,12 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
             {!sidebarCollapsed && (
               <div className="truncate flex-1">
                 <div className="sb-org-name truncate">{mandanteLogueado.nombre}</div>
-                <div className="sb-org-sub truncate">Plan Pro · 3 proyectos</div>
+                <div className="sb-org-sub truncate">{misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} visible{misProyectos.length === 1 ? '' : 's'}</div>
               </div>
             )}
             {sidebarCollapsed && (
               <div className="w-8 h-8 rounded-lg bg-brown text-white flex items-center justify-center font-bold text-sm shrink-0">
-                C
+                {mandanteLogueado.nombre[0]?.toUpperCase() || 'M'}
               </div>
             )}
             <button 
@@ -366,7 +358,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
               <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
                 <div>
                   <div className="sb-org-name">{mandanteLogueado.nombre}</div>
-                  <div className="sb-org-sub">Plan Pro · 3 proyectos activos</div>
+                  <div className="sb-org-sub">{misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} visible{misProyectos.length === 1 ? '' : 's'}</div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">
                   <X size={20} />
@@ -432,7 +424,6 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
               setSelectedContratista={setSelectedContratista}
               proyectoSeleccionadoAjustes={proyectoSeleccionadoAjustes}
               setProyectoSeleccionadoAjustes={setProyectoSeleccionadoAjustes}
-              PROYECTOS_AJUSTES={PROYECTOS_AJUSTES}
               ajustesEditando={ajustesEditando}
               setAjustesEditando={setAjustesEditando}
               showToast={showToast}

@@ -11,6 +11,7 @@ import {
   obtenerDiasRestantes,
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
+import { openDocumentFile } from '../../data/supabaseDocumentStorage';
 import { getEstadoDocumentoEfectivo, normalizarNombreDocumento } from '../contratista/documentosUtils';
 import { companyObligationSummary } from './proyectos/proyectosUtils';
 import {
@@ -45,6 +46,8 @@ interface DocumentRow {
   associated: string;
   type: 'Empresa' | 'Trabajador';
   project: Proyecto;
+  requirement?: Requisito;
+  workerRut?: string;
   state: string;
   validity: string;
 }
@@ -250,4 +253,148 @@ function AccreditationsV5({ contractor, projects, allProjects, selectedProjectId
 
 function WorkersV5({contractor,projects,allProjects,focus,selectedContext,onSelect,onOpenDocument}:{contractor:Contratista;projects:Proyecto[];allProjects:Proyecto[];focus?:Focus;selectedContext:WorkerContext|null;onSelect:(v:WorkerContext|null)=>void;onOpenDocument:(v:DocumentContext)=>void}){const [search,setSearch]=useState('');const [projectFilter,setProjectFilter]=useState(focus?.projectId||'all');const [stateFilter,setStateFilter]=useState('all');const context=selectedContext;const project=context?projects.find(p=>p.id===context.projectId):undefined;const worker=context?(contractor.trabajadores||[]).find(w=>w.rut===context.workerRut):undefined;if(project&&worker){const state=calcularEstadoTrabajador(worker,project.id);const reqs=getRequisitos().filter(r=>r.proyectoId===project.id&&r.activo!==false&&r.obligatorio&&r.destino==='trabajador');return <div className="mandante-contratistas-panel"><button type="button" className="mandante-contratistas-back" onClick={()=>onSelect(null)}><ArrowLeft/> Volver a trabajadores</button><div className="mandante-contratistas-worker-detail"><aside><strong>{worker.nombre}</strong><span>{worker.rut}</span><span>{worker.cargo||'Sin cargo registrado'}</span><span>{project.nombre}</span><b className={`mandante-contratistas-state ${badgeClass(workerStateLabel(state))}`}>{workerStateLabel(state)}</b><em>{state==='aprobado'||state==='por_vencer'?'Acceso habilitado':'Sin acceso'}</em></aside><article className="mandante-contratistas-card"><h2>Documentación del trabajador</h2>{reqs.map(req=>{const doc=findRequirementDocument(contractor,req,project.id,worker);const s=doc?getEstadoDocumentoEfectivo(doc,req):'Pendiente';return <button type="button" className="mandante-contratistas-doc-row" key={req.id} onClick={()=>onOpenDocument({projectId:project.id,workerRut:worker.rut,documentId:doc?.id,requirementId:req.id})}><span><strong>{req.nombre}</strong><small>{project.nombre}</small></span><b className={`mandante-contratistas-state ${badgeClass(s)}`}>{s}</b><span>Ver documento</span></button>})}</article></div></div>};const rows=projects.flatMap(p=>(contractor.trabajadores||[]).filter(w=>esTrabajadorAsignado(w,p.id,allProjects)).map(w=>({project:p,worker:w,state:calcularEstadoTrabajador(w,p.id)}))).filter(r=>(projectFilter==='all'||r.project.id===projectFilter)&&(stateFilter==='all'||r.state===stateFilter)&&`${r.worker.nombre} ${r.worker.rut}`.toLowerCase().includes(search.toLowerCase()));return <div className="mandante-contratistas-panel"><div className="mandante-contratistas-local-filters"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar trabajador..."/><select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="all">Todos los proyectos</option>{projects.map(p=><option value={p.id} key={p.id}>{p.nombre}</option>)}</select><select value={stateFilter} onChange={e=>setStateFilter(e.target.value)}><option value="all">Todos los estados</option><option value="aprobado">Acreditado</option><option value="por_vencer">Por vencer</option><option value="pendiente">En proceso</option><option value="rechazado">Bloqueado</option></select></div><article className="mandante-contratistas-card"><h2>Trabajadores</h2><div className="mandante-contratistas-table-wrap"><table><thead><tr><th>Trabajador</th><th>RUT</th><th>Proyecto</th><th>Cargo</th><th>Estado</th><th>Acceso</th></tr></thead><tbody>{rows.map(r=><tr key={`${r.project.id}:${r.worker.rut}`} className={r.project.id===focus?.projectId&&r.worker.rut===focus?.workerRut?'worker-focus':''} onClick={()=>onSelect({projectId:r.project.id,workerRut:r.worker.rut})}><td><button type="button">{r.worker.nombre}</button></td><td>{r.worker.rut}</td><td>{r.project.nombre}</td><td>{r.worker.cargo||'—'}</td><td><b className={`mandante-contratistas-state ${badgeClass(workerStateLabel(r.state))}`}>{workerStateLabel(r.state)}</b></td><td>{r.state==='aprobado'||r.state==='por_vencer'?'Habilitado':'Sin acceso'}</td></tr>)}</tbody></table></div></article></div>}
 
-function DocumentsV5({contractor,projects,focus,selectedContext,onSelect,onOpenAccreditation}:{contractor:Contratista;projects:Proyecto[];focus?:Focus;selectedContext:DocumentContext|null;onSelect:(v:DocumentContext|null)=>void;onOpenAccreditation:(id:string)=>void}){const [search,setSearch]=useState('');const [projectFilter,setProjectFilter]=useState(focus?.projectId||'all');const [typeFilter,setTypeFilter]=useState('all');const requirements=getRequisitos();const rows:DocumentRow[]=[...contractor.documentos.map(d=>({d,owner:contractor.nombre,type:'Empresa' as const,suffix:'empresa'})),...(contractor.trabajadores||[]).flatMap(w=>(w.documentos||[]).map(d=>({d,owner:w.nombre,type:'Trabajador' as const,suffix:w.rut})))].flatMap(item=>{const project=projects.find(p=>p.id===item.d.proyectoId);if(!project)return[];const req=requirements.find(r=>r.proyectoId===project.id&&normalizarNombreDocumento(r.nombre)===normalizarNombreDocumento(item.d.nombre));const state=effectiveState(item.d,req);return[{key:`${project.id}:${item.suffix}:${item.d.id}`,document:item.d,associated:item.owner,type:item.type,project,state,validity:validityLabel(item.d,state)}]}).filter(r=>(projectFilter==='all'||r.project.id===projectFilter)&&(typeFilter==='all'||r.type===typeFilter)&&`${r.document.nombre} ${r.associated}`.toLowerCase().includes(search.toLowerCase()));const ctx=selectedContext;if(ctx){const project=projects.find(p=>p.id===ctx.projectId);const worker=ctx.workerRut?(contractor.trabajadores||[]).find(w=>w.rut===ctx.workerRut):undefined;const docs=worker?worker.documentos:contractor.documentos;const doc=(docs||[]).find(d=>d.id===ctx.documentId);const req=requirements.find(r=>r.id===ctx.requirementId);const state=doc?effectiveState(doc,req):'Pendiente';return <div className="mandante-contratistas-panel"><button type="button" className="mandante-contratistas-back" onClick={()=>onSelect(null)}><ArrowLeft/> Volver a documentos</button><div className="mandante-contratistas-document-detail"><article className="mandante-contratistas-card"><div className="mandante-contratistas-detail-head"><div><h2>{doc?.nombre||req?.nombre||'Documento faltante'}</h2><p>{worker?.nombre||contractor.nombre} · {project?.nombre}</p></div><b className={`mandante-contratistas-state ${badgeClass(state)}`}>{state}</b></div><dl><div><dt>Asociado a</dt><dd>{worker?.nombre||contractor.nombre}</dd></div><div><dt>Proyecto</dt><dd>{project?.nombre}</dd></div><div><dt>Vencimiento</dt><dd>{doc?.vencimiento||'—'}</dd></div><div><dt>Estado actual</dt><dd>{doc?validityLabel(doc,state):'No se ha cargado un documento para este requisito.'}</dd></div></dl><button type="button" onClick={()=>project&&onOpenAccreditation(project.id)}>Ver acreditación</button></article><article className="mandante-contratistas-card"><h2>Historial</h2>{doc?.historial?.length?doc.historial.map((event,index)=><div className="mandante-contratistas-history" key={`${event.version}:${index}`}><strong>Versión {event.version} · {event.estado}</strong><small>{event.fecha}</small></div>):<p>No hay historial disponible para este documento.</p>}</article></div></div>};return <div className="mandante-contratistas-panel"><div className="mandante-contratistas-local-filters"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar documento..."/><select value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="all">Todos los proyectos</option>{projects.map(p=><option value={p.id} key={p.id}>{p.nombre}</option>)}</select><select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="all">Todos</option><option value="Empresa">Empresa</option><option value="Trabajador">Trabajadores</option></select></div><article className="mandante-contratistas-card"><h2>Documentos</h2><p>Explorador documental de solo lectura.</p><div className="mandante-contratistas-table-wrap"><table><thead><tr><th>Documento</th><th>Asociado a</th><th>Proyecto</th><th>Estado</th><th>Vencimiento</th></tr></thead><tbody>{rows.map(r=><tr key={r.key} onClick={()=>onSelect({projectId:r.project.id,documentId:r.document.id,workerRut:r.type==='Trabajador'?r.key.split(':')[1]:undefined})}><td><button type="button">{r.document.nombre}</button></td><td>{r.associated}</td><td>{r.project.nombre}</td><td><b className={`mandante-contratistas-state ${badgeClass(r.state)}`}>{r.state}</b></td><td>{r.validity}</td></tr>)}</tbody></table></div>{rows.length===0&&<p>No hay documentos que coincidan con los filtros.</p>}</article></div>}
+function DocumentsV5({
+  contractor,
+  projects,
+  focus,
+  selectedContext,
+  onSelect,
+  onOpenAccreditation,
+}: {
+  contractor: Contratista;
+  projects: Proyecto[];
+  focus?: Focus;
+  selectedContext: DocumentContext | null;
+  onSelect: (value: DocumentContext | null) => void;
+  onOpenAccreditation: (id: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState(focus?.projectId || 'all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [openingFile, setOpeningFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const requirements = getRequisitos();
+
+  const source = [
+    ...contractor.documentos.map(document => ({ document, owner: contractor.nombre, type: 'Empresa' as const, workerRut: undefined })),
+    ...(contractor.trabajadores || []).flatMap(worker =>
+      (worker.documentos || []).map(document => ({ document, owner: worker.nombre, type: 'Trabajador' as const, workerRut: worker.rut })),
+    ),
+  ];
+
+  const rows: DocumentRow[] = source.flatMap(item => {
+    const project = projects.find(projectItem => projectItem.id === item.document.proyectoId);
+    if (!project) return [];
+    const requirement = requirements.find(requirementItem =>
+      requirementItem.proyectoId === project.id &&
+      normalizarNombreDocumento(requirementItem.nombre) === normalizarNombreDocumento(item.document.nombre)
+    );
+    const state = effectiveState(item.document, requirement);
+    return [{
+      key: `${project.id}:${item.workerRut || 'empresa'}:${item.document.id}`,
+      document: item.document,
+      associated: item.owner,
+      type: item.type,
+      project,
+      requirement,
+      workerRut: item.workerRut,
+      state,
+      validity: validityLabel(item.document, state),
+    }];
+  }).filter(row =>
+    (projectFilter === 'all' || row.project.id === projectFilter) &&
+    (typeFilter === 'all' || row.type === typeFilter) &&
+    `${row.document.nombre} ${row.associated}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const context = selectedContext;
+  if (context) {
+    const project = projects.find(item => item.id === context.projectId);
+    const worker = context.workerRut
+      ? (contractor.trabajadores || []).find(item => item.rut === context.workerRut)
+      : undefined;
+    const documents = worker ? worker.documentos : contractor.documentos;
+    const document = (documents || []).find(item => item.id === context.documentId);
+    const requirement = requirements.find(item => item.id === context.requirementId)
+      || (project && document
+        ? requirements.find(item =>
+            item.proyectoId === project.id &&
+            normalizarNombreDocumento(item.nombre) === normalizarNombreDocumento(document.nombre)
+          )
+        : undefined);
+    const state = document ? effectiveState(document, requirement) : 'Pendiente';
+
+    const abrirArchivo = async () => {
+      if (!project || !document || !requirement) {
+        setFileError('No fue posible resolver el archivo real de este requisito.');
+        return;
+      }
+      setOpeningFile(true);
+      setFileError(null);
+      try {
+        await openDocumentFile({
+          contratistaId: contractor.id,
+          proyectoId: project.id,
+          requisito: {
+            id: requirement.id,
+            nombre: requirement.nombre,
+            destino: requirement.destino,
+          },
+          trabajadorRut: worker?.rut,
+        });
+      } catch (error) {
+        setFileError(error instanceof Error ? error.message : 'No fue posible abrir el archivo.');
+      } finally {
+        setOpeningFile(false);
+      }
+    };
+
+    return <div className="mandante-contratistas-panel">
+      <button type="button" className="mandante-contratistas-back" onClick={() => onSelect(null)}><ArrowLeft /> Volver a documentos</button>
+      <div className="mandante-contratistas-document-detail">
+        <article className="mandante-contratistas-card">
+          <div className="mandante-contratistas-detail-head">
+            <div><h2>{document?.nombre || requirement?.nombre || 'Documento faltante'}</h2><p>{worker?.nombre || contractor.nombre} · {project?.nombre}</p></div>
+            <b className={`mandante-contratistas-state ${badgeClass(state)}`}>{state}</b>
+          </div>
+          <dl>
+            <div><dt>Asociado a</dt><dd>{worker?.nombre || contractor.nombre}</dd></div>
+            <div><dt>Proyecto</dt><dd>{project?.nombre}</dd></div>
+            <div><dt>Vencimiento</dt><dd>{document?.vencimiento || '—'}</dd></div>
+            <div><dt>Estado actual</dt><dd>{document ? validityLabel(document, state) : 'No se ha cargado un documento para este requisito.'}</dd></div>
+          </dl>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {document && requirement && <button type="button" onClick={() => void abrirArchivo()} disabled={openingFile}>{openingFile ? 'Abriendo…' : 'Abrir archivo'}</button>}
+            <button type="button" onClick={() => project && onOpenAccreditation(project.id)}>Ver acreditación</button>
+          </div>
+          {fileError && <p role="alert" style={{ marginTop: 10, color: '#9a2020' }}>{fileError}</p>}
+        </article>
+        <article className="mandante-contratistas-card">
+          <h2>Historial</h2>
+          {document?.historial?.length
+            ? document.historial.map((event, index) => <div className="mandante-contratistas-history" key={`${event.version}:${index}`}><strong>Versión {event.version} · {event.estado}</strong><small>{event.fecha}</small></div>)
+            : <p>No hay historial disponible para este documento.</p>}
+        </article>
+      </div>
+    </div>;
+  }
+
+  return <div className="mandante-contratistas-panel">
+    <div className="mandante-contratistas-local-filters">
+      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar documento..." />
+      <select value={projectFilter} onChange={event => setProjectFilter(event.target.value)}><option value="all">Todos los proyectos</option>{projects.map(project => <option value={project.id} key={project.id}>{project.nombre}</option>)}</select>
+      <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">Todos</option><option value="Empresa">Empresa</option><option value="Trabajador">Trabajadores</option></select>
+    </div>
+    <article className="mandante-contratistas-card">
+      <h2>Documentos</h2>
+      <p>Explorador documental de solo lectura. Puedes abrir los archivos autorizados, pero no aprobarlos ni rechazarlos.</p>
+      <div className="mandante-contratistas-table-wrap"><table><thead><tr><th>Documento</th><th>Asociado a</th><th>Proyecto</th><th>Estado</th><th>Vencimiento</th></tr></thead><tbody>{rows.map(row => <tr key={row.key} onClick={() => onSelect({
+        projectId: row.project.id,
+        documentId: row.document.id,
+        workerRut: row.workerRut,
+        requirementId: row.requirement?.id,
+      })}><td><button type="button">{row.document.nombre}</button></td><td>{row.associated}</td><td>{row.project.nombre}</td><td><b className={`mandante-contratistas-state ${badgeClass(row.state)}`}>{row.state}</b></td><td>{row.validity}</td></tr>)}</tbody></table></div>
+      {rows.length === 0 && <p>No hay documentos que coincidan con los filtros.</p>}
+    </article>
+  </div>;
+}
