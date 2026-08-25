@@ -294,7 +294,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
           <div className="inline-block bg-cream text-brown text-[12.7px] font-semibold tracking-[1.5px] uppercase py-1 px-3 rounded-md mb-4">Qué permite Acredita</div>
           <div className="text-[33px] font-medium leading-[1.2]">Capacidades reales del producto</div>
           <p className="text-[16px] text-[#7a7a6a] leading-relaxed mt-4">
-            Sin testimonios ni resultados atribuidos a clientes ficticios. Estas son funciones disponibles en la plataforma para gestionar acreditaciones.
+            Estas son funciones disponibles hoy en la plataforma para gestionar acreditaciones de empresas y trabajadores por proyecto.
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6 max-w-[1000px] mx-auto mt-12">
