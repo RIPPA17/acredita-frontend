@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '../data/supabaseAuth';
 import { prepareCoreDataForSession } from '../data/supabaseCoreData';
 import { prepareOperationalDataForSession } from '../data/supabaseOperationalData';
+import { prepareReviewOperationsForSession } from '../data/supabaseReviewOperations';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -18,7 +19,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     let active = true;
     let refreshTimer: number | undefined;
 
-
     const loadSession = async () => {
       try {
         const restored = await restoreSupabaseSession();
@@ -27,15 +27,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           return;
         }
 
-
         await prepareCoreDataForSession(restored);
         await prepareOperationalDataForSession(restored);
+        await prepareReviewOperationsForSession(restored);
         if (!active) return;
 
         setSession(restored);
 
-        // Mantiene viva la sesión en jornadas largas. Las escrituras de negocio
-        // son event-driven y renuevan el JWT justo antes de persistir si hace falta.
         refreshTimer = window.setInterval(async () => {
           const refreshed = await restoreSupabaseSession();
           if (!active) return;
