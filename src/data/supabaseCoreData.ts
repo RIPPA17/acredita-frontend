@@ -1,14 +1,13 @@
 import { CONTRATISTAS, MANDANTES, PROYECTOS } from './mockData';
 import type { Contratista, Mandante, Proyecto, Requisito } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
-import { getRuntimeArray, purgeLegacyBusinessStorage, runtimeFingerprint, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, purgeLegacyBusinessStorage, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
-const CORE_KEYS = ['acredita_mandantes', 'acredita_proyectos', 'acredita_contratistas', 'acredita_requisitos'] as const;
 
 type BackendMandante = {
   id: string;
@@ -304,6 +303,37 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   writeArray('acredita_requisitos', frontendRequirements);
 }
 
+async function syncMandantes(
+  session: SupabaseUserSession,
+  rows: CoreRows,
+  mandantes: Mandante[],
+): Promise<void> {
+  if (session.role !== 'admin') return;
+  const token = session._supabase.accessToken;
+  const backendByKey = new Map(rows.mandantes.filter(row => row.integration_key).map(row => [row.integration_key as string, row]));
+
+  for (const mandante of mandantes) {
+    const existing = backendByKey.get(mandante.id);
+    if (existing) {
+      await patchRows('mandantes', token, { integration_key: `eq.${mandante.id}` }, {
+        name: mandante.nombre,
+        rut: mandante.rut || null,
+        legal_name: mandante.nombre,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      await insertRows('mandantes', token, {
+        integration_key: mandante.id,
+        name: mandante.nombre,
+        rut: mandante.rut || null,
+        legal_name: mandante.nombre,
+        is_active: true,
+      }, 'integration_key');
+    }
+  }
+}
+
 async function syncContractors(
   session: SupabaseUserSession,
   rows: CoreRows,
@@ -466,21 +496,21 @@ async function syncRequirements(
 
 export async function pushCoreDataToSupabase(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
+  const mandantes = readArray<Mandante>('acredita_mandantes', MANDANTES);
   const projects = readArray<Proyecto>('acredita_proyectos', PROYECTOS);
   const contractors = readArray<Contratista>('acredita_contratistas', CONTRATISTAS);
   const requirements = readArray<Requisito>('acredita_requisitos', []);
   const rows = await fetchCoreRows(session._supabase.accessToken);
 
-  const contractorUuidByKey = await syncContractors(session, rows, projects, contractors);
+  await syncMandantes(session, rows, mandantes);
+  const rowsAfterMandantes = await fetchCoreRows(session._supabase.accessToken);
+  const contractorUuidByKey = await syncContractors(session, rowsAfterMandantes, projects, contractors);
   const refreshedRows = await fetchCoreRows(session._supabase.accessToken);
   const projectUuidByKey = await syncProjects(session, refreshedRows, projects);
   await syncAccreditations(session, projectUuidByKey, contractorUuidByKey, projects);
   await syncRequirements(session, projectUuidByKey, projects, requirements);
 }
 
-function coreFingerprint(): string {
-  return runtimeFingerprint(CORE_KEYS);
-}
 
 export async function prepareCoreDataForSession(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -488,31 +518,3 @@ export async function prepareCoreDataForSession(session: SupabaseUserSession): P
   await hydrateCoreDataFromSupabase(session);
 }
 
-export function startCoreDataAutoSync(session: SupabaseUserSession): () => void {
-  if (typeof window === 'undefined') return () => {};
-  let lastFingerprint = coreFingerprint();
-  let syncing = false;
-  let disposed = false;
-
-  const timer = window.setInterval(async () => {
-    if (disposed || syncing) return;
-    const nextFingerprint = coreFingerprint();
-    if (nextFingerprint === lastFingerprint) return;
-    lastFingerprint = nextFingerprint;
-    syncing = true;
-    try {
-      await pushCoreDataToSupabase(session);
-      await hydrateCoreDataFromSupabase(session);
-      lastFingerprint = coreFingerprint();
-    } catch (error) {
-      console.error('Error sincronizando Proyectos/Contratistas/Requisitos con Supabase.', error);
-    } finally {
-      syncing = false;
-    }
-  }, 800);
-
-  return () => {
-    disposed = true;
-    window.clearInterval(timer);
-  };
-}

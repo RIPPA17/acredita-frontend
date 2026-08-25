@@ -1,8 +1,8 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '../data/supabaseAuth';
-import { prepareCoreDataForSession, startCoreDataAutoSync } from '../data/supabaseCoreData';
-import { prepareOperationalDataForSession, startOperationalDataAutoSync } from '../data/supabaseOperationalData';
+import { prepareCoreDataForSession } from '../data/supabaseCoreData';
+import { prepareOperationalDataForSession } from '../data/supabaseOperationalData';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -16,16 +16,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   React.useEffect(() => {
     let active = true;
-    let stopCoreSync = () => {};
-    let stopOperationalSync = () => {};
     let refreshTimer: number | undefined;
 
-    const startSyncForSession = (current: SupabaseUserSession) => {
-      stopCoreSync();
-      stopOperationalSync();
-      stopCoreSync = startCoreDataAutoSync(current);
-      stopOperationalSync = startOperationalDataAutoSync(current);
-    };
 
     const loadSession = async () => {
       try {
@@ -40,22 +32,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
         await prepareOperationalDataForSession(restored);
         if (!active) return;
 
-        startSyncForSession(restored);
         setSession(restored);
 
-        // Mantiene viva la sesión en jornadas largas. Cuando cambia el token,
-        // reiniciamos ambos watchers para que todas las escrituras sigan
-        // pasando por RLS con el JWT vigente.
+        // Mantiene viva la sesión en jornadas largas. Las escrituras de negocio
+        // son event-driven y renuevan el JWT justo antes de persistir si hace falta.
         refreshTimer = window.setInterval(async () => {
           const refreshed = await restoreSupabaseSession();
           if (!active) return;
           if (!refreshed) {
-            stopCoreSync();
-            stopOperationalSync();
             setSession(null);
             return;
           }
-          startSyncForSession(refreshed);
           setSession(refreshed);
         }, 15 * 60 * 1000);
       } catch (error) {
@@ -70,8 +57,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
     return () => {
       active = false;
-      stopCoreSync();
-      stopOperationalSync();
       if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, []);

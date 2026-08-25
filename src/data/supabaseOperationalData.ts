@@ -8,7 +8,7 @@ import type {
 } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
-import { getRuntimeArray, runtimeFingerprint, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
@@ -694,34 +694,4 @@ export async function prepareOperationalDataForSession(session: SupabaseUserSess
   await hydrateOperationalDataFromSupabase(session);
 }
 
-function operationalFingerprint(): string {
-  return runtimeFingerprint([CONTRACTORS_KEY]);
-}
 
-export function startOperationalDataAutoSync(session: SupabaseUserSession): () => void {
-  if (typeof window === 'undefined' || session.role === 'mandante') return () => {};
-  let last = operationalFingerprint();
-  let syncing = false;
-  let disposed = false;
-  const timer = window.setInterval(async () => {
-    if (disposed || syncing) return;
-    const next = operationalFingerprint();
-    if (next === last) return;
-    last = next;
-    syncing = true;
-    try {
-      await pushOperationalDataToSupabase(session);
-      await hydrateOperationalDataFromSupabase(session);
-      last = operationalFingerprint();
-    } catch (error) {
-      console.error('Error sincronizando Trabajadores/Documentos con Supabase.', error);
-    } finally {
-      syncing = false;
-    }
-  }, 900);
-
-  return () => {
-    disposed = true;
-    window.clearInterval(timer);
-  };
-}
