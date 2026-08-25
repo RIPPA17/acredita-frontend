@@ -24,12 +24,16 @@ jobs:
             git commit -m "Corrige flujos finales del portal contratista"
             git push
           fi
-      - name: Ensure simulated worker upload is gone
+      - name: Audit legacy contractor patterns
         run: |
-          if grep -R "subirDocumentoRequisito" src --exclude='documentosUtils.ts'; then
-            echo "Legacy simulated upload still referenced"
-            exit 1
-          fi
+          echo '--- simulated uploads ---'
+          ! grep -Rni "subirDocumentoRequisito\|fechaCargaDemo" src/pages/Contratista.tsx src/pages/contratista src/components/Contratista* || exit 1
+          echo '--- hardcoded demo entities/projects ---'
+          grep -RniE "costanera|mackenna|tecnicosur|eléctrica sur|constructora.velez|servicios norte" src/pages/Contratista.tsx src/pages/contratista src/components/Contratista* || true
+          echo '--- browser localStorage in contractor flow ---'
+          grep -Rni "localStorage" src/pages/Contratista.tsx src/pages/contratista src/components/Contratista* || true
+          echo '--- demo/todo markers ---'
+          grep -RniE "demo|TODO|FIXME" src/pages/Contratista.tsx src/pages/contratista src/components/Contratista* || true
       - run: npm ci
       - run: npm run lint
       - run: npm run build
