@@ -21,6 +21,7 @@ import ConfigTab from './contratista/ConfigTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
+import { confirmBusinessPersistence } from '../data/supabasePersistence';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ export default function ContratistaPortal() {
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [savingWorker, setSavingWorker] = useState(false);
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<Trabajador | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
@@ -176,9 +178,9 @@ export default function ContratistaPortal() {
   }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
 
 
-  const handleAddWorkerSubmit = (e: React.FormEvent) => {
+  const handleAddWorkerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWorkerForm.nombre || !newWorkerForm.rut) return;
+    if (!newWorkerForm.nombre || !newWorkerForm.rut || savingWorker) return;
     if (!isValidRut(newWorkerForm.rut)) {
       showToast('RUT inválido, revisa el formato y dígito verificador', 'error');
       return;
@@ -200,38 +202,37 @@ export default function ContratistaPortal() {
       return;
     }
 
-    const workerDocs = crearDocumentosPendientesProyecto(
-      projectReqs,
-      contratista.id,
-      selectedProyectoId,
-      newWorkerForm.rut,
-    );
+    const workerDocs = crearDocumentosPendientesProyecto(projectReqs, contratista.id, selectedProyectoId, newWorkerForm.rut);
 
-    if (existingWorker) {
-      existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
-      existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
-    } else {
-      contratista.trabajadores.push({
-        nombre: newWorkerForm.nombre,
-        rut: newWorkerForm.rut,
-        estado: 'pendiente',
-        cargo: newWorkerForm.cargo || undefined,
-        faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
-        cumplimiento: 0,
-        documentos: workerDocs,
-      });
+    setSavingWorker(true);
+    try {
+      if (existingWorker) {
+        existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
+        existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
+      } else {
+        contratista.trabajadores.push({
+          nombre: newWorkerForm.nombre,
+          rut: newWorkerForm.rut,
+          estado: 'pendiente',
+          cargo: newWorkerForm.cargo || undefined,
+          faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
+          cumplimiento: 0,
+          documentos: workerDocs,
+        });
+      }
+      saveContratistas(list);
+      await confirmBusinessPersistence('all');
+      setDataRevision(value => value + 1);
+      setNewWorkerForm({ nombre: '', rut: '', cargo: '' });
+      setShowAddWorkerModal(false);
+      showToast('Trabajador agregado con éxito');
+    } catch (error) {
+      setDataRevision(value => value + 1);
+      console.error('No fue posible agregar el trabajador.', error);
+      showToast('No fue posible guardar el trabajador. Intenta nuevamente.', 'error');
+    } finally {
+      setSavingWorker(false);
     }
-
-    saveContratistas(list);
-    setDataRevision(value => value + 1);
-
-    setNewWorkerForm({
-      nombre: '',
-      rut: '',
-      cargo: '',
-    });
-    setShowAddWorkerModal(false);
-    showToast('Trabajador agregado con éxito');
   };
 
   if (!contratistaEncontrado) {
@@ -580,9 +581,10 @@ export default function ContratistaPortal() {
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 btn btn-primary py-2.5 font-medium rounded-lg text-sm"
+                  disabled={savingWorker}
+                  className="flex-1 btn btn-primary py-2.5 font-medium rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Agregar trabajador
+                  {savingWorker ? 'Guardando…' : 'Agregar trabajador'}
                 </button>
               </div>
             </form>

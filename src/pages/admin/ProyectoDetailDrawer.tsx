@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { XCircle, Plus, Edit } from 'lucide-react';
 import { Contratista, Proyecto, Mandante, Requisito, PlantillaBase } from '../../types';
-import { saveRequisitos, getPlantillas } from '../../data/localStorageDb';
+import { saveRequisitos, getPlantillas, getRequisitos } from '../../data/localStorageDb';
 import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
+import { confirmBusinessPersistence } from '../../data/supabasePersistence';
 
 type Tab = 'resumen' | 'contratistas' | 'requisitos' | 'acreditaciones';
 
@@ -258,6 +259,8 @@ export default function ProyectoDetailDrawer({
   const [editingRequisito, setEditingRequisito] = useState<Requisito | null>(null);
   const [form, setForm] = useState(FORM_VACIO);
   const [plantillaSeleccionadaId, setPlantillaSeleccionadaId] = useState('');
+  const [savingRequirement, setSavingRequirement] = useState(false);
+  const [requirementSaveError, setRequirementSaveError] = useState('');
 
   // Catálogo reutilizable de Configuración → Plantillas base: se lee
   // directamente cada vez que el modal está abierto (sin levantar estado
@@ -311,6 +314,7 @@ export default function ProyectoDetailDrawer({
     setEditingRequisito(null);
     setForm(FORM_VACIO);
     setPlantillaSeleccionadaId('');
+    setRequirementSaveError('');
     setShowRequisitoModal(true);
   };
 
@@ -326,6 +330,7 @@ export default function ProyectoDetailDrawer({
       alertaDias: r.alertaDias,
     });
     setPlantillaSeleccionadaId('');
+    setRequirementSaveError('');
     setShowRequisitoModal(true);
   };
 
@@ -348,42 +353,42 @@ export default function ProyectoDetailDrawer({
     setForm(f => ({ ...f, nombre: plantilla.nombre, categoria: plantilla.categoria, destino: plantilla.destino }));
   };
 
-  const guardarRequisito = (e: React.FormEvent) => {
+  const guardarRequisito = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombre.trim() || !form.frecuencia.trim()) return;
-
-    if (editingRequisito) {
-      const nuevaLista = requisitos.map(r =>
-        r.id === editingRequisito.id
-          ? { ...r, ...form, nombre: form.nombre.trim(), frecuencia: form.frecuencia.trim() }
-          : r
-      );
-      saveRequisitos(nuevaLista);
-      setRequisitos(nuevaLista);
-    } else {
-      const nuevo: Requisito = {
-        id: `req_${proyecto.id}_${Date.now()}`,
-        nombre: form.nombre.trim(),
-        categoria: form.categoria,
-        destino: form.destino,
-        obligatorio: form.obligatorio,
-        frecuencia: form.frecuencia.trim(),
-        alertaDias: form.alertaDias,
-        criticidad: form.criticidad,
-        proyectoId: proyecto.id,
-        activo: true,
-      };
-      const nuevaLista = [...requisitos, nuevo];
-      saveRequisitos(nuevaLista);
-      setRequisitos(nuevaLista);
+    if (!form.nombre.trim() || !form.frecuencia.trim() || savingRequirement) return;
+    const nuevaLista = editingRequisito
+      ? requisitos.map(r => r.id === editingRequisito.id ? { ...r, ...form, nombre: form.nombre.trim(), frecuencia: form.frecuencia.trim() } : r)
+      : [...requisitos, { id: `req_${proyecto.id}_${Date.now()}`, nombre: form.nombre.trim(), categoria: form.categoria, destino: form.destino, obligatorio: form.obligatorio, frecuencia: form.frecuencia.trim(), alertaDias: form.alertaDias, criticidad: form.criticidad, proyectoId: proyecto.id, activo: true } as Requisito];
+    setSavingRequirement(true);
+    setRequirementSaveError('');
+    saveRequisitos(nuevaLista);
+    try {
+      await confirmBusinessPersistence('core');
+      setRequisitos([...getRequisitos()]);
+      cerrarModalRequisito();
+    } catch (error) {
+      setRequisitos([...getRequisitos()]);
+      console.error('No fue posible guardar el requisito.', error);
+      setRequirementSaveError('No fue posible guardar el requisito. Revisa tu conexión e intenta nuevamente.');
+    } finally {
+      setSavingRequirement(false);
     }
-    cerrarModalRequisito();
   };
 
-  const toggleActivoRequisito = (r: Requisito) => {
+  const toggleActivoRequisito = async (r: Requisito) => {
+    if (savingRequirement) return;
     const nuevaLista = requisitos.map(x => x.id === r.id ? { ...x, activo: x.activo === false ? true : false } : x);
+    setSavingRequirement(true);
     saveRequisitos(nuevaLista);
-    setRequisitos(nuevaLista);
+    try {
+      await confirmBusinessPersistence('core');
+      setRequisitos([...getRequisitos()]);
+    } catch (error) {
+      setRequisitos([...getRequisitos()]);
+      console.error('No fue posible actualizar el requisito.', error);
+    } finally {
+      setSavingRequirement(false);
+    }
   };
 
   const tabs: Array<{ id: Tab; label: string }> = [
@@ -463,6 +468,7 @@ export default function ProyectoDetailDrawer({
             </div>
 
             <form onSubmit={guardarRequisito} className="p-6 flex flex-col gap-4">
+              {requirementSaveError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{requirementSaveError}</div>}
               {!editingRequisito && (
                 <div>
                   <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Usar plantilla base</label>
@@ -567,11 +573,11 @@ export default function ProyectoDetailDrawer({
               </div>
 
               <div className="flex justify-end gap-3 mt-2 pt-4 border-t border-cream">
-                <button type="button" onClick={cerrarModalRequisito} className="btn btn-ghost font-medium">
+                <button type="button" disabled={savingRequirement} onClick={cerrarModalRequisito} className="btn btn-ghost font-medium disabled:opacity-50">
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingRequisito ? 'Guardar cambios' : 'Agregar requisito'}
+                <button type="submit" disabled={savingRequirement} className="btn btn-primary disabled:opacity-60 disabled:cursor-not-allowed">
+                  {savingRequirement ? 'Guardando…' : editingRequisito ? 'Guardar cambios' : 'Agregar requisito'}
                 </button>
               </div>
             </form>
