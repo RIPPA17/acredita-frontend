@@ -31,10 +31,6 @@ export function clearRuntimeBusinessData(): void {
   CORE_RUNTIME_KEYS.forEach(key => runtimeData.delete(key));
 }
 
-export function runtimeFingerprint(keys: readonly string[]): string {
-  return keys.map(key => `${key}:${JSON.stringify(runtimeData.get(key) ?? null)}`).join('|');
-}
-
 export function purgeLegacyBusinessStorage(): void {
   if (typeof window === 'undefined') return;
   LEGACY_BUSINESS_KEYS.forEach(key => localStorage.removeItem(key));
