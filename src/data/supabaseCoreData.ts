@@ -303,6 +303,37 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   writeArray('acredita_requisitos', frontendRequirements);
 }
 
+async function syncMandantes(
+  session: SupabaseUserSession,
+  rows: CoreRows,
+  mandantes: Mandante[],
+): Promise<void> {
+  if (session.role !== 'admin') return;
+  const token = session._supabase.accessToken;
+  const backendByKey = new Map(rows.mandantes.filter(row => row.integration_key).map(row => [row.integration_key as string, row]));
+
+  for (const mandante of mandantes) {
+    const existing = backendByKey.get(mandante.id);
+    if (existing) {
+      await patchRows('mandantes', token, { integration_key: `eq.${mandante.id}` }, {
+        name: mandante.nombre,
+        rut: mandante.rut || null,
+        legal_name: mandante.nombre,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      await insertRows('mandantes', token, {
+        integration_key: mandante.id,
+        name: mandante.nombre,
+        rut: mandante.rut || null,
+        legal_name: mandante.nombre,
+        is_active: true,
+      }, 'integration_key');
+    }
+  }
+}
+
 async function syncContractors(
   session: SupabaseUserSession,
   rows: CoreRows,
@@ -465,12 +496,15 @@ async function syncRequirements(
 
 export async function pushCoreDataToSupabase(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
+  const mandantes = readArray<Mandante>('acredita_mandantes', MANDANTES);
   const projects = readArray<Proyecto>('acredita_proyectos', PROYECTOS);
   const contractors = readArray<Contratista>('acredita_contratistas', CONTRATISTAS);
   const requirements = readArray<Requisito>('acredita_requisitos', []);
   const rows = await fetchCoreRows(session._supabase.accessToken);
 
-  const contractorUuidByKey = await syncContractors(session, rows, projects, contractors);
+  await syncMandantes(session, rows, mandantes);
+  const rowsAfterMandantes = await fetchCoreRows(session._supabase.accessToken);
+  const contractorUuidByKey = await syncContractors(session, rowsAfterMandantes, projects, contractors);
   const refreshedRows = await fetchCoreRows(session._supabase.accessToken);
   const projectUuidByKey = await syncProjects(session, refreshedRows, projects);
   await syncAccreditations(session, projectUuidByKey, contractorUuidByKey, projects);
