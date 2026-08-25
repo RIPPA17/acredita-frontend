@@ -1,0 +1,56 @@
+name: Cleanup audit
+on:
+  push:
+    branches:
+      - cleanup/legacy-final
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: LocalStorage references
+        run: |
+          echo '=== LOCALSTORAGE REFERENCES ==='
+          grep -RIn --exclude-dir=node_modules --exclude='*.css' 'localStorage\.' src || true
+      - name: Legacy exports usage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          target = Path('src/data/localStorageDb.ts')
+          text = target.read_text()
+          exports = sorted(set(re.findall(r'export\s+(?:async\s+)?function\s+(\w+)', text)))
+          files = [p for p in Path('src').rglob('*') if p.suffix in {'.ts','.tsx'} and p != target]
+          corpus = '\n'.join(p.read_text(errors='ignore') for p in files)
+          print('=== LOCALSTORAGEDB EXPORTS ===')
+          print('total', len(exports))
+          for name in exports:
+              count = len(re.findall(rf'\b{re.escape(name)}\b', corpus))
+              print(f'{count:3} {name}')
+          print('=== UNUSED EXPORTS (textual) ===')
+          for name in exports:
+              if not re.search(rf'\b{re.escape(name)}\b', corpus):
+                  print(name)
+          PY
+      - name: MockData usage
+        run: |
+          echo '=== MOCKDATA IMPORTS ==='
+          grep -RIn --exclude='mockData.ts' "mockData" src || true
+      - name: Demo and legacy markers
+        run: |
+          echo '=== DEMO / LEGACY MARKERS ==='
+          grep -RInE --exclude-dir=node_modules 'demo|legacy|simular|sembrar|mock' src | head -n 300 || true
+      - name: TypeScript
+        run: npm run lint
+      - name: Build
+        run: npm run build
