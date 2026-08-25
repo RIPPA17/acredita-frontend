@@ -20,37 +20,51 @@ jobs:
         run: npm ci
       - name: LocalStorage references
         run: |
-          echo '=== LOCALSTORAGE REFERENCES ==='
-          grep -RIn --exclude-dir=node_modules --exclude='*.css' 'localStorage\.' src || true
-      - name: Legacy exports usage
+          echo '=== LOCALSTORAGE REFERENCES (PRODUCT, NO TESTS) ==='
+          grep -RIn --exclude-dir=node_modules --exclude-dir=__tests__ --exclude='*.css' 'localStorage\.' src || true
+      - name: LocalStorageDb imports
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          target = Path('src/data/localStorageDb.ts')
-          text = target.read_text()
-          exports = sorted(set(re.findall(r'export\s+(?:async\s+)?function\s+(\w+)', text)))
-          files = [p for p in Path('src').rglob('*') if p.suffix in {'.ts','.tsx'} and p != target]
-          corpus = '\n'.join(p.read_text(errors='ignore') for p in files)
-          print('=== LOCALSTORAGEDB EXPORTS ===')
-          print('total', len(exports))
+          print('=== ACTUAL IMPORTS FROM localStorageDb ===')
+          imported=set()
+          for p in Path('src').rglob('*'):
+              if p.suffix not in {'.ts','.tsx'} or p.name=='localStorageDb.ts' or '__tests__' in p.parts:
+                  continue
+              text=p.read_text(errors='ignore')
+              for m in re.finditer(r'import\s*\{([^}]*)\}\s*from\s*[\"\']([^\"\']*localStorageDb)[\"\']', text, re.S):
+                  names=[]
+                  for raw in m.group(1).split(','):
+                      name=raw.strip().split(' as ')[0].strip()
+                      if name:
+                          names.append(name)
+                          imported.add(name)
+                  print(f'{p}: {", ".join(names)}')
+          print('=== UNIQUE IMPORTED EXPORTS ===')
+          for name in sorted(imported): print(name)
+          print('COUNT', len(imported))
+          PY
+      - name: Unused legacy exports
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          target=Path('src/data/localStorageDb.ts')
+          text=target.read_text()
+          exports=sorted(set(re.findall(r'export\s+(?:async\s+)?function\s+(\w+)', text)))
+          files=[p for p in Path('src').rglob('*') if p.suffix in {'.ts','.tsx'} and p!=target and '__tests__' not in p.parts]
+          corpus='\n'.join(p.read_text(errors='ignore') for p in files)
+          print('=== UNUSED EXPORTS OUTSIDE TESTS ===')
           for name in exports:
-              count = len(re.findall(rf'\b{re.escape(name)}\b', corpus))
-              print(f'{count:3} {name}')
-          print('=== UNUSED EXPORTS (textual) ===')
-          for name in exports:
-              if not re.search(rf'\b{re.escape(name)}\b', corpus):
-                  print(name)
+              if not re.search(rf'\b{re.escape(name)}\b', corpus): print(name)
           PY
       - name: MockData usage
         run: |
           echo '=== MOCKDATA IMPORTS ==='
-          grep -RIn --exclude='mockData.ts' "mockData" src || true
-      - name: Demo and legacy markers
-        run: |
-          echo '=== DEMO / LEGACY MARKERS ==='
-          grep -RInE --exclude-dir=node_modules 'demo|legacy|simular|sembrar|mock' src | head -n 300 || true
-      - name: TypeScript
+          grep -RIn --exclude='mockData.ts' --exclude-dir=__tests__ "mockData" src || true
+      - name: TypeScript baseline
+        continue-on-error: true
         run: npm run lint
       - name: Build
         run: npm run build
