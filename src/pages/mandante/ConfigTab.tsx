@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Building2, Folder, ShieldCheck } from 'lucide-react';
 import type { Mandante, Proyecto } from '../../types';
 import type { ConfigTabId } from './config/configUtils';
@@ -13,8 +14,15 @@ interface Props {
 }
 
 export default function ConfigTab({ mandante, misProyectos, onDirtyChange }: Props) {
-  onDirtyChange?.(false);
-  const activos = misProyectos.filter(project => project.estado === 'active').length;
+  useEffect(() => {
+    onDirtyChange?.(false);
+  }, [onDirtyChange]);
+
+  const activos = misProyectos.filter(project => {
+    const estado = String(project.estado || '').toLowerCase();
+    return estado === 'active' || estado === 'activo';
+  }).length;
+
   return (
     <div className="mandante-config fade-in">
       <header className="mandante-config-head">
