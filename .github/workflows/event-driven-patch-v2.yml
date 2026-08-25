@@ -117,7 +117,7 @@ jobs:
             if (method !== 'GET') writes.push({ url, method });
             if (method === 'GET') return new Response(JSON.stringify(backend[table] || []), { status: 200, headers: { 'Content-Type': 'application/json' } });
             if (method === 'POST' && table === 'projects') backend.projects.push({ id: 'p-uuid', ...JSON.parse(init.body || '{}') });
-            return new Response('', { status: 204 });
+            return new Response(null, { status: 204 });
           };
           const db = await import('./src/data/localStorageDb.ts');
           const persistence = await import('./src/data/supabasePersistence.ts');
