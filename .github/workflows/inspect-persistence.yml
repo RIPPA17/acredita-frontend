@@ -16,8 +16,8 @@ jobs:
       - name: Find persistence callsites
         run: |
           echo '=== AUTO SYNC ==='
-          rg -n "start(Core|Operational)DataAutoSync|setInterval" src || true
+          grep -RInE "start(Core|Operational)DataAutoSync|setInterval" src || true
           echo '=== SAVE CALLS ==='
-          rg -n "save(Contratistas|Proyectos|Mandantes|Requisitos)\(" src || true
+          grep -RInE "save(Contratistas|Proyectos|Mandantes|Requisitos)\(" src || true
           echo '=== IMPORTS OF SAVE FUNCTIONS ==='
-          rg -n "saveContratistas|saveProyectos|saveMandantes|saveRequisitos" src || true
+          grep -RInE "saveContratistas|saveProyectos|saveMandantes|saveRequisitos" src || true
