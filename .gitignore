@@ -29,6 +29,11 @@ pnpm-debug.log*
 *.log
 .eslintcache
 
+# === Resultados E2E / Playwright ===
+test-results/
+playwright-report/
+blob-report/
+
 # === IDEs / Editores de Código ===
 .vscode/
 .idea/
