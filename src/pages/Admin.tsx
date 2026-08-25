@@ -36,7 +36,7 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck, Settings
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getCurrentSession } from "../data/localStorageDb";
 import { Contratista, Proyecto, Requisito, Verificador, ClaimRevision } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
@@ -58,12 +58,16 @@ import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import DocumentoDetailModal from './admin/DocumentoDetailModal';
 import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
 import { refreshReviewOperationsCache } from '../data/supabaseReviewOperations';
+import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
+import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
+import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
 export default function AdminPortal() {
   const navigate = useNavigate();
+  const session = getCurrentSession();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem('sidebar_collapsed');
     if (stored !== null) return stored === 'true';
@@ -154,6 +158,16 @@ export default function AdminPortal() {
   const [selectedDocKey, setSelectedDocKey] = useState<string | null>(null);
   const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
+  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!session?.profileId) return;
+    let cancelled = false;
+    loadReadNotificationKeys(session.profileId, session)
+      .then(keys => { if (!cancelled) setNotificacionesLeidas(keys); })
+      .catch(() => { if (!cancelled) setNotificacionesLeidas(new Set()); });
+    return () => { cancelled = true; };
+  }, [session?.profileId]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   const [tabCliente, setTabCliente] = useState("resumen");
   // Proyecto desde el que se abrió el drawer de Contratistas (si el usuario
@@ -303,6 +317,33 @@ export default function AdminPortal() {
   );
 
   const pendingDocsCount = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS).length;
+
+  const notificacionesOperativas = buildAdminNotifications(contratistas, proyectos, pendingDocsCount);
+  const notificacionesSinLeer = notificacionesOperativas.filter(item => !notificacionesLeidas.has(item.id)).length;
+
+  const marcarNotificacionesLeidas = (ids: string[]) => {
+    setNotificacionesLeidas(actual => {
+      const next = new Set(actual);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
+    if (session?.profileId) void markNotificationKeysRead(session.profileId, ids, session).catch(() => undefined);
+  };
+
+  const abrirNotificacionOperativa = (notificacion: OperationalNotification) => {
+    marcarNotificacionesLeidas([notificacion.id]);
+    if (notificacion.destino === 'cola') setActiveTab('cola');
+    else if (notificacion.destino === 'acreditacion') setActiveTab('acreditaciones');
+    else {
+      setActiveTab('proyectos');
+      if (notificacion.proyectoId) {
+        const proyecto = proyectos.find(item => item.id === notificacion.proyectoId);
+        if (proyecto) setProyectoSeleccionado(proyecto);
+      }
+    }
+    setShowNotif(false);
+  };
+
 
   const menuItems: Array<{ id: string; label: string; icon: any; badge?: number; section?: string; badgeTipo?: string; badgePunto?: boolean }> = [
     { id: "dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -484,89 +525,22 @@ export default function AdminPortal() {
           <div className="relative">
             <button
               onClick={() => setShowNotif(!showNotif)}
+              aria-label={showNotif ? 'Cerrar notificaciones' : 'Abrir notificaciones'}
+              aria-expanded={showNotif}
               className="flex items-center justify-center relative w-8 h-8 rounded-md bg-white/10 text-cream hover:bg-white/20 transition-colors"
             >
               <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#c03030] rounded-full border border-navy"></span>
+              {notificacionesSinLeer > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 flex items-center justify-center bg-[#c73b3b] text-white text-[8px] font-extrabold rounded-full border-2 border-navy">{notificacionesSinLeer}</span>}
             </button>
-
-            {showNotif && (
-              <div
-                className="fixed inset-0 z-[299]"
-                onClick={() => setShowNotif(false)}
-              />
-            )}
-
-            {showNotif && (
-              <div className="absolute top-11 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300] right-3 sm:right-0">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-cream3">
-                  <span className="font-semibold text-navy text-[15px]">
-                    Notificaciones
-                  </span>
-                  <span className="badge b-red">1 urgente</span>
-                </div>
-
-                {/* Items */}
-                <div className="flex flex-col divide-y divide-cream3 max-h-[400px] overflow-y-auto">
-                  <div className="flex items-start gap-3 px-4 py-3 bg-red-50 hover:bg-red-100/60 transition-colors cursor-pointer">
-                    <AlertCircle
-                      size={18}
-                      className="text-red-500 shrink-0 mt-0.5"
-                    />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-red-700">
-                        3 documentos sin revisar +24hrs
-                      </p>
-                      <p className="text-[12.5px] text-red-500 mt-0.5">
-                        Requieren atención urgente — cola de revisión
-                      </p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">
-                        Hace 2 horas
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer">
-                    <CheckCircle
-                      size={18}
-                      className="text-green-500 shrink-0 mt-0.5"
-                    />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">
-                        Eléctrica Sur aprobó contrato de trabajo
-                      </p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">
-                        Hace 6 horas
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer">
-                    <Users
-                      size={18}
-                      className="text-blue-500 shrink-0 mt-0.5"
-                    />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">
-                        TécnicoSur SpA se registró en la plataforma
-                      </p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">
-                        Hace 8 horas
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="px-4 py-2.5 border-t border-cream3 text-center">
-                  <button
-                    onClick={() => setShowNotif(false)}
-                    className="text-[13px] text-brown hover:underline font-medium"
-                  >
-                    Marcar todas como leídas
-                  </button>
-                </div>
-              </div>
-            )}
+            {showNotif && <div className="fixed inset-0 z-[299]" onClick={() => setShowNotif(false)} />}
+            {showNotif && <OperationalNotificationsPanel
+              contextLabel="Equipo Acredita"
+              notificaciones={notificacionesOperativas}
+              leidas={notificacionesLeidas}
+              onMarcarLeida={id => marcarNotificacionesLeidas([id])}
+              onMarcarTodas={() => marcarNotificacionesLeidas(notificacionesOperativas.map(item => item.id))}
+              onAbrir={abrirNotificacionOperativa}
+            />}
           </div>
           <div className="flex min-w-0 max-w-[55vw] items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
