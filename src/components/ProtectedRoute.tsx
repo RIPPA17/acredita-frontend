@@ -35,19 +35,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           return;
         }
 
-        // Solo intentamos subir datos core legacy si el navegador realmente
-        // tiene una base local completa previa. En una sesión nueva, Supabase
-        // hidrata primero el catálogo y conserva los mocks como compatibilidad
-        // únicamente hasta que el bloque operacional termina su migración.
-        const hasLegacyCoreData =
-          localStorage.getItem('acredita_db_initialized') === 'true'
-          && localStorage.getItem('acredita_proyectos') !== null
-          && localStorage.getItem('acredita_contratistas') !== null
-          && localStorage.getItem('acredita_requisitos') !== null;
-
-        if (!hasLegacyCoreData) {
-          localStorage.setItem(`acredita_core_supabase_migrated_v1:${restored.profileId}`, 'true');
-        }
 
         await prepareCoreDataForSession(restored);
         await prepareOperationalDataForSession(restored);

@@ -8,13 +8,13 @@ import type {
 } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
+import { getRuntimeArray, runtimeFingerprint, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
-const MIGRATION_MARKER_PREFIX = 'acredita_operational_supabase_migrated_v1:';
 const CONTRACTORS_KEY = 'acredita_contratistas';
 
 type BackendProject = { id: string; name: string; integration_key: string | null };
@@ -145,37 +145,19 @@ async function patchRows(table: string, token: string, filters: Record<string, s
 }
 
 function readContractors(): Contratista[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CONTRACTORS_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return getRuntimeArray<Contratista>(CONTRACTORS_KEY, []);
 }
 
 function writeContractors(contractors: Contratista[]): void {
-  if (typeof window !== 'undefined') localStorage.setItem(CONTRACTORS_KEY, JSON.stringify(contractors));
+  setRuntimeArray(CONTRACTORS_KEY, contractors);
 }
 
 function readProjects(): Proyecto[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const parsed = JSON.parse(localStorage.getItem('acredita_proyectos') || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return getRuntimeArray<Proyecto>('acredita_proyectos', []);
 }
 
 function readRequirements(): Requisito[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const parsed = JSON.parse(localStorage.getItem('acredita_requisitos') || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return getRuntimeArray<Requisito>('acredita_requisitos', []);
 }
 
 function normalize(value: string): string {
@@ -643,7 +625,7 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     if (!contractorKey) continue;
     const localContractor = contractors.find(c => c.id === contractorKey);
     const localWorker = localContractor?.trabajadores?.find(w => normalizeRut(w.rut) === normalizeRut(backendWorker.rut));
-    let docs = mergeDocs(localWorker?.documentos || [], backendWorkerDocs.get(`${contractorKey}:${normalizeRut(backendWorker.rut)}`) || []);
+    let docs = [...(backendWorkerDocs.get(`${contractorKey}:${normalizeRut(backendWorker.rut)}`) || [])];
     const assignedProjectKeys = assignmentProjectsByWorker.get(backendWorker.id) || [];
 
     // Los placeholders pendientes mantienen visible una asignación incluso si
@@ -667,11 +649,11 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
 
     const firstProject = assignedProjectKeys.map(key => projectByKey.get(key)).find(Boolean);
     const worker: Trabajador = {
-      ...(localWorker || { estado: 'pendiente' as const }),
+      estado: 'pendiente' as const,
       nombre: backendWorker.full_name,
       rut: backendWorker.rut,
-      cargo: backendWorker.job_title || localWorker?.cargo,
-      faena: firstProject?.nombre || localWorker?.faena,
+      cargo: backendWorker.job_title || undefined,
+      faena: firstProject?.nombre,
       documentos: docs,
     };
     const list = workersByContractor.get(contractorKey) || [];
@@ -679,33 +661,41 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     workersByContractor.set(contractorKey, list);
   }
 
-  const next = contractors.map(contractor => ({
-    ...contractor,
-    documentos: mergeDocs(contractor.documentos || [], backendCompanyDocs.get(contractor.id) || []),
-    trabajadores: workersByContractor.has(contractor.id)
-      ? workersByContractor.get(contractor.id)
-      : contractor.trabajadores,
-  }));
+  const next = contractors.map(contractor => {
+    const companyDocs = [...(backendCompanyDocs.get(contractor.id) || [])];
+    for (const projectKey of contractor.proyectos || []) {
+      const companyReqs = requirements.filter(r => r.proyectoId === projectKey && r.destino === 'empresa' && r.activo !== false);
+      for (const req of companyReqs) {
+        if (companyDocs.some(d => d.proyectoId === projectKey && normalize(d.nombre) === normalize(req.nombre))) continue;
+        companyDocs.push({
+id: `doc_${slug(contractor.id)}_${slug(projectKey)}_${slug(req.id)}_empresa`,
+nombre: req.nombre,
+categoria: req.categoria,
+estado: 'pendiente',
+vencimiento: '—',
+proyectoId: projectKey,
+version: 1,
+historial: [],
+        });
+      }
+    }
+    return {
+      ...contractor,
+      documentos: companyDocs,
+      trabajadores: workersByContractor.get(contractor.id) || [],
+    };
+  });
   writeContractors(next);
   await refreshDerivedStateCache(session);
 }
 
 export async function prepareOperationalDataForSession(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
-  const marker = `${MIGRATION_MARKER_PREFIX}${session.profileId}`;
-  if (localStorage.getItem(marker) !== 'true' && session.role !== 'mandante') {
-    try {
-      await pushOperationalDataToSupabase(session);
-      localStorage.setItem(marker, 'true');
-    } catch (error) {
-      console.warn('No fue posible migrar completamente trabajadores/documentos legacy.', error);
-    }
-  }
   await hydrateOperationalDataFromSupabase(session);
 }
 
 function operationalFingerprint(): string {
-  return typeof window === 'undefined' ? '' : localStorage.getItem(CONTRACTORS_KEY) || '';
+  return runtimeFingerprint([CONTRACTORS_KEY]);
 }
 
 export function startOperationalDataAutoSync(session: SupabaseUserSession): () => void {
@@ -721,6 +711,8 @@ export function startOperationalDataAutoSync(session: SupabaseUserSession): () =
     syncing = true;
     try {
       await pushOperationalDataToSupabase(session);
+      await hydrateOperationalDataFromSupabase(session);
+      last = operationalFingerprint();
     } catch (error) {
       console.error('Error sincronizando Trabajadores/Documentos con Supabase.', error);
     } finally {
