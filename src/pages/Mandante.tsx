@@ -16,6 +16,9 @@ import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
 import ContratistasTab from './mandante/ContratistasTab';
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
+import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
+import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
+import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 
 export default function MandantePortal() {
   const session = getCurrentSession();
@@ -37,6 +40,7 @@ function InvalidMandanteSession() {
 
 function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandante }) {
   const navigate = useNavigate();
+  const session = getCurrentSession();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
@@ -51,6 +55,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
   const [activeConfigTab, setActiveConfigTab] = useState<ConfigTabId>('empresa');
   const [configHasUnsavedChanges, setConfigHasUnsavedChanges] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
   const [activeProjectTab, setActiveProjectTab] = useState('resumen');
   const [editingContractorId, setEditingContractorId] = useState<string | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
@@ -67,6 +72,28 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
 
   const misProyectos = allProyectos.filter(p => p.mandanteId === mandanteLogueado.id);
 
+  const notificacionesOperativas = buildMandanteNotifications(mandanteLogueado.id, allContratistas, allProyectos);
+  const notificacionesSinLeer = notificacionesOperativas.filter(item => !notificacionesLeidas.has(item.id)).length;
+
+  React.useEffect(() => {
+    if (!session?.profileId) return;
+    let cancelled = false;
+    loadReadNotificationKeys(session.profileId, session)
+      .then(keys => { if (!cancelled) setNotificacionesLeidas(keys); })
+      .catch(() => { if (!cancelled) setNotificacionesLeidas(new Set()); });
+    return () => { cancelled = true; };
+  }, [session?.profileId]);
+
+  const marcarNotificacionesLeidas = (ids: string[]) => {
+    setNotificacionesLeidas(actual => {
+      const next = new Set(actual);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
+    if (session?.profileId) void markNotificationKeysRead(session.profileId, ids, session).catch(() => undefined);
+  };
+
+
   const PROYECTOS_AJUSTES = misProyectos.map(p => ({
     id: p.id,
     nombre: p.nombre,
@@ -79,6 +106,13 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
     setProyectoSeleccionadoAjustes(projectId);
     setActiveTab('proyectos');
     setActiveProjectTab('resumen');
+  };
+
+  const abrirNotificacionOperativa = (notificacion: OperationalNotification) => {
+    marcarNotificacionesLeidas([notificacion.id]);
+    if (notificacion.proyectoId) goToProject(notificacion.proyectoId);
+    else setActiveTab('proyectos');
+    setShowNotif(false);
   };
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
@@ -245,101 +279,24 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
         </div>
         <div className="flex items-center gap-4">
           <div className="relative">
-            <button 
+            <button
               onClick={() => setShowNotif(!showNotif)}
-              className="flex items-center justify-center relative w-8 h-8 rounded-md bg-white/10 text-cream hover:bg-white/20 transition-colors">
+              aria-label={showNotif ? 'Cerrar notificaciones' : 'Abrir notificaciones'}
+              aria-expanded={showNotif}
+              className="flex items-center justify-center relative w-8 h-8 rounded-md bg-white/10 text-cream hover:bg-white/20 transition-colors"
+            >
               <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#c03030] rounded-full border border-navy"></span>
+              {notificacionesSinLeer > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 flex items-center justify-center bg-[#c73b3b] text-white text-[8px] font-extrabold rounded-full border-2 border-navy">{notificacionesSinLeer}</span>}
             </button>
-
             {showNotif && <div className="fixed inset-0 z-[299]" onClick={() => setShowNotif(false)} />}
-            
-            {showNotif && (
-              <div className="absolute top-11 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-xl shadow-2xl border border-cream3 z-[300] right-3 sm:right-0">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-cream3 text-left">
-                  <span className="font-semibold text-navy text-[15px]">Notificaciones</span>
-                  <span className="badge b-red">2 urgentes</span>
-                </div>
-
-                {/* Items */}
-                <div className="flex flex-col divide-y divide-cream3 max-h-[400px] overflow-y-auto w-full">
-                  <div 
-                    onClick={() => {
-                      setActiveTab('proyectos');
-                      setActiveProjectTab('contratistas');
-                      setVistaContratistas('costanera');
-                      setSelectedContratista('constructora-velez');
-                      setShowNotif(false);
-                    }}
-                    className="flex items-start gap-3 px-4 py-3 bg-red-50 hover:bg-red-100/60 transition-colors cursor-pointer text-left"
-                  >
-                    <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-red-700">3 documentos sin revisar +24hrs</p>
-                      <p className="text-[12.5px] text-red-500 mt-0.5">Requieren atención urgente — cola de revisión</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 2 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => {
-                      setActiveTab('proyectos');
-                      setActiveProjectTab('requisitos');
-                      setShowNotif(false);
-                    }}
-                    className="flex items-start gap-3 px-4 py-3 bg-yellow-50 hover:bg-yellow-100/60 transition-colors cursor-pointer text-left"
-                  >
-                    <AlertTriangle size={18} className="text-yellow-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-semibold text-yellow-800">Plantilla "F30 SII" desactualizada</p>
-                      <p className="text-[12.5px] text-yellow-700 mt-0.5">Revisar antes del 31 de mayo — Gestión de plantillas</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 5 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => {
-                      setActiveTab('proyectos');
-                      setActiveProjectTab('contratistas');
-                      setVistaContratistas('mackenna');
-                      setSelectedContratista('electrica-sur');
-                      setShowNotif(false);
-                    }}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer text-left"
-                  >
-                    <CheckCircle size={18} className="text-green-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">Eléctrica Sur aprobó contrato de trabajo</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 6 horas</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => {
-                      setActiveTab('proyectos');
-                      setActiveProjectTab('contratistas');
-                      setVistaContratistas('mackenna');
-                      setSelectedContratista('tecnicosur');
-                      setShowNotif(false);
-                    }}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-cream2 transition-colors cursor-pointer text-left"
-                  >
-                    <Users size={18} className="text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[13.8px] font-medium text-navy">TécnicoSur SpA se registró en la plataforma</p>
-                      <p className="text-[11.5px] text-gray-400 mt-1">Hace 8 horas</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="px-4 py-2.5 border-t border-cream3 text-center">
-                  <button 
-                    onClick={() => setShowNotif(false)}
-                    className="text-[13px] text-brown hover:underline font-medium">
-                    Marcar todas como leídas
-                  </button>
-                </div>
-              </div>
-            )}
+            {showNotif && <OperationalNotificationsPanel
+              contextLabel={mandanteLogueado.nombre}
+              notificaciones={notificacionesOperativas}
+              leidas={notificacionesLeidas}
+              onMarcarLeida={id => marcarNotificacionesLeidas([id])}
+              onMarcarTodas={() => marcarNotificacionesLeidas(notificacionesOperativas.map(item => item.id))}
+              onAbrir={abrirNotificacionOperativa}
+            />}
           </div>
           <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">{mandanteLogueado.nombre.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase()}</div>
