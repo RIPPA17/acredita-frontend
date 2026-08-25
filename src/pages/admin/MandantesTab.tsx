@@ -210,7 +210,7 @@ export default function MandantesTab({
               className="px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-hover to-gold text-white hover:brightness-105 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_6px_16px_rgba(179,137,63,0.35)] border-none"
             >
               <Plus size={15} />
-              Invitar mandante
+              Crear mandante
             </button>
           </div>
         </div>
