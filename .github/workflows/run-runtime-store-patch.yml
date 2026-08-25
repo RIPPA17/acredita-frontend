@@ -40,6 +40,12 @@ jobs:
             const expected = { admin: '/admin', mandante: '/mandante', contratista: '/contratista' };
             const forbidden = ['acredita_contratistas','acredita_proyectos','acredita_mandantes','acredita_requisitos'];
             const browser = await chromium.launch();
+            const waitHydrated = async (page, role) => {
+              await page.waitForFunction(() => !document.body.innerText.includes('Sincronizando datos seguros'), null, { timeout: 30000 });
+              const text = (await page.locator('body').innerText()).trim();
+              if (text.includes('Algo salió mal')) throw new Error(`${role}: ErrorBoundary activo: ${text.slice(0,300)}`);
+              if (text.length < 100) throw new Error(`${role}: portal sin contenido tras hidratación: ${text.slice(0,300)}`);
+            };
             try {
               for (const user of users) {
                 const context = await browser.newContext();
@@ -49,19 +55,18 @@ jobs:
                 await page.locator('#login-password').fill(user.password);
                 await page.getByRole('button', { name: 'Ingresar' }).click();
                 await page.waitForURL(url => url.pathname.startsWith(expected[user.role]), { timeout: 30000 });
-                await page.waitForLoadState('networkidle');
-                if ((await page.locator('body').innerText()).trim().length < 100) throw new Error(`${user.role}: portal vacío`);
+                await waitHydrated(page, user.role);
                 let keys = await page.evaluate(() => Object.keys(localStorage));
                 let leaked = forbidden.filter(k => keys.includes(k));
                 if (leaked.length) throw new Error(`${user.role}: localStorage negocio antes reload: ${leaked.join(',')}`);
                 if (!keys.includes('acredita_session')) throw new Error(`${user.role}: sesión ausente`);
-                await page.reload({ waitUntil: 'networkidle' });
+                await page.reload({ waitUntil: 'domcontentloaded' });
                 await page.waitForURL(url => url.pathname.startsWith(expected[user.role]), { timeout: 30000 });
-                if ((await page.locator('body').innerText()).trim().length < 100) throw new Error(`${user.role}: portal vacío después reload`);
+                await waitHydrated(page, user.role);
                 keys = await page.evaluate(() => Object.keys(localStorage));
                 leaked = forbidden.filter(k => keys.includes(k));
                 if (leaked.length) throw new Error(`${user.role}: localStorage negocio después reload: ${leaked.join(',')}`);
-                console.log(`PASS ${user.role}: localStorage negocio=0 | reload=OK`);
+                console.log(`PASS ${user.role}: ${expected[user.role]} | localStorage negocio=0 | reload=OK`);
                 await context.close();
               }
             } finally { await browser.close(); }
