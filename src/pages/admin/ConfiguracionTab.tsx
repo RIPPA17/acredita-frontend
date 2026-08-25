@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import type { Verificador } from '../../types';
-import { getPlantillas } from '../../data/localStorageDb';
+import { useEffect, useState } from 'react';
+import type { PlantillaBase, Verificador } from '../../types';
+import { loadDocumentTemplates } from '../../data/supabaseTemplates';
 import GeneralConfig from './configuracion/GeneralConfig';
-import PlantillasConfig from './configuracion/PlantillasConfig';
+import PlantillasSupabaseConfig from './configuracion/PlantillasSupabaseConfig';
 
 type Tab = 'general' | 'plantillas';
 
@@ -22,7 +22,27 @@ export default function ConfiguracionTab({
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [tab, setTab] = useState<Tab>('general');
-  const [plantillas, setPlantillas] = useState<any[]>(() => getPlantillas());
+  const [plantillas, setPlantillas] = useState<PlantillaBase[]>([]);
+  const [loadingPlantillas, setLoadingPlantillas] = useState(true);
+  const [plantillasError, setPlantillasError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setLoadingPlantillas(true);
+      setPlantillasError(null);
+      try {
+        const rows = await loadDocumentTemplates();
+        if (active) setPlantillas(rows);
+      } catch (error) {
+        if (active) setPlantillasError(error instanceof Error ? error.message : 'No fue posible cargar las plantillas.');
+      } finally {
+        if (active) setLoadingPlantillas(false);
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="fade-in">
@@ -51,8 +71,15 @@ export default function ConfiguracionTab({
           <div className="p-5">
             {tab === 'general' ? (
               <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} onSetVerificadorActual={() => undefined} />
+            ) : loadingPlantillas ? (
+              <div className="py-14 text-center text-[13px] text-gray-400">Cargando plantillas desde Supabase…</div>
+            ) : plantillasError ? (
+              <div className="py-14 text-center">
+                <p className="text-[13px] text-red-700 font-semibold">No fue posible cargar las plantillas.</p>
+                <p className="text-[11.5px] text-gray-400 mt-1">{plantillasError}</p>
+              </div>
             ) : (
-              <PlantillasConfig plantillas={plantillas} setPlantillas={setPlantillas} showToast={showToast} />
+              <PlantillasSupabaseConfig plantillas={plantillas} setPlantillas={setPlantillas} showToast={showToast} />
             )}
           </div>
         </div>
