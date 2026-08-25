@@ -1,0 +1,27 @@
+name: Landing Copy Fix
+
+on:
+  push:
+    branches:
+      - fix/landing-no-fake-clients
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/landing-no-fake-clients
+      - name: Ajustar copy
+        run: python -c "from pathlib import Path; p=Path('src/pages/Landing.tsx'); t=p.read_text(); old='Sin testimonios ni resultados atribuidos a clientes ficticios. Estas son funciones disponibles en la plataforma para gestionar acreditaciones.'; new='Estas son funciones disponibles hoy en la plataforma para gestionar acreditaciones de empresas y trabajadores por proyecto.'; assert old in t; p.write_text(t.replace(old,new,1))"
+      - name: Guardar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Landing.tsx
+          git commit -m "Ajusta copy de capacidades reales"
+          git push origin HEAD:fix/landing-no-fake-clients
