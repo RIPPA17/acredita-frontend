@@ -1,5 +1,5 @@
 import { PLANTILLA_DOCUMENTOS } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, HistorialVersionDocumento, PreferenciasNotificacionesContratista } from '../types';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, HistorialVersionDocumento } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
@@ -79,61 +79,6 @@ export function saveRequisitos(data: Requisito[]) {
 
 function getReglas(): any[] {
   return REGLAS_DEFAULT;
-}
-
-const DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA: PreferenciasNotificacionesContratista = {
-  documentoRechazado: true,
-  documentoPorVencer: true,
-  acreditacionAprobada: true,
-  cambioEstadoTrabajador: false,
-};
-
-const PREFERENCIAS_CONTRATISTA_KEY = 'acredita_preferencias_notificaciones_contratista';
-
-function safeParseStorageValue<T>(key: string, fallback: T, isValid: (value: unknown) => boolean): T {
-  if (typeof window === 'undefined') return fallback;
-  const raw = localStorage.getItem(key);
-  if (raw === null) return fallback;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (isValid(parsed)) return parsed as T;
-  } catch {
-    // Se conserva el valor para permitir recuperación manual.
-  }
-  console.warn(`[Acredita] Se ignoró contenido inválido en localStorage: ${key}`);
-  return fallback;
-}
-
-
-function safeParseStorageObject<T extends object>(key: string, fallback: T): T {
-  return safeParseStorageValue<T>(key, fallback, value =>
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-  );
-}
-
-export function getPreferenciasNotificacionesContratista(contratistaId: string): PreferenciasNotificacionesContratista {
-  if (typeof window === 'undefined') return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
-  try {
-    const todas = safeParseStorageObject<Record<string, Partial<PreferenciasNotificacionesContratista>>>(PREFERENCIAS_CONTRATISTA_KEY, {});
-    return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA, ...(todas[contratistaId] || {}) };
-  } catch {
-    return { ...DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA };
-  }
-}
-
-export function savePreferenciasNotificacionesContratista(
-  contratistaId: string,
-  preferencias: PreferenciasNotificacionesContratista,
-): void {
-  if (typeof window === 'undefined') return;
-  let todas: Record<string, PreferenciasNotificacionesContratista> = {};
-  try {
-    todas = JSON.parse(localStorage.getItem(PREFERENCIAS_CONTRATISTA_KEY) || '{}');
-  } catch {
-    todas = {};
-  }
-  todas[contratistaId] = preferencias;
-  localStorage.setItem(PREFERENCIAS_CONTRATISTA_KEY, JSON.stringify(todas));
 }
 
 export function getBusinessToday(): Date {

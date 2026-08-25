@@ -1,10 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell, Building2, LogOut, UserRound } from 'lucide-react';
-import {
-  getPreferenciasNotificacionesContratista,
-  savePreferenciasNotificacionesContratista,
-  UserSession,
-} from '../../data/localStorageDb';
+import type { SupabaseUserSession as UserSession } from '../../data/supabaseAuth';
 import { Contratista, Mandante, PreferenciasNotificacionesContratista, Proyecto } from '../../types';
 
 type ConfigSubTab = 'empresa' | 'notificaciones' | 'cuenta';
@@ -20,23 +16,38 @@ function iniciales(nombre: string): string {
   return nombre.split(/\s+/).filter(Boolean).slice(0, 2).map(parte => parte[0]).join('').toUpperCase();
 }
 
-export default function ConfigTab({ contratistaLogueado, misProyectos, allMandantes, session, onLogout, showToast }: {
+export default function ConfigTab({ contratistaLogueado, misProyectos, allMandantes, session, onLogout, showToast, preferenciasNotificaciones, onGuardarPreferencias }: {
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
   allMandantes: Mandante[];
   session: UserSession | null;
   onLogout: () => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
+  preferenciasNotificaciones: PreferenciasNotificacionesContratista;
+  onGuardarPreferencias: (preferencias: PreferenciasNotificacionesContratista) => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<ConfigSubTab>('empresa');
-  const [preferencias, setPreferencias] = useState<PreferenciasNotificacionesContratista>(() => getPreferenciasNotificacionesContratista(contratistaLogueado.id));
-  const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(() => getPreferenciasNotificacionesContratista(contratistaLogueado.id));
+  const [preferencias, setPreferencias] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
+  const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
+  const [guardando, setGuardando] = useState(false);
   const hayCambios = PREFERENCIAS.some(([key]) => preferencias[key] !== guardadas[key]);
 
-  const guardarPreferencias = () => {
-    savePreferenciasNotificacionesContratista(contratistaLogueado.id, preferencias);
-    setGuardadas(preferencias);
-    showToast('Preferencias guardadas');
+  useEffect(() => {
+    setPreferencias(preferenciasNotificaciones);
+    setGuardadas(preferenciasNotificaciones);
+  }, [preferenciasNotificaciones]);
+
+  const guardarPreferencias = async () => {
+    setGuardando(true);
+    try {
+      await onGuardarPreferencias(preferencias);
+      setGuardadas(preferencias);
+      showToast('Preferencias guardadas');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible guardar las preferencias', 'error');
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -83,7 +94,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
               <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos quieres que aparezcan como avisos dentro del portal. No se configuran canales externos en este MVP.</p></header>
               <div className="cfg-card-body"><div className="cfg-pref-list">
                 {PREFERENCIAS.map(([key, titulo, descripcion]) => <div className="cfg-pref-row" key={key}><div><strong>{titulo}</strong><p>{descripcion}</p></div><button type="button" role="switch" aria-checked={preferencias[key]} aria-label={titulo} className={`cfg-switch ${preferencias[key] ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, [key]: !actual[key] }))}><span /></button></div>)}
-              </div><div className="cfg-pref-foot"><span>Los cambios se guardan localmente para esta cuenta en el frontend MVP.</span><button className="cfg-save" disabled={!hayCambios} onClick={guardarPreferencias}>Guardar preferencias</button></div></div>
+              </div><div className="cfg-pref-foot"><span>Los cambios se guardan en tu cuenta y se aplican en cualquier dispositivo.</span><button className="cfg-save" disabled={!hayCambios || guardando} onClick={guardarPreferencias}>{guardando ? 'Guardando…' : 'Guardar preferencias'}</button></div></div>
             </section>}
 
             {activeTab === 'cuenta' && <section className="cfg-card">

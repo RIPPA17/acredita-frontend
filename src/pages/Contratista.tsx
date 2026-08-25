@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Documento, Trabajador } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession, getPreferenciasNotificacionesContratista } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
@@ -20,24 +20,7 @@ import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
-
-const NOTIFICACIONES_LEIDAS_KEY = 'acredita_notificaciones_leidas_contratista';
-
-function getNotificacionesLeidas(contratistaId: string): Set<string> {
-  try {
-    const data = JSON.parse(localStorage.getItem(NOTIFICACIONES_LEIDAS_KEY) || '{}') as Record<string, string[]>;
-    return new Set(data[contratistaId] || []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveNotificacionesLeidas(contratistaId: string, leidas: Set<string>): void {
-  let data: Record<string, string[]> = {};
-  try { data = JSON.parse(localStorage.getItem(NOTIFICACIONES_LEIDAS_KEY) || '{}'); } catch { data = {}; }
-  data[contratistaId] = [...leidas];
-  localStorage.setItem(NOTIFICACIONES_LEIDAS_KEY, JSON.stringify(data));
-}
+import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -91,13 +74,31 @@ export default function ContratistaPortal() {
 
   const session = getCurrentSession();
   const contratistaLogueado = allContratistas.find(c => c.id === session?.contratistaId) || allContratistas[0];
-  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(() => getNotificacionesLeidas(contratistaLogueado.id));
+  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
+  const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
+
+  React.useEffect(() => {
+    if (!session?.profileId) return;
+    let cancelled = false;
+    Promise.all([
+      loadNotificationPreferences(session.profileId, session),
+      loadReadNotificationKeys(session.profileId, session),
+    ]).then(([preferencias, leidas]) => {
+      if (cancelled) return;
+      setPreferenciasNotificaciones(preferencias);
+      setNotificacionesLeidas(leidas);
+    }).catch(() => {
+      if (!cancelled) setNotificacionesLeidas(new Set());
+    });
+    return () => { cancelled = true; };
+  }, [session?.profileId]);
+
   const notificaciones = buildNotificacionesContratista({
     contratista: contratistaLogueado,
     proyectos: misProyectos,
     requisitos: getRequisitos(),
-    preferencias: getPreferenciasNotificacionesContratista(contratistaLogueado.id),
+    preferencias: preferenciasNotificaciones,
   });
   const notificacionesSinLeer = notificaciones.filter(item => !notificacionesLeidas.has(item.id)).length;
 
@@ -105,15 +106,18 @@ export default function ContratistaPortal() {
     setNotificacionesLeidas(actual => {
       const next = new Set<string>(actual);
       ids.forEach(id => next.add(id));
-      saveNotificacionesLeidas(contratistaLogueado.id, next);
       return next;
     });
+    if (session?.profileId) void markNotificationKeysRead(session.profileId, ids, session).catch(() => undefined);
   };
 
-  const abrirNotificaciones = () => {
-    setNotificacionesLeidas(getNotificacionesLeidas(contratistaLogueado.id));
-    setShowNotif(actual => !actual);
+  const guardarPreferenciasNotificaciones = async (preferencias: typeof preferenciasNotificaciones) => {
+    if (!session?.profileId) throw new Error('Sesión inválida');
+    await saveNotificationPreferences(session.profileId, preferencias, session);
+    setPreferenciasNotificaciones(preferencias);
   };
+
+  const abrirNotificaciones = () => setShowNotif(actual => !actual);
 
   const navegarNotificacion = (notificacion: NotificacionContratista) => {
     marcarLeidas([notificacion.id]);
@@ -428,6 +432,8 @@ export default function ContratistaPortal() {
               session={session}
               onLogout={handleLogout}
               showToast={showToast}
+              preferenciasNotificaciones={preferenciasNotificaciones}
+              onGuardarPreferencias={guardarPreferenciasNotificaciones}
             />
           )}
 
