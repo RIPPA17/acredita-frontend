@@ -304,7 +304,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
             {!sidebarCollapsed && (
               <div className="truncate flex-1">
                 <div className="sb-org-name truncate">{mandanteLogueado.nombre}</div>
-                <div className="sb-org-sub truncate">Plan Pro · 3 proyectos</div>
+                <div className="sb-org-sub truncate">{misProyectos.length} proyecto{misProyectos.length === 1 ? '' : 's'} visible{misProyectos.length === 1 ? '' : 's'}</div>
               </div>
             )}
             {sidebarCollapsed && (
