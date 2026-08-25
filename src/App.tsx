@@ -9,7 +9,6 @@ import AdminPortal from './pages/Admin';
 import ContratistaPortal from './pages/Contratista';
 import LoginPage from './pages/Login';
 import RegistroPage from './pages/Registro';
-import ActivacionPage from './pages/Activacion';
 import InvitacionPage from './pages/Invitacion';
 import NotFoundPage from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -36,7 +35,6 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/registro" element={<RegistroPage />} />
-          <Route path="/activacion" element={<ActivacionPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
 
           <Route path="/admin/*" element={
