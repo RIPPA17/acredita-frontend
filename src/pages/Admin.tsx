@@ -42,7 +42,6 @@ import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
 import { buildColaDocs, buildCorrectionDocs } from './admin/colaUtils';
 import { pruneClaimsRevision } from './admin/verificadorUtils';
-import { GLOBAL_MANDANTES, GLOBAL_PROYECTOS, GLOBAL_CONTRATISTAS } from './admin/globalData';
 import { DocumentoRow, ProyectoRow } from './admin/RowComponents';
 import MandantesTab from './admin/MandantesTab';
 import ContratistasTab from './admin/ContratistasTab';
@@ -55,10 +54,10 @@ import AcreditacionesTab from './admin/AcreditacionesTab';
 import AuditoriaTab from './admin/AuditoriaTab';
 import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
-import DocumentoDetailModal from './admin/DocumentoDetailModal';
 import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
 import { refreshReviewOperationsCache } from '../data/supabaseReviewOperations';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
+import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 
@@ -85,31 +84,6 @@ export default function AdminPortal() {
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
 
-  const ACTIVIDAD_RECIENTE: any[] = [];
-  let actId = 1;
-  GLOBAL_CONTRATISTAS.forEach(c => {
-    c.documentos.forEach(d => {
-      if (d.estado === 'aprobado') {
-        ACTIVIDAD_RECIENTE.push({
-          id: actId++,
-          empresa: c.nombre,
-          documento: d.nombre,
-          fecha: 'Hoy',
-          estado: 'Aprobado',
-          detalle: `Revisado por ${d.revisor || 'Sistema'}`
-        });
-      } else if (d.estado === 'rechazado') {
-        ACTIVIDAD_RECIENTE.push({
-          id: actId++,
-          empresa: c.nombre,
-          documento: d.nombre,
-          fecha: 'Hoy',
-          estado: 'Rechazado',
-          detalle: d.motivo || 'Rechazado por auditoría'
-        });
-      }
-    });
-  });
 
   const [activeTab, setActiveTab] = useState("dashboard");
   // Fuente reactiva de contratistas: se actualiza explícitamente al
@@ -140,21 +114,21 @@ export default function AdminPortal() {
       setVerificadores(snapshot.verificadores);
       setVerificadorActualIdState(snapshot.currentReviewerId);
       setClaimsRevision(pruneClaimsRevision(snapshot.claims, freshContratistas, freshProyectos));
+      setAprobadosHoy(snapshot.actividad.filter(item => item.accion === 'aprobado').length);
+      setRechazadosHoy(snapshot.actividad.filter(item => item.accion === 'rechazado').length);
     }).catch(() => {
       // Conserva el último snapshot válido si Supabase tiene una interrupción breve.
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [aprobadosHoy, setAprobadosHoy] = useState(2);
-  const [rechazadosHoy, setRechazadosHoy] = useState(1);
+  const [aprobadosHoy, setAprobadosHoy] = useState(0);
+  const [rechazadosHoy, setRechazadosHoy] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
-  const [actividadSeleccionada, setActividadSeleccionada] = useState<typeof ACTIVIDAD_RECIENTE[0] | null>(null);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [selectedDocKey, setSelectedDocKey] = useState<string | null>(null);
   const [selectedAcreditacionContratista, setSelectedAcreditacionContratista] = useState<any>(null);
   const [showNotif, setShowNotif] = useState(false);
@@ -200,7 +174,7 @@ export default function AdminPortal() {
   const [auditoriaLogs, setAuditoriaLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    if (activeTab !== "auditoria") return;
+    if (activeTab !== "dashboard" && activeTab !== "auditoria") return;
     let cancelled = false;
     loadSupabaseAuditLogs()
       .then((logs) => {
@@ -213,64 +187,10 @@ export default function AdminPortal() {
   }, [activeTab]);
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
-  const [invitacionEnviada, setInvitacionEnviada] = useState(false);
-  const [formInvitacion, setFormInvitacion] = useState({
-    nombre: "",
-    empresa: "",
-    rut: "",
-    correo: "",
-    industria: "",
-  });
+  const [mandanteCreado, setMandanteCreado] = useState(false);
+  const [formInvitacion, setFormInvitacion] = useState({ empresa: "", rut: "" });
 
   const [showInvitarContratistaModal, setShowInvitarContratistaModal] = useState(false);
-  const [resultadoInvitarContratista, setResultadoInvitarContratista] = useState<null | 'nuevo' | 'agregado' | 'ya_asignado'>(null);
-  const [formInvitarContratista, setFormInvitarContratista] = useState({
-    empresa: "",
-    rut: "",
-    correo: "",
-    proyectoId: "",
-  });
-
-  const resetFormInvitarContratista = () => {
-    setShowInvitarContratistaModal(false);
-    setResultadoInvitarContratista(null);
-    setFormInvitarContratista({ empresa: "", rut: "", correo: "", proyectoId: "" });
-  };
-
-  const handleInvitarContratista = (e: React.FormEvent) => {
-    e.preventDefault();
-    const { empresa, rut, correo, proyectoId } = formInvitarContratista;
-    if (!empresa.trim() || !rut.trim() || !correo.trim() || !proyectoId) return;
-
-    const list = getContratistas();
-    const rutNormalizado = rut.trim().toLowerCase();
-    const existente = list.find(c => c.rut.trim().toLowerCase() === rutNormalizado);
-
-    if (existente) {
-      if (existente.proyectos.includes(proyectoId)) {
-        setResultadoInvitarContratista('ya_asignado');
-        return;
-      }
-      existente.proyectos.push(proyectoId);
-      saveContratistas(list);
-      setContratistas([...list]);
-      setResultadoInvitarContratista('agregado');
-    } else {
-      const nuevo: Contratista = {
-        id: `c_${Date.now()}`,
-        nombre: empresa,
-        rut,
-        proyectos: [proyectoId],
-        documentos: [],
-        trabajadores: [],
-        isNew: true,
-      };
-      list.push(nuevo);
-      saveContratistas(list);
-      setContratistas([...list]);
-      setResultadoInvitarContratista('nuevo');
-    }
-  };
 
   const [showNuevoProyectoModal, setShowNuevoProyectoModal] = useState(false);
   const [formNuevoProyecto, setFormNuevoProyecto] = useState({ nombre: "", mandanteId: "" });
@@ -308,15 +228,12 @@ export default function AdminPortal() {
     showToast("Proyecto creado correctamente");
   };
 
-  const handleSelectDoc = (doc: any) => {
-    setSelectedDoc(doc);
-  };
 
   const hayAccesosFallidos = auditoriaLogs.some((log: any) =>
     log.accion?.toLowerCase().includes("fallido") || log.accion?.toLowerCase().includes("error")
   );
 
-  const pendingDocsCount = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS).length;
+  const pendingDocsCount = buildColaDocs(contratistas, proyectos).length;
 
   const notificacionesOperativas = buildAdminNotifications(contratistas, proyectos, pendingDocsCount);
   const notificacionesSinLeer = notificacionesOperativas.filter(item => !notificacionesLeidas.has(item.id)).length;
@@ -366,10 +283,31 @@ export default function AdminPortal() {
     };
   });
 
+  const DOCUMENTOS_BUSQUEDA = contratistas.flatMap(contratista => [
+    ...contratista.documentos.map(documento => ({
+      documento: documento.nombre,
+      estado: documento.estado,
+      contratista,
+      proyectoId: documento.proyectoId,
+      proyectoNombre: proyectos.find(proyecto => proyecto.id === documento.proyectoId)?.nombre || 'Proyecto no disponible',
+      trabajador: null,
+    })),
+    ...(contratista.trabajadores || []).flatMap(trabajador =>
+      (trabajador.documentos || []).map(documento => ({
+        documento: documento.nombre,
+        estado: documento.estado,
+        contratista,
+        proyectoId: documento.proyectoId,
+        proyectoNombre: proyectos.find(proyecto => proyecto.id === documento.proyectoId)?.nombre || 'Proyecto no disponible',
+        trabajador,
+      }))
+    ),
+  ]).filter(item => Boolean(item.proyectoId));
+
   const indiceBusqueda = [
     ...GLOBAL_MANDANTES.map(m => ({ tipo: "empresa", label: m.nombre, sub: "Mandante", data: m, esMandante: true })),
-    ...GLOBAL_CONTRATISTAS.map(c => ({ tipo: "empresa", label: c.nombre, sub: c.isNew ? "Contratista (Nuevo)" : "Contratista", data: c, esMandante: false })),
-    ...ACTIVIDAD_RECIENTE.map(a => ({ tipo: "documento", label: a.documento, sub: `${a.empresa} · ${a.estado}`, data: a })),
+    ...contratistas.map(c => ({ tipo: "empresa", label: c.nombre, sub: c.isNew ? "Contratista (Nuevo)" : "Contratista", data: c, esMandante: false })),
+    ...DOCUMENTOS_BUSQUEDA.map(item => ({ tipo: "documento", label: item.documento, sub: `${item.contratista.nombre} · ${item.proyectoNombre} · ${item.estado}`, data: item })),
     ...PROYECTOS_BUSQUEDA.map(p => ({ tipo: "proyecto", label: p.nombre, sub: p.mandante, data: p })),
     ...verificadores.map(v => ({
       tipo: "revisor",
@@ -466,7 +404,16 @@ export default function AdminPortal() {
                       {resultadosPorTipo.documento.map((r, i) => (
                         <div
                           key={i}
-                          onClick={() => { setActividadSeleccionada(r.data); setBusquedaAbierta(false); setBusquedaGlobal(""); }}
+                          onClick={() => {
+                            const item = r.data as any;
+                            setSelectedAcreditacionContratista({
+                              ...item.contratista,
+                              _fichaProyectoId: item.proyectoId,
+                              _fichaTrabajador: item.trabajador || undefined,
+                            });
+                            setBusquedaAbierta(false);
+                            setBusquedaGlobal("");
+                          }}
                           className="flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-cream cursor-pointer"
                         >
                           <span className="text-[13px] text-navy">{r.label}</span>
@@ -672,6 +619,9 @@ export default function AdminPortal() {
             <DashboardTab
               GLOBAL_CONTRATISTAS={contratistas}
               GLOBAL_PROYECTOS={proyectos}
+              GLOBAL_MANDANTES={GLOBAL_MANDANTES}
+              verificadores={verificadores}
+              claimsRevision={claimsRevision}
               setActiveTab={setActiveTab}
               aprobadosHoy={aprobadosHoy}
               rechazadosHoy={rechazadosHoy}
@@ -782,180 +732,39 @@ export default function AdminPortal() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
             <div className="flex justify-between items-center p-4 border-b border-cream">
-              <h3 className="font-medium text-navy text-[17.6px]">
-                Invitar Mandante
-              </h3>
-              <button
-                onClick={() => setShowInvitarModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
+              <div>
+                <h3 className="font-medium text-navy text-[17.6px]">Crear Mandante</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Crea la organización. La cuenta de acceso se habilita por administración.</p>
+              </div>
+              <button onClick={() => { setShowInvitarModal(false); setMandanteCreado(false); }} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
-
             <div className="p-6">
-              {invitacionEnviada ? (
+              {mandanteCreado ? (
                 <div className="text-center py-4">
-                  <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Mail size={32} className="text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-medium text-navy mb-2">
-                    ¡Invitación enviada!
-                  </h4>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                    Invitación enviada a{" "}
-                    <span className="font-medium">{formInvitacion.correo}</span>
-                    .<br />
-                    El mandante recibirá un link para activar su cuenta.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setShowInvitarModal(false);
-                      setFormInvitacion({
-                        nombre: "",
-                        empresa: "",
-                        rut: "",
-                        correo: "",
-                        industria: "",
-                      });
-                    }}
-                    className="btn btn-primary w-full justify-center"
-                  >
-                    Entendido
-                  </button>
+                  <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle size={32} className="text-green-600" /></div>
+                  <h4 className="text-lg font-medium text-navy mb-2">Mandante creado</h4>
+                  <p className="text-gray-600 text-sm leading-relaxed mb-6">La organización <span className="font-medium">{formInvitacion.empresa}</span> quedó disponible para crear proyectos y gestionar acreditaciones.</p>
+                  <button onClick={() => { setShowInvitarModal(false); setMandanteCreado(false); setFormInvitacion({ empresa: '', rut: '' }); }} className="btn btn-primary w-full justify-center">Entendido</button>
                 </div>
               ) : (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!formInvitacion.nombre.trim() || !formInvitacion.empresa.trim() || !formInvitacion.rut.trim() || !formInvitacion.correo.trim()) {
-                      return;
-                    }
-                    const newMandante = {
-                      id: `m_${Date.now()}`,
-                      nombre: formInvitacion.empresa,
-                      rut: formInvitacion.rut,
-                      proyectos: []
-                    };
-                    const list = getMandantes();
-                    list.push(newMandante);
-                    saveMandantes(list);
-                    setInvitacionEnviada(true);
-                  }}
-                  className="flex flex-col gap-4"
-                >
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Nombre del contacto
-                    </label>
-                    <input
-                      type="text"
-                      value={formInvitacion.nombre}
-                      onChange={(e) =>
-                        setFormInvitacion({
-                          ...formInvitacion,
-                          nombre: e.target.value,
-                        })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="Nombre y apellido"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Empresa / Razón social
-                    </label>
-                    <input
-                      type="text"
-                      value={formInvitacion.empresa}
-                      onChange={(e) =>
-                        setFormInvitacion({
-                          ...formInvitacion,
-                          empresa: e.target.value,
-                        })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="Nombre de la empresa"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      RUT
-                    </label>
-                    <input
-                      type="text"
-                      value={formInvitacion.rut}
-                      onChange={(e) =>
-                        setFormInvitacion({
-                          ...formInvitacion,
-                          rut: e.target.value,
-                        })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="76.999.999-9"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Correo corporativo
-                    </label>
-                    <input
-                      type="email"
-                      value={formInvitacion.correo}
-                      onChange={(e) =>
-                        setFormInvitacion({
-                          ...formInvitacion,
-                          correo: e.target.value,
-                        })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="tu@empresa.cl"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Industria <span className="text-gray-400 font-normal">(opcional)</span>
-                    </label>
-                    <select
-                      value={formInvitacion.industria}
-                      onChange={(e) =>
-                        setFormInvitacion({
-                          ...formInvitacion,
-                          industria: e.target.value,
-                        })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                    >
-                      <option value="">Selecciona una industria...</option>
-                      <option value="construccion">Construcción</option>
-                      <option value="mineria">Minería</option>
-                      <option value="energia">Energía</option>
-                      <option value="manufactura">Manufactura</option>
-                      <option value="logistica">Logística y Transporte</option>
-                      <option value="retail">Retail</option>
-                      <option value="telecomunicaciones">
-                        Telecomunicaciones
-                      </option>
-                      <option value="servicios">Servicios Generales</option>
-                    </select>
-                  </div>
-
-                  <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-cream">
-                    <button
-                      type="button"
-                      onClick={() => setShowInvitarModal(false)}
-                      className="btn btn-ghost font-medium"
-                    >
-                      Cancelar
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Enviar invitación
-                    </button>
-                  </div>
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  const empresa = formInvitacion.empresa.trim();
+                  const rut = formInvitacion.rut.trim();
+                  if (!empresa || !rut) return;
+                  const list = getMandantes();
+                  if (list.some(item => item.rut.trim().toLowerCase() === rut.toLowerCase())) {
+                    showToast('Ya existe un mandante con este RUT.', 'warning');
+                    return;
+                  }
+                  list.push({ id: `m_${Date.now()}`, nombre: empresa, rut, proyectos: [] });
+                  saveMandantes(list);
+                  setMandanteCreado(true);
+                }} className="flex flex-col gap-4">
+                  <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Empresa / Razón social</label><input type="text" value={formInvitacion.empresa} onChange={(event) => setFormInvitacion({ ...formInvitacion, empresa: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="Nombre de la organización" required /></div>
+                  <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">RUT</label><input type="text" value={formInvitacion.rut} onChange={(event) => setFormInvitacion({ ...formInvitacion, rut: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="76.999.999-9" required /></div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-[11.5px] text-blue-800">Esta acción crea la organización Mandante; no simula el envío de un correo ni la creación de una cuenta de usuario.</div>
+                  <div className="flex justify-end gap-3 mt-2 pt-4 border-t border-cream"><button type="button" onClick={() => setShowInvitarModal(false)} className="btn btn-ghost font-medium">Cancelar</button><button type="submit" className="btn btn-primary">Crear mandante</button></div>
                 </form>
               )}
             </div>
@@ -963,151 +772,13 @@ export default function AdminPortal() {
         </div>
       )}
 
-      {showInvitarContratistaModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b border-cream">
-              <h3 className="font-medium text-navy text-[17.6px]">
-                Invitar Contratista
-              </h3>
-              <button
-                onClick={resetFormInvitarContratista}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              {resultadoInvitarContratista === 'ya_asignado' ? (
-                <div className="text-center py-4">
-                  <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertTriangle size={32} className="text-amber-600" />
-                  </div>
-                  <h4 className="text-lg font-medium text-navy mb-2">
-                    Ya está asignado
-                  </h4>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                    Este contratista ya está asignado a este proyecto.
-                  </p>
-                  <button
-                    onClick={resetFormInvitarContratista}
-                    className="btn btn-primary w-full justify-center"
-                  >
-                    Entendido
-                  </button>
-                </div>
-              ) : resultadoInvitarContratista ? (
-                <div className="text-center py-4">
-                  <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Mail size={32} className="text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-medium text-navy mb-2">
-                    {resultadoInvitarContratista === 'nuevo' ? 'Contratista agregado' : 'Proyecto agregado'}
-                  </h4>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                    {resultadoInvitarContratista === 'nuevo' ? (
-                      <><span className="font-medium">{formInvitarContratista.empresa}</span> fue agregado correctamente.</>
-                    ) : (
-                      <>Se agregó el proyecto seleccionado a <span className="font-medium">{formInvitarContratista.empresa}</span>.</>
-                    )}
-                  </p>
-                  <button
-                    onClick={resetFormInvitarContratista}
-                    className="btn btn-primary w-full justify-center"
-                  >
-                    Entendido
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleInvitarContratista} className="flex flex-col gap-4">
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Razón social
-                    </label>
-                    <input
-                      type="text"
-                      value={formInvitarContratista.empresa}
-                      onChange={(e) =>
-                        setFormInvitarContratista({ ...formInvitarContratista, empresa: e.target.value })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="Nombre de la empresa"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      RUT
-                    </label>
-                    <input
-                      type="text"
-                      value={formInvitarContratista.rut}
-                      onChange={(e) =>
-                        setFormInvitarContratista({ ...formInvitarContratista, rut: e.target.value })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="76.999.999-9"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Correo de contacto
-                    </label>
-                    <input
-                      type="email"
-                      value={formInvitarContratista.correo}
-                      onChange={(e) =>
-                        setFormInvitarContratista({ ...formInvitarContratista, correo: e.target.value })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      placeholder="documentos@empresa.cl"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">
-                      Proyecto
-                    </label>
-                    <select
-                      value={formInvitarContratista.proyectoId}
-                      onChange={(e) =>
-                        setFormInvitarContratista({ ...formInvitarContratista, proyectoId: e.target.value })
-                      }
-                      className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all"
-                      required
-                    >
-                      <option value="">Selecciona un proyecto...</option>
-                      {proyectos.map(p => {
-                        const mandante = GLOBAL_MANDANTES.find(m => m.id === p.mandanteId);
-                        return (
-                          <option key={p.id} value={p.id}>
-                            {mandante ? `${mandante.nombre} · ` : ''}{p.nombre}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-cream">
-                    <button
-                      type="button"
-                      onClick={resetFormInvitarContratista}
-                      className="btn btn-ghost font-medium"
-                    >
-                      Cancelar
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Agregar contratista
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ContractorInvitationModal
+        open={showInvitarContratistaModal}
+        onClose={() => setShowInvitarContratistaModal(false)}
+        contractors={contratistas}
+        projects={proyectos}
+        showToast={showToast}
+      />
 
       {showNuevoProyectoModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -1233,10 +904,6 @@ export default function AdminPortal() {
         />
       )}
 
-      <DocumentoDetailModal
-        actividadSeleccionada={actividadSeleccionada}
-        setActividadSeleccionada={setActividadSeleccionada}
-      />
 
       {selectedAcreditacionContratista && selectedAcreditacionContratista._fichaProyectoId && (
         <FichaAcreditacion

@@ -1,21 +1,18 @@
 import { ClipboardList, ShieldCheck, Building2, Users } from 'lucide-react';
-import { Contratista, Proyecto } from '../../types';
+import { ClaimRevision, Contratista, Mandante, Proyecto, Verificador } from '../../types';
 import { buildColaDocs, buildCorrectionDocs } from './colaUtils';
 import { buildAcreditacionRows, badgeClass, AcredRow } from './acreditacionUtils';
-import { GLOBAL_MANDANTES } from './globalData';
+import { getReviewActivityToday } from '../../data/supabaseReviewOperations';
 
-const VERIFICADORES_HOY = [
-  { nombre: 'María González', rol: 'Analista de acreditación', peso: 0.38 },
-  { nombre: 'Carlos Soto', rol: 'Analista de acreditación', peso: 0.30 },
-  { nombre: 'Ana Ruiz', rol: 'Supervisora', peso: 0.20 },
-];
-const VERIFICADORES_ACTIVOS = 4;
 
 const rankEstado = (e: AcredRow['estado']) => (e === 'Vencido/Bloqueado' ? 0 : e === 'En proceso' ? 1 : 2);
 
 export default function DashboardTab({
   GLOBAL_CONTRATISTAS,
   GLOBAL_PROYECTOS,
+  GLOBAL_MANDANTES,
+  verificadores,
+  claimsRevision,
   setActiveTab,
   aprobadosHoy,
   rechazadosHoy,
@@ -23,6 +20,9 @@ export default function DashboardTab({
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
+  GLOBAL_MANDANTES: Mandante[];
+  verificadores: Verificador[];
+  claimsRevision: ClaimRevision[];
   setActiveTab: (v: string) => void;
   aprobadosHoy: number;
   rechazadosHoy: number;
@@ -31,12 +31,19 @@ export default function DashboardTab({
   const dynamicCola = buildColaDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
   const correctionDocs = buildCorrectionDocs(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS);
 
-  // Mirrors ColaRevisionTab's own illustrative claim simulation (2 of the
-  // oldest/highest-priority pending docs shown as "already taken" once there
-  // are enough of them), so this KPI agrees with what that tab shows.
-  const enRevisionCount = dynamicCola.length >= 3 ? 2 : 0;
+  const claimedKeys = new Set(claimsRevision.map(item => item.documentoKey));
+  const enRevisionCount = dynamicCola.filter(item => claimedKeys.has(item.key)).length;
   const porRevisarCount = dynamicCola.length - enRevisionCount;
   const esperandoCorreccionCount = correctionDocs.length;
+  const verificadoresActivos = verificadores.filter(item => item.activo).length;
+  const actividadVerificadores = verificadores
+    .map(verificador => {
+      const actividad = getReviewActivityToday(verificador.id);
+      return { verificador, ...actividad, total: actividad.aprobados + actividad.rechazados };
+    })
+    .filter(item => item.total > 0)
+    .sort((a, b) => b.total - a.total || a.verificador.nombre.localeCompare(b.verificador.nombre))
+    .slice(0, 3);
 
   const acredRows = buildAcreditacionRows(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES);
   const bloqueadasCount = acredRows.filter(r => r.estado === 'Vencido/Bloqueado').length;
@@ -214,16 +221,16 @@ export default function DashboardTab({
               <div className="metric-card"><div className="label">Revisados</div><div className="number">{revisadosHoy}</div></div>
               <div className="metric-card"><div className="label">Aprobados</div><div className="number">{aprobadosHoy}</div></div>
               <div className="metric-card"><div className="label">Rechazados</div><div className="number">{rechazadosHoy}</div></div>
-              <div className="metric-card"><div className="label">Verificadores activos</div><div className="number">{VERIFICADORES_ACTIVOS}</div></div>
+              <div className="metric-card"><div className="label">Verificadores activos</div><div className="number">{verificadoresActivos}</div></div>
             </div>
             <div className="section-label">Más activos hoy</div>
-            {VERIFICADORES_HOY.map(v => (
-              <div className="verifier" key={v.nombre}>
-                <div><b>{v.nombre}</b><br /><span>{v.rol}</span></div>
-                <span><b>{Math.round(revisadosHoy * v.peso)}</b> revisiones</span>
+            {actividadVerificadores.length > 0 ? actividadVerificadores.map(item => (
+              <div className="verifier" key={item.verificador.id}>
+                <div><b>{item.verificador.nombre}</b><br /><span>{item.verificador.rol === 'supervisor' ? 'Supervisor' : 'Verificador'}</span></div>
+                <span><b>{item.total}</b> revisiones</span>
               </div>
-            ))}
-            <button className="btn" style={{ width: '100%', marginTop: '12px' }} onClick={() => setActiveTab('auditoria')}>Ver verificadores</button>
+            )) : <div className="muted">Todavía no hay revisiones registradas hoy.</div>}
+            <button className="btn" style={{ width: '100%', marginTop: '12px' }} onClick={() => setActiveTab('verificadores')}>Ver verificadores</button>
           </div>
         </aside>
       </div>

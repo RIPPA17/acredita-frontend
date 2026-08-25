@@ -138,6 +138,8 @@ export default function ColaRevisionTab({
     try {
       const snapshot = await refreshReviewOperationsCache();
       setClaimsRevision(snapshot.claims);
+      setAprobadosHoy(() => snapshot.actividad.filter(item => item.accion === 'aprobado').length);
+      setRechazadosHoy(() => snapshot.actividad.filter(item => item.accion === 'rechazado').length);
     } catch {
       // La cola conserva el último estado válido si hay una interrupción breve.
     }
@@ -148,18 +150,17 @@ export default function ColaRevisionTab({
     const refresh = async () => {
       try {
         const snapshot = await refreshReviewOperationsCache();
-        if (active) setClaimsRevision(snapshot.claims);
+        if (!active) return;
+        setClaimsRevision(snapshot.claims);
+        setAprobadosHoy(() => snapshot.actividad.filter(item => item.accion === 'aprobado').length);
+        setRechazadosHoy(() => snapshot.actividad.filter(item => item.accion === 'rechazado').length);
       } catch {
-        // No se interrumpe la revisión actual por un fallo transitorio de polling.
+        // Conserva el último snapshot válido; la toma atómica evita dobles revisiones.
       }
     };
     void refresh();
-    const timer = window.setInterval(refresh, 4000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-    // El setter proviene del contenedor y no representa una dependencia de negocio.
+    return () => { active = false; };
+    // Setters compartidos del contenedor; la carga se hace una vez al entrar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -206,9 +207,10 @@ export default function ColaRevisionTab({
         action: 'approve',
         reviewerName: currentReviewer?.nombre,
       });
-      setAprobadosHoy(value => value + 1);
       const snapshot = await refreshReviewOperationsCache();
       setClaimsRevision(snapshot.claims);
+      setAprobadosHoy(() => snapshot.actividad.filter(item => item.accion === 'aprobado').length);
+      setRechazadosHoy(() => snapshot.actividad.filter(item => item.accion === 'rechazado').length);
       setDataVersion(value => value + 1);
       setSelectedKey(null);
       setTab('pending');
@@ -241,9 +243,10 @@ export default function ColaRevisionTab({
         explanation: note,
         solution: note,
       });
-      setRechazadosHoy(value => value + 1);
       const snapshot = await refreshReviewOperationsCache();
       setClaimsRevision(snapshot.claims);
+      setAprobadosHoy(() => snapshot.actividad.filter(item => item.accion === 'aprobado').length);
+      setRechazadosHoy(() => snapshot.actividad.filter(item => item.accion === 'rechazado').length);
       setDataVersion(value => value + 1);
       setSelectedKey(null);
       setTab('pending');
@@ -265,7 +268,7 @@ export default function ColaRevisionTab({
         <div>
           <div className="text-[11px] tracking-[1.8px] uppercase font-bold text-brown">Operación Acredita</div>
           <h2 className="text-2xl font-semibold text-navy mt-1">Cola de revisión</h2>
-          <p className="text-[13px] text-gray-500 mt-1">Las tomas y decisiones se comparten en tiempo real entre todos los verificadores.</p>
+          <p className="text-[13px] text-gray-500 mt-1">Las tomas se coordinan de forma atómica en Supabase. Usa Actualizar para refrescar la vista compartida.</p>
         </div>
         <div className="flex gap-2 text-[11px]">
           <span className={`badge border ${BADGE.green}`}>{aprobadosHoy} aprobados hoy</span>

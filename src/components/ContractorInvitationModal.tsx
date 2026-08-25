@@ -58,7 +58,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
     setSubmitting(true);
     try {
       const session = await restoreSupabaseSession();
-      if (!session || session.role !== 'mandante') throw new Error('Tu sesión de Mandante venció');
+      if (!session || (session.role !== 'mandante' && session.role !== 'admin')) throw new Error('Tu sesión autorizada venció');
 
       const invitation = await createContractorInvitation({
         session,

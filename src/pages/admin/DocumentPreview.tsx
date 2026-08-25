@@ -32,11 +32,11 @@ function LegacyFallback({ item }: { item: any }) {
       <div className="w-14 h-14 rounded-full bg-[#f2ead8] flex items-center justify-center mx-auto mb-4">
         <FileText size={28} className="text-brown" />
       </div>
-      <div className="text-[10px] uppercase tracking-[0.14em] text-gray-400 mb-1">Documento demo / legacy</div>
+      <div className="text-[10px] uppercase tracking-[0.14em] text-gray-400 mb-1">Versión sin archivo físico</div>
       <div className="text-[15px] font-bold text-navy">{item.title || 'Documento'}</div>
       <div className="text-[12px] text-gray-500 mt-1">{persona || item.emp || 'Sin titular'} · {item.proyecto || 'Proyecto'}</div>
       <div className="mt-5 p-3 rounded-lg bg-cream2 border border-cream3 text-[11.5px] text-gray-600 leading-relaxed">
-        Esta versión proviene de los datos de demostración anteriores y no contiene bytes de archivo. Las nuevas cargas se muestran aquí como PDF o imagen real.
+        Esta versión no contiene bytes de archivo en Storage. Las cargas actuales se muestran aquí como PDF o imagen real.
       </div>
     </div>
   );
@@ -84,7 +84,7 @@ export default function DocumentPreview({ item }: { item: any }) {
       .catch(error => {
         if (!active) return;
         // Los documentos sembrados antes de Storage no tienen objeto físico.
-        // Eso no debe impedir revisar el resto de la demo.
+        // Eso no debe impedir revisar otros registros disponibles.
         const message = error instanceof Error ? error.message.toLowerCase() : '';
         const legacyWithoutFile = message.includes('no tiene un archivo real')
           || message.includes('todavía no tiene un documento asociado')
