@@ -5,6 +5,7 @@ import {
   Mail, Phone, MapPin, LayoutDashboard, Folder, ListChecks, X, Building2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '../data/supabaseAuth';
 
 export default function LandingPage() {
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -16,14 +17,50 @@ export default function LandingPage() {
   };
 
   const [demoForm, setDemoForm] = useState({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' });
-  const [demoEnviado, setDemoEnviado] = useState(false);
+const [demoEnviado, setDemoEnviado] = useState(false);
+const [demoEnviando, setDemoEnviando] = useState(false);
 
-  const handleSubmitDemo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!demoForm.nombre.trim() || !demoForm.empresa.trim() || !demoForm.correo.trim()) return;
+const handleSubmitDemo = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!demoForm.nombre.trim() || !demoForm.empresa.trim() || !demoForm.correo.trim() || demoEnviando) return;
+
+  setDemoEnviando(true);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/access_requests`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        request_type: 'demo',
+        requested_role: 'mandante',
+        full_name: demoForm.nombre.trim(),
+        company_name: demoForm.empresa.trim(),
+        rut: null,
+        industry: demoForm.industria || null,
+        email: demoForm.correo.trim().toLowerCase(),
+        phone: null,
+        company_size: demoForm.tamano || null,
+        message: demoForm.mensaje.trim() || null,
+        status: 'pending',
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.message || 'No fue posible enviar la solicitud.');
+    }
+
     setDemoEnviado(true);
     showToast('Solicitud enviada. Nuestro equipo te contactará pronto.');
-  };
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'No fue posible enviar la solicitud.', 'error');
+  } finally {
+    setDemoEnviando(false);
+  }
+};
 
   return (
     <div className="bg-white min-h-screen text-navy">
@@ -398,7 +435,7 @@ export default function LandingPage() {
                     onChange={(e) => setDemoForm({ ...demoForm, mensaje: e.target.value })}
                   ></textarea>
                 </div>
-                <button type="submit" className="btn btn-primary w-full justify-center text-[16.5px] py-3">Solicitar demo</button>
+                <button type="submit" disabled={demoEnviando} className="btn btn-primary w-full justify-center text-[16.5px] py-3 disabled:opacity-60 disabled:cursor-not-allowed">{demoEnviando ? 'Enviando…' : 'Solicitar demo'}</button>
               </form>
             )}
           </div>
