@@ -74,7 +74,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowLoginModal(true)} className="btn btn-outline">Iniciar sesión</button>
-          <Link to="/registro?rol=mandante" className="btn btn-primary">Registrarse gratis</Link>
+          <Link to="/registro?rol=mandante" className="btn btn-primary">Solicitar acceso</Link>
         </div>
       </nav>
 
@@ -90,7 +90,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
           La plataforma que conecta mandantes y contratistas, nuestro equipo experto valida los documentos y te avisa antes de que algo venza.
         </p>
         <div className="flex gap-3 justify-center mb-12">
-          <Link to="/registro?rol=mandante" className="btn btn-primary btn-lg">Comenzar gratis</Link>
+          <Link to="/registro?rol=mandante" className="btn btn-primary btn-lg">Solicitar acceso</Link>
           <a href="#contacto" className="btn btn-outline btn-lg">Solicitar demo</a>
         </div>
         
@@ -464,9 +464,9 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       {/* CTA FINAL */}
       <div className="bg-white py-24 px-12 text-center">
         <h2 className="text-[41.8px] text-navy leading-[1.2] mb-4 font-medium">¿Listo para dejar de<br/>perseguir <span className="text-brown">documentos</span>?</h2>
-        <p className="text-[#6b7e8f] text-[17.6px] max-w-[480px] mx-auto mb-10 leading-[1.7]">Empieza gratis hoy. Sin tarjeta de crédito. Sin compromiso. El contratista siempre entra gratis.</p>
+        <p className="text-[#6b7e8f] text-[17.6px] max-w-[480px] mx-auto mb-10 leading-[1.7]">Solicita acceso para tu organización. Nuestro equipo revisará la solicitud y te contactará para habilitar la cuenta correspondiente.</p>
         <div className="flex gap-3 justify-center">
-          <Link to="/registro?rol=mandante" className="btn btn-primary btn-lg">Comenzar gratis</Link>
+          <Link to="/registro?rol=mandante" className="btn btn-primary btn-lg">Solicitar acceso</Link>
           <a href="#contacto" className="btn btn-outline btn-lg">Solicitar demo</a>
         </div>
       </div>
@@ -552,7 +552,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
             </div>
             
             <div className="mt-6 text-center text-[13.2px] text-gray-500">
-              ¿No tienes una cuenta? <Link to="/registro" className="text-brown font-medium hover:underline">Regístrate gratis</Link>
+              ¿Aún no tienes acceso? <Link to="/registro" className="text-brown font-medium hover:underline">Solicítalo aquí</Link>
             </div>
           </div>
         </div>
