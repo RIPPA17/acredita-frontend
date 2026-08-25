@@ -17,6 +17,7 @@ jobs:
       - name: Apply Mandante audit fixes
         run: |
           python3 scripts/fix_mandante_audit.py
+          python3 scripts/fix_mandante_sidebar.py
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -38,6 +39,7 @@ jobs:
           fi
           echo '--- real document opening ---'
           grep -q "openDocumentFile" src/pages/mandante/ContratistasTab.tsx
+          grep -q "solo lectura" src/pages/mandante/ContratistasTab.tsx
       - run: npm ci
       - run: npm run lint
       - run: npm run build
