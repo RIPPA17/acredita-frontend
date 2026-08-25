@@ -59,6 +59,8 @@ export interface ReviewOperationsSnapshot {
   currentReviewerId: string;
 }
 
+let runtimeReviewSnapshot: ReviewOperationsSnapshot | null = null;
+
 export interface ReviewDecisionInput {
   action: 'approve' | 'reject';
   reviewerName?: string;
@@ -198,12 +200,20 @@ async function resolveLatestVersion(
   return latest;
 }
 
+export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
+  return runtimeReviewSnapshot;
+}
+
+export function getReviewActivityToday(reviewerId: string): { aprobados: number; rechazados: number } {
+  const activity = runtimeReviewSnapshot?.actividad || [];
+  return {
+    aprobados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'aprobado').length,
+    rechazados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'rechazado').length,
+  };
+}
+
 function writeReviewCache(snapshot: ReviewOperationsSnapshot): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('acredita_verificadores', JSON.stringify(snapshot.verificadores));
-  localStorage.setItem('acredita_verificador_actual', JSON.stringify(snapshot.currentReviewerId));
-  localStorage.setItem('acredita_claims_revision', JSON.stringify(snapshot.claims));
-  localStorage.setItem('acredita_actividad_verificadores', JSON.stringify(snapshot.actividad));
+  runtimeReviewSnapshot = snapshot;
 }
 
 export async function refreshReviewOperationsCache(

@@ -8,7 +8,7 @@ import {
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
   Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu, ChevronLeft
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, savePlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, getInvitaciones, saveInvitaciones, logoutUser, crearInvitacion, getCurrentSession, nombresDocumentoCoinciden } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, logoutUser, getCurrentSession, nombresDocumentoCoinciden } from '../data/localStorageDb';
 import { Contratista, Mandante } from '../types';
 import ConfigTab from './mandante/ConfigTab';
 import type { ConfigTabId } from './mandante/config/configUtils';
@@ -64,7 +64,6 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
 
   const allProyectos = getProyectos();
   const allContratistas = getContratistas();
-  const allPlantillas = getPlantillas();
 
   const misProyectos = allProyectos.filter(p => p.mandanteId === mandanteLogueado.id);
 
@@ -81,9 +80,6 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
     setActiveTab('proyectos');
     setActiveProjectTab('resumen');
   };
-  const [onboardingStep, setOnboardingStep] = useState<number | null>(() => {
-    return misProyectos.length === 0 ? 1 : null;
-  });
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
     setToast({msg, type});
@@ -232,101 +228,6 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
     { id: 'contratistas', label: 'Contratistas', icon: Building2 },
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
-
-  if (onboardingStep !== null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-cream2 p-4 font-sans text-navy">
-        <div className="card w-full max-w-[480px] shadow-xl border-none">
-          <div className="text-center mb-6">
-            <div className="text-[13.2px] font-semibold text-gray-500 uppercase tracking-widest mb-2">
-              Paso {onboardingStep} de 3
-            </div>
-            <div className="flex justify-center gap-2">
-              {[1, 2, 3].map((step) => (
-                <div 
-                  key={step} 
-                  className={`w-2 h-2 rounded-full ${step <= onboardingStep ? 'bg-brown' : 'bg-gray-300'}`}
-                ></div>
-              ))}
-            </div>
-          </div>
-
-          {onboardingStep === 1 && (
-            <div className="fade-in">
-              <h2 className="section-title text-center text-xl mb-6">Configura tu empresa</h2>
-              <div className="flex flex-col gap-4 mb-6">
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1">RUT Empresa</label>
-                  <input type="text" className="form-input w-full" placeholder="76.123.456-7" />
-                </div>
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Nombre Empresa</label>
-                  <input type="text" className="form-input w-full" placeholder={mandanteLogueado.nombre} />
-                </div>
-              </div>
-              <button 
-                className="btn btn-primary w-full justify-center text-[15.4px] py-2.5"
-                onClick={() => setOnboardingStep(2)}
-              >
-                Continuar →
-              </button>
-            </div>
-          )}
-
-          {onboardingStep === 2 && (
-            <div className="fade-in">
-              <h2 className="section-title text-center text-xl mb-6">Crea tu primer proyecto</h2>
-              <div className="flex flex-col gap-4 mb-6">
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Nombre proyecto</label>
-                  <input type="text" className="form-input w-full" placeholder="Torre Mackenna" />
-                </div>
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Fecha de cierre</label>
-                  <input type="date" className="form-input w-full" />
-                </div>
-              </div>
-              <button 
-                className="btn btn-primary w-full justify-center text-[15.4px] py-2.5"
-                onClick={() => setOnboardingStep(3)}
-              >
-                Continuar →
-              </button>
-            </div>
-          )}
-
-          {onboardingStep === 3 && (
-            <div className="fade-in">
-              <h2 className="section-title text-center text-xl mb-6">Invita a tu primer contratista</h2>
-              <div className="flex flex-col gap-4 mb-6">
-                <div>
-                  <label className="block text-[13.2px] font-medium text-gray-700 mb-1">Email del contratista</label>
-                  <div className="flex gap-2">
-                    <input type="email" className="form-input w-full" placeholder="contacto@empresa.cl" />
-                  </div>
-                </div>
-              </div>
-              <button 
-                className="btn btn-primary w-full justify-center text-[15.4px] py-2.5"
-                onClick={() => setOnboardingStep(null)}
-              >
-                Ir al dashboard
-              </button>
-            </div>
-          )}
-
-          <div className="mt-4 text-center">
-            <button 
-              className="text-[13.2px] text-gray-400 hover:text-navy transition-colors underline"
-              onClick={() => setOnboardingStep(null)}
-            >
-              Saltar por ahora
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-screen flex flex-col font-sans bg-cream2 text-navy">

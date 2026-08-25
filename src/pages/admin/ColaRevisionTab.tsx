@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, XCircle, Search, RefreshCw, Clock3 } from 'lucide-react';
-import { getContratistas, getMandantes, getProyectos, getVerificadorActual } from '../../data/localStorageDb';
+import { getContratistas, getMandantes, getProyectos } from '../../data/localStorageDb';
 import {
   claimDocumentReview,
   refreshReviewOperationsCache,
@@ -81,7 +81,7 @@ export default function ColaRevisionTab({
   const pendingDocs = useMemo(() => buildColaDocs(getContratistas(), getProyectos()), [dataVersion]);
   const correctionDocs = useMemo(() => buildCorrectionDocs(getContratistas(), getProyectos()), [dataVersion]);
 
-  const currentReviewer = verificadores.find(item => item.id === verificadorActualId) || getVerificadorActual();
+  const currentReviewer = verificadores.find(item => item.id === verificadorActualId);
   const reviewerName = (id?: string) => verificadores.find(item => item.id === id)?.nombre || 'Usuario Acredita';
   const claimedKeys = useMemo(() => new Set(claimsRevision.map(item => item.documentoKey)), [claimsRevision]);
 

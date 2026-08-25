@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { XCircle } from 'lucide-react';
 import type { ClaimRevision, Contratista, Proyecto, Verificador } from '../../types';
-import { getActividadHoyPorVerificador } from '../../data/localStorageDb';
+import { getReviewActivityToday } from '../../data/supabaseReviewOperations';
 import { resolveCargaPorVerificador } from './verificadorUtils';
 
 type Tab = 'resumen' | 'carga' | 'actividad';
@@ -38,7 +38,7 @@ export default function VerificadorDetailDrawer({
   if (!verificador) return null;
 
   const carga = cargaPorVerificador.get(verificador.id) || [];
-  const actividad = getActividadHoyPorVerificador(verificador.id);
+  const actividad = getReviewActivityToday(verificador.id);
   const total = actividad.aprobados + actividad.rechazados;
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'resumen', label: 'Resumen' },

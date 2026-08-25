@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Eye, Search, ShieldCheck } from 'lucide-react';
 import type { ClaimRevision, Contratista, Proyecto, Verificador } from '../../types';
-import { getActividadHoyPorVerificador } from '../../data/localStorageDb';
+import { getReviewActivityToday } from '../../data/supabaseReviewOperations';
 import { resolveCargaPorVerificador } from './verificadorUtils';
 
 type Filtro = 'todos' | 'activos' | 'supervisores';
@@ -32,7 +32,7 @@ export default function VerificadoresTab({
   );
 
   const rows = verificadores.map(verificador => {
-    const actividad = getActividadHoyPorVerificador(verificador.id);
+    const actividad = getReviewActivityToday(verificador.id);
     return {
       verificador,
       enRevision: (carga.get(verificador.id) || []).length,

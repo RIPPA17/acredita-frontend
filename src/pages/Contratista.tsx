@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Documento, Trabajador } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, getPlantillas, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, getInvitaciones, saveInvitaciones, logoutUser, getCurrentSession, aceptarInvitacion, getPreferenciasNotificacionesContratista } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession, getPreferenciasNotificacionesContratista } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
@@ -53,8 +53,6 @@ export default function ContratistaPortal() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
-  const [invitacionAceptada, setInvitacionAceptada] = useState(false);
-  const [tieneProyecto, setTieneProyecto] = useState(false);
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
@@ -154,22 +152,6 @@ export default function ContratistaPortal() {
     }
   }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
 
-  React.useEffect(() => {
-    const invs = getInvitaciones();
-    const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
-    if (pending) {
-      setTieneProyecto(true);
-      setInvitacionAceptada(false);
-    } else {
-      if (misProyectos.length > 0) {
-        setTieneProyecto(true);
-        setInvitacionAceptada(true);
-      } else {
-        setTieneProyecto(false);
-        setInvitacionAceptada(false);
-      }
-    }
-  }, []);
 
   const handleAddWorkerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,89 +211,6 @@ export default function ContratistaPortal() {
     showToast('Trabajador agregado con éxito');
   };
 
-  if (tieneProyecto && !invitacionAceptada) {
-    const invitacionPendiente = getInvitaciones().find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
-    const requisitosInvitacion = invitacionPendiente
-      ? getRequisitos().filter(req => req.proyectoId === invitacionPendiente.proyectoId && req.activo !== false)
-      : [];
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-cream2 p-4 font-sans text-navy">
-        <div className="card max-w-md w-full fade-in shadow-xl border-none">
-          <div className="flex justify-center mb-5">
-            <span className="badge b-blue px-3 py-1 text-[13.2px] font-medium flex items-center gap-1.5"><Bell size={14} /> Nueva invitación</span>
-          </div>
-          <h2 className="section-title text-center text-xl mb-6">Te han invitado a un proyecto</h2>
-          
-          <div className="bg-white border border-cream3 rounded-xl p-4 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-cream rounded-lg flex items-center justify-center text-brown shrink-0">
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div className="font-semibold text-navy text-[15.4px]">{invitacionPendiente?.mandanteNombre || 'Mandante'}</div>
-                <div className="text-[13.2px] text-gray-500">{invitacionPendiente?.proyectoNombre || 'Proyecto'}</div>
-              </div>
-            </div>
-            
-            <div className="border-t border-cream3 pt-4">
-              <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Documentos requeridos:</p>
-              <ul className="text-[13.2px] text-gray-600 flex flex-col gap-2.5">
-                {requisitosInvitacion.map(req => (
-                  <li key={req.id} className="flex items-center gap-2"><FileText size={16} className="text-gray-400" /> {req.nombre}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <button 
-              className="btn btn-primary w-full justify-center py-2.5 text-[15.4px]"
-              onClick={() => {
-                const invs = getInvitaciones();
-                const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
-                if (pending) {
-                  aceptarInvitacion(pending.id, contratistaLogueado.id);
-                  
-                  setInvitacionAceptada(true);
-                  setTieneProyecto(true);
-                  setSelectedProyectoId(pending.proyectoId);
-                  setShowWelcomeAlert(true);
-                  showToast('Invitación aceptada. Proyecto asociado.');
-                  setTimeout(() => {
-                    window.location.reload();
-                  }, 1000);
-                } else {
-                  setInvitacionAceptada(true);
-                  showToast('Invitación procesada');
-                }
-              }}
-            >
-              Aceptar y comenzar
-            </button>
-            <button 
-              className="btn btn-ghost w-full justify-center text-gray-500 hover:text-navy py-2.5 text-[15.4px]"
-              onClick={() => {
-                const invs = getInvitaciones();
-                const pending = invs.find(inv => inv.contratistaId === contratistaLogueado.id && inv.estado === 'pendiente');
-                if (pending) {
-                  pending.estado = 'rechazada';
-                  saveInvitaciones(invs);
-                }
-                setTieneProyecto(false);
-                showToast('Invitación rechazada', 'error');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
-              }}
-            >
-              Rechazar invitación
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen flex flex-col font-sans bg-cream2 text-navy">
       {/* TOPBAR */}
@@ -350,7 +249,7 @@ export default function ContratistaPortal() {
         </div>
       </div>
 
-      {!tieneProyecto && (
+      {misProyectos.length === 0 && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 flex items-center sticky top-[64px] z-40">
           <div className="flex items-center gap-2 text-yellow-800 text-sm">
             <AlertTriangle size={16} className="shrink-0"/>

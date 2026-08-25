@@ -18,7 +18,6 @@ export default function ConfiguracionTab({
 }: {
   verificadores: Verificador[];
   verificadorActualId: string | null;
-  onSetVerificadorActual: (id: string) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [tab, setTab] = useState<Tab>('general');
@@ -70,7 +69,7 @@ export default function ConfiguracionTab({
           </div>
           <div className="p-5">
             {tab === 'general' ? (
-              <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} onSetVerificadorActual={() => undefined} />
+              <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} />
             ) : loadingPlantillas ? (
               <div className="py-14 text-center text-[13px] text-gray-400">Cargando plantillas desde Supabase…</div>
             ) : plantillasError ? (

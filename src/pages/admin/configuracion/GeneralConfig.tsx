@@ -12,7 +12,6 @@ export default function GeneralConfig({
 }: {
   verificadores: Verificador[];
   verificadorActualId: string | null;
-  onSetVerificadorActual: (id: string) => void;
 }) {
   const actual = verificadores.find(item => item.id === verificadorActualId);
   const supervisores = verificadores.filter(item => item.rol === 'supervisor' && item.activo);
