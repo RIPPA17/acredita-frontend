@@ -16,14 +16,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Apply cleanup patch
+      - name: Apply cleanup patches
         run: |
           python3 scripts/cleanup_legacy_patch.py
+          python3 scripts/cleanup_legacy_phase2.py
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add src tsconfig.json
-            git commit -m "Limpia caches operativos legacy"
+            git commit -m "Retira bootstrap y login local legacy"
             git push
           fi
       - name: Install
@@ -37,11 +38,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          print('=== ACTUAL IMPORTS FROM localStorageDb ===')
           imported=set()
           for p in Path('src').rglob('*'):
-              if p.suffix not in {'.ts','.tsx'} or p.name=='localStorageDb.ts' or '__tests__' in p.parts:
-                  continue
+              if p.suffix not in {'.ts','.tsx'} or p.name=='localStorageDb.ts' or '__tests__' in p.parts: continue
               text=p.read_text(errors='ignore')
               for m in re.finditer(r'import\s*\{([^}]*)\}\s*from\s*[\"\']([^\"\']*localStorageDb)[\"\']', text, re.S):
                   for raw in m.group(1).split(','):
@@ -50,21 +49,10 @@ jobs:
           print('COUNT', len(imported))
           for name in sorted(imported): print(name)
           PY
-      - name: Unused legacy exports
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          target=Path('src/data/localStorageDb.ts')
-          text=target.read_text()
-          exports=sorted(set(re.findall(r'export\s+(?:async\s+)?function\s+(\w+)', text)))
-          files=[p for p in Path('src').rglob('*') if p.suffix in {'.ts','.tsx'} and p!=target and '__tests__' not in p.parts]
-          corpus='\n'.join(p.read_text(errors='ignore') for p in files)
-          print('=== UNUSED EXPORTS OUTSIDE TESTS ===')
-          for name in exports:
-              if not re.search(rf'\b{re.escape(name)}\b', corpus): print(name)
-          PY
       - name: TypeScript
         run: npm run lint
       - name: Build
         run: npm run build
+      - name: Dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev
