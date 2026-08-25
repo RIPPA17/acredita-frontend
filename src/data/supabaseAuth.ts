@@ -250,6 +250,29 @@ export async function restoreSupabaseSession(): Promise<SupabaseUserSession | nu
   }
 }
 
+export function getStoredSupabaseSession(): SupabaseUserSession | null {
+  return readStoredSession();
+}
+
+export async function getSupabaseSessionForRequest(
+  sessionHint?: SupabaseUserSession | null,
+): Promise<SupabaseUserSession | null> {
+  const stored = sessionHint || readStoredSession();
+  if (!stored) return null;
+  if (stored._supabase.expiresAt > Date.now() + 60_000) return stored;
+  try {
+    const refreshed = toRawTokens(await refreshGrant(stored._supabase.refreshToken));
+    const next: SupabaseUserSession = { ...stored, _supabase: refreshed };
+    const current = readStoredSession();
+    if (current?.profileId === stored.profileId) persistSession(next);
+    return next;
+  } catch {
+    const current = readStoredSession();
+    if (current?.profileId === stored.profileId) localStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+}
+
 export function clearSupabaseSession(): void {
   if (typeof window !== 'undefined') localStorage.removeItem(SESSION_KEY);
 }

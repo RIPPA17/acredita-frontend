@@ -1,14 +1,13 @@
 import { CONTRATISTAS, MANDANTES, PROYECTOS } from './mockData';
 import type { Contratista, Mandante, Proyecto, Requisito } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
-import { getRuntimeArray, purgeLegacyBusinessStorage, runtimeFingerprint, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, purgeLegacyBusinessStorage, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
-const CORE_KEYS = ['acredita_mandantes', 'acredita_proyectos', 'acredita_contratistas', 'acredita_requisitos'] as const;
 
 type BackendMandante = {
   id: string;
@@ -478,9 +477,6 @@ export async function pushCoreDataToSupabase(session: SupabaseUserSession): Prom
   await syncRequirements(session, projectUuidByKey, projects, requirements);
 }
 
-function coreFingerprint(): string {
-  return runtimeFingerprint(CORE_KEYS);
-}
 
 export async function prepareCoreDataForSession(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -488,31 +484,3 @@ export async function prepareCoreDataForSession(session: SupabaseUserSession): P
   await hydrateCoreDataFromSupabase(session);
 }
 
-export function startCoreDataAutoSync(session: SupabaseUserSession): () => void {
-  if (typeof window === 'undefined') return () => {};
-  let lastFingerprint = coreFingerprint();
-  let syncing = false;
-  let disposed = false;
-
-  const timer = window.setInterval(async () => {
-    if (disposed || syncing) return;
-    const nextFingerprint = coreFingerprint();
-    if (nextFingerprint === lastFingerprint) return;
-    lastFingerprint = nextFingerprint;
-    syncing = true;
-    try {
-      await pushCoreDataToSupabase(session);
-      await hydrateCoreDataFromSupabase(session);
-      lastFingerprint = coreFingerprint();
-    } catch (error) {
-      console.error('Error sincronizando Proyectos/Contratistas/Requisitos con Supabase.', error);
-    } finally {
-      syncing = false;
-    }
-  }, 800);
-
-  return () => {
-    disposed = true;
-    window.clearInterval(timer);
-  };
-}

@@ -2,6 +2,7 @@ import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES
 import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador, PreferenciasNotificacionesContratista } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
 import { clearRuntimeBusinessData, getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { requestBusinessPersistence } from './supabasePersistence';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -257,6 +258,7 @@ function snapshotContractorStates(contratistas: Contratista[]): Record<string, {
 
 export function saveContratistas(data: Contratista[]) {
   setRuntimeArray('acredita_contratistas', data);
+  requestBusinessPersistence('all');
 }
 
 export function getProyectos(): Proyecto[] {
@@ -265,6 +267,7 @@ export function getProyectos(): Proyecto[] {
 
 export function saveProyectos(data: Proyecto[]) {
   setRuntimeArray('acredita_proyectos', data);
+  requestBusinessPersistence('core');
 }
 
 export function getMandantes(): Mandante[] {
@@ -273,6 +276,7 @@ export function getMandantes(): Mandante[] {
 
 export function saveMandantes(data: Mandante[]) {
   setRuntimeArray('acredita_mandantes', data);
+  requestBusinessPersistence('core');
 }
 
 export function getPlantillas(): any[] {
@@ -293,6 +297,7 @@ export function getRequisitos(): Requisito[] {
 
 export function saveRequisitos(data: Requisito[]) {
   setRuntimeArray('acredita_requisitos', data);
+  requestBusinessPersistence('core');
 }
 
 export function getReglas(): any[] {
