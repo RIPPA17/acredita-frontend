@@ -37,19 +37,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleAutofill = () => {
-    setPassword('');
-    if (rol === 'admin') setEmail('admin@acredita.cl');
-    if (rol === 'mandante') setEmail('mandante@acredita.cl');
-    if (rol === 'contratista') setEmail('contratista@acredita.cl');
-  };
-
-  const demoEmail = rol === 'admin'
-    ? 'admin@acredita.cl'
-    : rol === 'mandante'
-      ? 'mandante@acredita.cl'
-      : 'contratista@acredita.cl';
-
   return (
     <div className="min-h-screen bg-white">
       <div className="grid md:grid-cols-2 min-h-screen">
@@ -174,19 +161,6 @@ export default function LoginPage() {
                 {loading ? 'Verificando…' : 'Ingresar'}
               </button>
             </form>
-
-            <div className="mt-4 p-3.5 bg-[#faf9f8] border border-cream3 rounded-xl text-[12px] text-navy/80">
-              <div className="font-semibold mb-1 flex justify-between items-center text-[12.5px] text-navy">
-                <span>Cuenta demo ({rol === 'admin' ? 'Acredita' : rol === 'mandante' ? 'Mandante' : 'Contratista'})</span>
-                <button type="button" onClick={handleAutofill} className="text-brown hover:underline font-bold">
-                  Usar email
-                </button>
-              </div>
-              <div className="font-mono text-gray-600 leading-relaxed mt-1 break-all">
-                {demoEmail}
-              </div>
-              <div className="text-gray-500 mt-1">La contraseña no se guarda ni se publica en el frontend.</div>
-            </div>
 
             <div className="mt-6 text-center text-[13.2px] text-gray-500">
               ¿No tienes una cuenta? <Link to={`/registro?rol=${rol}`} className="text-brown font-medium hover:underline">Solicita acceso</Link>
