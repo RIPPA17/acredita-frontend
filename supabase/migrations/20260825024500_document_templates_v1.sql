@@ -1,0 +1,1 @@
+-- Placeholder; replaced after applying verified migration in Supabase.
