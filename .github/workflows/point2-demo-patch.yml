@@ -26,19 +26,16 @@ jobs:
 
           old_import = "import { Link } from 'react-router-dom';"
           new_import = "import { Link } from 'react-router-dom';\nimport { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '../data/supabaseAuth';"
-          if old_import not in text:
-              raise SystemExit('Landing import anchor not found')
-          text = text.replace(old_import, new_import, 1)
+          if "SUPABASE_PUBLISHABLE_KEY" not in text:
+              if old_import not in text:
+                  raise SystemExit('Landing import anchor not found')
+              text = text.replace(old_import, new_import, 1)
 
-          old_logic = """  const [demoForm, setDemoForm] = useState({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' });
-          const [demoEnviado, setDemoEnviado] = useState(false);
-
-          const handleSubmitDemo = (e: React.FormEvent) => {
-            e.preventDefault();
-            if (!demoForm.nombre.trim() || !demoForm.empresa.trim() || !demoForm.correo.trim()) return;
-            setDemoEnviado(true);
-            showToast('Solicitud enviada. Nuestro equipo te contactará pronto.');
-          };"""
+          start = text.find("  const [demoForm")
+          end_marker = "  };\n\n  return ("
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Landing demo logic anchors not found')
 
           new_logic = """  const [demoForm, setDemoForm] = useState({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' });
           const [demoEnviado, setDemoEnviado] = useState(false);
@@ -86,9 +83,7 @@ jobs:
             }
           };"""
 
-          if old_logic not in text:
-              raise SystemExit('Landing demo logic anchor not found')
-          text = text.replace(old_logic, new_logic, 1)
+          text = text[:start] + new_logic + "\n\n  return (" + text[end + len(end_marker):]
 
           old_button = '<button type="submit" className="btn btn-primary w-full justify-center text-[16.5px] py-3">Solicitar demo</button>'
           new_button = '<button type="submit" disabled={demoEnviando} className="btn btn-primary w-full justify-center text-[16.5px] py-3 disabled:opacity-60 disabled:cursor-not-allowed">{demoEnviando ? \'Enviando…\' : \'Solicitar demo\'}</button>'
