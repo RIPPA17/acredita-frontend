@@ -212,54 +212,6 @@ export function getReviewActivityToday(reviewerId: string): { aprobados: number;
   };
 }
 
-export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
-  return runtimeReviewSnapshot;
-}
-
-export function getReviewActivityToday(reviewerId: string): { aprobados: number; rechazados: number } {
-  const activity = runtimeReviewSnapshot?.actividad || [];
-  return {
-    aprobados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'aprobado').length,
-    rechazados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'rechazado').length,
-  };
-}
-
-export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
-  return runtimeReviewSnapshot;
-}
-
-export function getReviewActivityToday(reviewerId: string): { aprobados: number; rechazados: number } {
-  const activity = runtimeReviewSnapshot?.actividad || [];
-  return {
-    aprobados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'aprobado').length,
-    rechazados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'rechazado').length,
-  };
-}
-
-export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
-  return runtimeReviewSnapshot;
-}
-
-export function getReviewActivityToday(reviewerId: string): { aprobados: number; rechazados: number } {
-  const activity = runtimeReviewSnapshot?.actividad || [];
-  return {
-    aprobados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'aprobado').length,
-    rechazados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'rechazado').length,
-  };
-}
-
-export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
-  return runtimeReviewSnapshot;
-}
-
-export function getReviewActivityToday(reviewerId: string): { aprobados: number; rechazados: number } {
-  const activity = runtimeReviewSnapshot?.actividad || [];
-  return {
-    aprobados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'aprobado').length,
-    rechazados: activity.filter(item => item.verificadorId === reviewerId && item.accion === 'rechazado').length,
-  };
-}
-
 function writeReviewCache(snapshot: ReviewOperationsSnapshot): void {
   runtimeReviewSnapshot = snapshot;
 }
