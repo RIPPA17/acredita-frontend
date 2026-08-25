@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Building2, CheckCircle, FolderPlus } from 'lucide-react';
 import MandantePortal from '../pages/Mandante';
 import { getMandantes, getProyectos, saveProyectos } from '../data/localStorageDb';
@@ -32,7 +32,7 @@ export default function MandanteRoute() {
 
   if (projects.length > 0) return <MandantePortal />;
 
-  const crearPrimerProyecto = async (event: React.FormEvent) => {
+  const crearPrimerProyecto = async (event: FormEvent) => {
     event.preventDefault();
     const nombre = nombreProyecto.trim();
     if (nombre.length < 3) {
@@ -105,7 +105,7 @@ export default function MandanteRoute() {
   );
 }
 
-function Step({ icon, title, detail, active = false, done = false }: { icon: React.ReactNode; title: string; detail: string; active?: boolean; done?: boolean }) {
+function Step({ icon, title, detail, active = false, done = false }: { icon: ReactNode; title: string; detail: string; active?: boolean; done?: boolean }) {
   return (
     <div className={`rounded-xl border p-3 ${active ? 'border-brown bg-gold-soft/30' : done ? 'border-emerald-200 bg-emerald-50' : 'border-cream3 bg-white'}`}>
       <div className={`mb-2 ${active ? 'text-brown' : done ? 'text-emerald-700' : 'text-gray-400'}`}>{icon}</div>

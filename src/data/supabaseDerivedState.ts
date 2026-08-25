@@ -4,7 +4,6 @@ const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | un
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
-const CACHE_KEY = 'acredita_backend_derived_state_v1';
 
 type BackendAccreditationStatus = {
   accreditation_id: string;
@@ -62,6 +61,8 @@ type DerivedStateCache = {
   workers: Record<string, DerivedWorkerState>;
 };
 
+let runtimeCache: DerivedStateCache | null = null;
+
 function normalizeRut(value: string): string {
   return (value || '').replace(/[^0-9kK]/g, '').toUpperCase();
 }
@@ -87,17 +88,11 @@ async function selectRows<T>(table: string, token: string, select: string): Prom
 }
 
 function readCache(): DerivedStateCache | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-    return parsed && typeof parsed === 'object' ? parsed as DerivedStateCache : null;
-  } catch {
-    return null;
-  }
+  return runtimeCache;
 }
 
 export function clearDerivedStateCache(): void {
-  if (typeof window !== 'undefined') localStorage.removeItem(CACHE_KEY);
+  runtimeCache = null;
 }
 
 export function getBackendAccreditationState(
@@ -186,7 +181,7 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
     accreditations,
     workers,
   };
-  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  runtimeCache = cache;
 }
 
 export function backendAccreditationLabel(state: DerivedAccreditationState): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {

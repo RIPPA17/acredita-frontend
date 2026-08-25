@@ -36,7 +36,7 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck, Settings
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, getVerificadores, saveVerificadores, getVerificadorActualId, setVerificadorActual, getVerificadorActual, getClaimsRevision, saveClaimsRevision, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getAuditLogs } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser } from "../data/localStorageDb";
 import { Contratista, Proyecto, Requisito, Verificador, ClaimRevision } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
@@ -57,6 +57,7 @@ import DashboardTab from './admin/DashboardTab';
 import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import DocumentoDetailModal from './admin/DocumentoDetailModal';
 import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
+import { refreshReviewOperationsCache } from '../data/supabaseReviewOperations';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -122,23 +123,22 @@ export default function AdminPortal() {
   // reactiva compartida entre ColaRevisionTab y VerificadoresTab, para que
   // "tomar revisión"/aprobar/rechazar en Cola se refleje al instante en
   // Verificadores (y viceversa) sin depender de un refresh manual.
-  const [verificadores, setVerificadores] = useState<Verificador[]>(() => getVerificadores());
-  const [claimsRevision, setClaimsRevisionState] = useState<ClaimRevision[]>(() => getClaimsRevision());
-  const setClaimsRevision = (next: ClaimRevision[]) => {
-    saveClaimsRevision(next);
-    setClaimsRevisionState(next);
-  };
+  const [verificadores, setVerificadores] = useState<Verificador[]>([]);
+  const [claimsRevision, setClaimsRevisionState] = useState<ClaimRevision[]>([]);
+  const setClaimsRevision = (next: ClaimRevision[]) => setClaimsRevisionState(next);
   useEffect(() => {
     const freshContratistas = getContratistas();
     const freshProyectos = getProyectos();
     setContratistas(freshContratistas);
     setProyectos(freshProyectos);
     setRequisitos(getRequisitos());
-    setVerificadores(getVerificadores());
-    setVerificadorActualIdState(getVerificadorActualId());
-    // Red de seguridad: al cambiar de pestaña, descarta claims cuyo
-    // documento ya no esté en la cola (p. ej. modificado por otro flujo).
-    setClaimsRevision(pruneClaimsRevision(getClaimsRevision(), freshContratistas, freshProyectos));
+    void refreshReviewOperationsCache().then(snapshot => {
+      setVerificadores(snapshot.verificadores);
+      setVerificadorActualIdState(snapshot.currentReviewerId);
+      setClaimsRevision(pruneClaimsRevision(snapshot.claims, freshContratistas, freshProyectos));
+    }).catch(() => {
+      // Conserva el último snapshot válido si Supabase tiene una interrupción breve.
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -174,20 +174,12 @@ export default function AdminPortal() {
   useEffect(() => {
     if (!verificadorSeleccionado) setTabVerificador("resumen");
   }, [verificadorSeleccionado]);
-  // Verificador operativo actual (Configuración → General): estado reactivo
-  // separado del arreglo `verificadores`, para que cambiar quién opera la
-  // Cola se refleje al instante ahí sin depender de que la lista de
-  // verificadores también cambie de referencia.
-  const [verificadorActualId, setVerificadorActualIdState] = useState<string | null>(() => getVerificadorActualId());
-  const handleSetVerificadorActual = (id: string) => {
-    setVerificadorActual(id);
-    setVerificadorActualIdState(id);
-    showToast("Verificador operativo actualizado");
-  };
-  // Identidad mostrada en el topbar: se resuelve desde el equipo central de
-  // verificadores (nunca un nombre hardcodeado), y se recalcula cuando
-  // cambia el equipo o el verificador operativo actual.
-  const topbarVerificador = useMemo(() => getVerificadorActual(), [verificadores, verificadorActualId]);
+  // El revisor operativo es la identidad Acredita autenticada que devuelve Supabase.
+  const [verificadorActualId, setVerificadorActualIdState] = useState<string | null>(null);
+  const topbarVerificador = useMemo(
+    () => verificadores.find(item => item.id === verificadorActualId) || null,
+    [verificadores, verificadorActualId],
+  );
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
 
@@ -201,20 +193,7 @@ export default function AdminPortal() {
         if (!cancelled) setAuditoriaLogs(logs);
       })
       .catch(() => {
-        if (cancelled) return;
-        const legacy = getAuditLogs().map(log => ({
-          ...log,
-          id: log.id,
-          accion: log.accion,
-          actor: log.actor || log.usuarioId,
-          rol: log.rol === 'admin' ? 'Revisor' : log.rol === 'contratista' ? 'Contratista' : log.rol === 'mandante' ? 'Mandante' : 'Sistema Automático',
-          empresa: log.empresa || 'N/A',
-          proyecto: log.proyecto || '',
-          detalle: log.detalle || '',
-          fecha: log.fecha || '',
-          resultado: log.resultado || 'informativo',
-        }));
-        setAuditoriaLogs(legacy);
+        if (!cancelled) setAuditoriaLogs([]);
       });
     return () => { cancelled = true; };
   }, [activeTab]);
@@ -819,7 +798,6 @@ export default function AdminPortal() {
             <ConfiguracionTab
               verificadores={verificadores}
               verificadorActualId={verificadorActualId}
-              onSetVerificadorActual={handleSetVerificadorActual}
               showToast={showToast}
             />
           )}

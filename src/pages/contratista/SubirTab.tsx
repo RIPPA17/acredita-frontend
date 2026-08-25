@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import {
   esTrabajadorAsignado,
   getRequisitos,
@@ -206,7 +206,7 @@ export default function SubirTab({
     fileInputRef.current?.click();
   };
 
-  const procesarArchivo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const procesarArchivo = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     const target = uploadTarget;
