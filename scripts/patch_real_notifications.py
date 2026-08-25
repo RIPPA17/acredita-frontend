@@ -1,5 +1,9 @@
 from pathlib import Path
 
+if "loadNotificationPreferences" in Path('src/pages/Contratista.tsx').read_text():
+    print('Notification patch already applied')
+    raise SystemExit(0)
+
 
 def replace_once(path: str, old: str, new: str):
     p = Path(path)
