@@ -1,8 +1,9 @@
-import { CONTRATISTAS, PROYECTOS, MANDANTES, PLANTILLA_DOCUMENTOS, VERIFICADORES } from './mockData';
-import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, Verificador, ClaimRevision, ActividadVerificador, PreferenciasNotificacionesContratista } from '../types';
+import { PLANTILLA_DOCUMENTOS } from './mockData';
+import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, Invitacion, HistorialVersionDocumento, PreferenciasNotificacionesContratista } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
-import { clearRuntimeBusinessData, getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
+import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -11,227 +12,7 @@ export const REGLAS_DEFAULT = [
   { id: 4, documento: "Certificado Antecedentes", diasVigencia: 180, alertaDias: 15, criticidad: "advertencia" }
 ];
 
-// Versión del esquema de datos guardados en localStorage. Subir este número
-// cuando se agregue una migración nueva en runMigrations() — initDb() se
-// encarga de aplicarla una sola vez, sin pedirle nada al usuario.
-const DB_SCHEMA_VERSION = 2;
-const SCHEMA_VERSION_KEY = 'acredita_schema_version';
-
-export function initDb() {
-  // Los datos de negocio ya no se inicializan ni se leen desde localStorage.
-  // ProtectedRoute hidrata la memoria efímera desde Supabase antes de renderizar portales protegidos.
-}
-
-function seedIfNeeded() {
-  if (localStorage.getItem('acredita_db_initialized')) return;
-  {
-    // 1. Initialize project-specific requirements
-    const defaultRequisitos: Requisito[] = [];
-    PROYECTOS.forEach(proj => {
-      PLANTILLA_DOCUMENTOS.forEach((plantilla) => {
-        let alertaDias = 15;
-        let criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' = 'bloquea_pago';
-        let obligatorio = true;
-
-        if (plantilla.id === 'liquidacion') {
-          alertaDias = 5;
-          criticidad = 'bloquea_pago';
-        } else if (plantilla.id === 'f30') {
-          alertaDias = 7;
-          criticidad = 'bloquea_pago';
-        } else if (plantilla.id === 'contrato') {
-          alertaDias = 15;
-          criticidad = 'bloquea_acceso';
-        } else if (plantilla.id === 'mutual') {
-          alertaDias = 7;
-          criticidad = 'bloquea_acceso';
-        } else if (plantilla.id === 'antecedentes') {
-          alertaDias = 15;
-          criticidad = 'advertencia';
-          obligatorio = false;
-        } else if (plantilla.id === 'odi') {
-          alertaDias = 30;
-          criticidad = 'bloquea_acceso';
-        }
-
-        defaultRequisitos.push({
-          id: `${proj.id}_${plantilla.id}`,
-          nombre: plantilla.nombre,
-          categoria: plantilla.categoria as any,
-          destino: plantilla.destino as any,
-          obligatorio,
-          frecuencia: plantilla.frecuencia,
-          alertaDias,
-          criticidad,
-          proyectoId: proj.id,
-          activo: true
-        });
-      });
-    });
-    localStorage.setItem('acredita_requisitos', JSON.stringify(defaultRequisitos));
-
-    // 2. Expand mock contractors to assign project-specific documents and workers.
-    // Un documento de mockData puede venir SIN proyectoId (el caso de siempre:
-    // se replica tal cual, con el mismo estado, en cada proyecto del
-    // contratista) o ya con su proyectoId propio (dataset demo enriquecido:
-    // ese documento pertenece únicamente a ese proyecto, con su propio id y
-    // estado — no se duplica en los demás).
-    const expandDocsPorProyecto = (docs: Documento[], proyectoIds: string[]): Documento[] => {
-      const result: Documento[] = [];
-      proyectoIds.forEach(pId => {
-        docs.forEach(d => {
-          if (d.proyectoId) {
-            if (d.proyectoId === pId) result.push({ ...d });
-            return;
-          }
-          result.push({ ...d, id: `${pId}_${d.id}`, proyectoId: pId });
-        });
-      });
-      return result;
-    };
-
-    const expandedContratistas = CONTRATISTAS.map(c => {
-      const docsWithProject = expandDocsPorProyecto(c.documentos, c.proyectos);
-
-      const workersWithProject = c.trabajadores?.map(w => ({
-        ...w,
-        documentos: expandDocsPorProyecto(w.documentos || [], c.proyectos)
-      }));
-
-      return {
-        ...c,
-        documentos: docsWithProject,
-        trabajadores: workersWithProject
-      };
-    });
-
-    localStorage.setItem('acredita_contratistas', JSON.stringify(expandedContratistas));
-    localStorage.setItem('acredita_proyectos', JSON.stringify(PROYECTOS));
-    localStorage.setItem('acredita_mandantes', JSON.stringify(MANDANTES));
-    localStorage.setItem('acredita_plantillas', JSON.stringify(PLANTILLA_DOCUMENTOS));
-    
-    localStorage.setItem('acredita_reglas', JSON.stringify(REGLAS_DEFAULT));
-    localStorage.setItem('acredita_verificadores', JSON.stringify(VERIFICADORES));
-    localStorage.setItem('acredita_verificador_actual', JSON.stringify('ver_maria'));
-    localStorage.setItem('acredita_db_initialized', 'true');
-    // Los datos recién sembrados ya tienen la forma más reciente (documentos
-    // con proyectoId, etc.) — quedan al día, sin necesidad de migrar nada.
-    localStorage.setItem(SCHEMA_VERSION_KEY, String(DB_SCHEMA_VERSION));
-  }
-}
-
-function normalizarNombreDocumento(nombre: string): string {
-  return (nombre || '').trim().toLowerCase();
-}
-
-// Un documento legacy a veces ya traía su id prefijado con OTRO proyecto
-// (ej. "costanera_d1") aunque le faltara el campo proyectoId. Si no se
-// limpia ese prefijo antes de migrar, el nuevo id terminaría duplicado
-// (ej. "hospital_costanera_d1"). Se prueba contra todos los proyectos del
-// contratista, no solo el destino, porque el prefijo puede ser de cualquiera.
-function idBaseDocumentoLegacy(docId: string, proyectoIds: string[]): string {
-  for (const pid of proyectoIds) {
-    if (docId.startsWith(`${pid}_`)) return docId.slice(pid.length + 1);
-  }
-  return docId;
-}
-
-// Migra documentos legacy sin proyectoId: cada uno se copia una vez por
-// proyecto del contratista, preservando estado/vencimiento/motivo/etc.
-// Idempotente: si para un (proyectoId, nombre normalizado) ya existe un
-// documento, no crea otro — así correrla varias veces no duplica nada.
-function migrarDocumentosLegacy(docs: Documento[], proyectoIds: string[]): { docs: Documento[]; changed: boolean } {
-  if (proyectoIds.length === 0) return { docs, changed: false };
-  const legacyDocs = docs.filter(d => !d.proyectoId);
-  if (legacyDocs.length === 0) return { docs, changed: false };
-
-  const conProyecto = docs.filter(d => !!d.proyectoId);
-  const existingKeys = new Set(conProyecto.map(d => `${d.proyectoId}::${normalizarNombreDocumento(d.nombre)}`));
-  const existingIds = new Set(docs.map(d => d.id));
-  const nuevos: Documento[] = [];
-
-  legacyDocs.forEach(legacyDoc => {
-    const baseId = idBaseDocumentoLegacy(legacyDoc.id, proyectoIds);
-    proyectoIds.forEach(pId => {
-      const key = `${pId}::${normalizarNombreDocumento(legacyDoc.nombre)}`;
-      if (existingKeys.has(key)) return; // ya existe un documento real para ese proyecto
-
-      let targetId = `${pId}_${baseId}`;
-      let suffix = 0;
-      while (existingIds.has(targetId)) {
-        suffix += 1;
-        targetId = `${pId}_${baseId}_${suffix}`;
-      }
-
-      nuevos.push({ ...legacyDoc, id: targetId, proyectoId: pId });
-      existingKeys.add(key);
-      existingIds.add(targetId);
-    });
-  });
-
-  // Los legacy sin proyectoId quedan reemplazados por sus copias por proyecto
-  // (o por el documento real que ya existía) — nunca se dejan huérfanos sin
-  // proyectoId, para que los filtros por proyecto los encuentren siempre.
-  return { docs: [...conProyecto, ...nuevos], changed: true };
-}
-
-// Migración a la versión 2 del esquema: navegadores que usaron una versión
-// anterior de la app pueden tener contratistas con documentos (de empresa o
-// de trabajadores) sin proyectoId. El código actual filtra siempre por
-// proyectoId, así que esos documentos se volvían invisibles y el Inicio
-// mostraba "Proyecto recién iniciado" aunque hubiera datos reales.
-// Transforma los datos existentes en vez de resembrarlos, para no perder
-// cambios ya hechos por el usuario (aprobaciones, rechazos, cargas, etc).
-function migrarProyectoIdLegacy(): void {
-  const raw = localStorage.getItem('acredita_contratistas');
-  if (!raw) return;
-
-  let contratistas: Contratista[];
-  try {
-    contratistas = JSON.parse(raw);
-  } catch (e) {
-    return;
-  }
-  if (!Array.isArray(contratistas)) return;
-
-  let anyChanged = false;
-  contratistas.forEach(c => {
-    const proyectoIds = c.proyectos || [];
-
-    const empresaResult = migrarDocumentosLegacy(c.documentos || [], proyectoIds);
-    if (empresaResult.changed) {
-      c.documentos = empresaResult.docs;
-      anyChanged = true;
-    }
-
-    (c.trabajadores || []).forEach(w => {
-      const workerResult = migrarDocumentosLegacy(w.documentos || [], proyectoIds);
-      if (workerResult.changed) {
-        w.documentos = workerResult.docs;
-        anyChanged = true;
-      }
-    });
-  });
-
-  if (anyChanged) {
-    localStorage.setItem('acredita_contratistas', JSON.stringify(contratistas));
-  }
-}
-
-// Aplica las migraciones pendientes según acredita_schema_version. Se llama
-// en cada initDb(), pero solo hace trabajo real cuando la versión guardada
-// quedó atrás — por eso es segura de ejecutar muchas veces (idempotente) y
-// no requiere que el usuario recargue dos veces ni borre su navegador.
-function runMigrations(): void {
-  const stored = parseInt(localStorage.getItem(SCHEMA_VERSION_KEY) || '0', 10);
-  if (stored >= DB_SCHEMA_VERSION) return;
-
-  if (stored < 2) {
-    migrarProyectoIdLegacy();
-  }
-
-  localStorage.setItem(SCHEMA_VERSION_KEY, String(DB_SCHEMA_VERSION));
-}
+// Datos de negocio: memoria efímera hidratada desde Supabase.
 
 export function getContratistas(): Contratista[] {
   return getRuntimeArray<Contratista>('acredita_contratistas', []);
@@ -280,15 +61,11 @@ export function saveMandantes(data: Mandante[]) {
 }
 
 export function getPlantillas(): any[] {
-  initDb();
-  if (typeof window === 'undefined') return PLANTILLA_DOCUMENTOS;
-  return safeParseStorageArray<any>('acredita_plantillas', []);
+  return getRuntimeArray<any>('acredita_plantillas', PLANTILLA_DOCUMENTOS);
 }
 
 export function savePlantillas(data: any[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_plantillas', JSON.stringify(data));
-  }
+  setRuntimeArray('acredita_plantillas', data);
 }
 
 export function getRequisitos(): Requisito[] {
@@ -300,141 +77,9 @@ export function saveRequisitos(data: Requisito[]) {
   requestBusinessPersistence('core');
 }
 
-export function getReglas(): any[] {
-  initDb();
-  if (typeof window === 'undefined') return REGLAS_DEFAULT;
-  return safeParseStorageArray<any>('acredita_reglas', REGLAS_DEFAULT);
+function getReglas(): any[] {
+  return REGLAS_DEFAULT;
 }
-
-export function saveReglas(data: any[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_reglas', JSON.stringify(data));
-  }
-}
-
-export function getVerificadores(): Verificador[] {
-  initDb();
-  if (typeof window === 'undefined') return VERIFICADORES;
-  return safeParseStorageArray<Verificador>('acredita_verificadores', []);
-}
-
-export function saveVerificadores(data: Verificador[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_verificadores', JSON.stringify(data));
-  }
-}
-
-// Verificador operativo actual: se guarda solo el id (nunca el nombre) para
-// que sobreviva a un cambio de nombre y no dependa de strings hardcodeados
-// en ningún componente.
-export function getVerificadorActualId(): string | null {
-  initDb();
-  if (typeof window === 'undefined') return null;
-  return safeParseStorageValue<string | null>('acredita_verificador_actual', null, value => typeof value === 'string');
-}
-
-export function setVerificadorActual(id: string) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_verificador_actual', JSON.stringify(id));
-  }
-}
-
-// Resuelve el verificador operativo actual con fallback: si el id guardado
-// ya no existe o quedó inactivo, usa el primer verificador activo,
-// prefiriendo uno en línea. Si no queda ninguno, retorna null (la UI debe
-// mostrar esa ausencia, nunca un nombre inventado).
-export function getVerificadorActual(): Verificador | null {
-  const verificadores = getVerificadores();
-  const storedId = getVerificadorActualId();
-  const stored = storedId ? verificadores.find(v => v.id === storedId && v.activo) : undefined;
-  if (stored) return stored;
-
-  const activos = verificadores.filter(v => v.rol === 'verificador' && v.activo);
-  return activos.find(v => v.estado === 'online') || activos[0] || null;
-}
-
-// Supervisor para escalamientos: primer supervisor activo, prefiriendo uno
-// en línea. Sin fallback inventado — si no hay ninguno, la UI debe mostrar
-// "Supervisor no disponible".
-export function getSupervisorActual(): Verificador | null {
-  const supervisores = getVerificadores().filter(v => v.rol === 'supervisor' && v.activo);
-  return supervisores.find(v => v.estado === 'online') || supervisores[0] || null;
-}
-
-export function getClaimsRevision(): ClaimRevision[] {
-  if (typeof window === 'undefined') return [];
-  return safeParseStorageArray<ClaimRevision>('acredita_claims_revision', []);
-}
-
-export function saveClaimsRevision(data: ClaimRevision[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_claims_revision', JSON.stringify(data));
-  }
-}
-
-export function getActividadVerificadores(): ActividadVerificador[] {
-  if (typeof window === 'undefined') return [];
-  return safeParseStorageArray<ActividadVerificador>('acredita_actividad_verificadores', []);
-}
-
-export function saveActividadVerificadores(data: ActividadVerificador[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('acredita_actividad_verificadores', JSON.stringify(data));
-  }
-}
-
-// Registra una decisión (aprobar/rechazar) apenas ocurre — no en cada click.
-// Es una capa operacional mínima separada de Auditoría (que sigue intacta):
-// evita depender de nombres como identidad y evita parsear texto libre para
-// saber "quién hizo qué hoy".
-export function registrarActividadVerificador(verificadorId: string, documentoKey: string, accion: 'aprobado' | 'rechazado') {
-  const lista = getActividadVerificadores();
-  lista.push({
-    id: `act_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-    verificadorId,
-    documentoKey,
-    accion,
-    fecha: new Date().toISOString(),
-  });
-  saveActividadVerificadores(lista);
-}
-
-// "Hoy" para actividad de verificadores usa la fecha real del navegador
-// (igual que registrarAuditoria/Auditoría, que ya timestampean con
-// new Date() en vez de la fecha demo central) — no una fecha demo distinta.
-export function getActividadHoyPorVerificador(verificadorId: string): { aprobados: number; rechazados: number } {
-  const hoy = new Date().toDateString();
-  const actividad = getActividadVerificadores().filter(a =>
-    a.verificadorId === verificadorId && new Date(a.fecha).toDateString() === hoy
-  );
-  return {
-    aprobados: actividad.filter(a => a.accion === 'aprobado').length,
-    rechazados: actividad.filter(a => a.accion === 'rechazado').length,
-  };
-}
-
-// Todas las claves de localStorage que pertenecen a los datos de trabajo del
-// MVP (excluye 'acredita_session', que identifica al usuario logueado, no un
-// dato del negocio). Mantener sincronizada con cualquier clave 'acredita_*'
-// nueva que se agregue en este archivo.
-const ACREDITA_DATA_KEYS = [
-  'acredita_db_initialized',
-  'acredita_schema_version',
-  'acredita_contratistas',
-  'acredita_proyectos',
-  'acredita_mandantes',
-  'acredita_plantillas',
-  'acredita_requisitos',
-  'acredita_reglas',
-  'acredita_verificadores',
-  'acredita_verificador_actual',
-  'acredita_claims_revision',
-  'acredita_actividad_verificadores',
-  'acredita_invitaciones',
-  'acredita_audit_logs',
-  'acredita_preferencias_notificaciones_contratista',
-  'acredita_notificaciones_leidas_contratista',
-];
 
 const DEFAULT_PREFERENCIAS_NOTIFICACIONES_CONTRATISTA: PreferenciasNotificacionesContratista = {
   documentoRechazado: true,
@@ -494,39 +139,8 @@ export function savePreferenciasNotificacionesContratista(
   localStorage.setItem(PREFERENCIAS_CONTRATISTA_KEY, JSON.stringify(todas));
 }
 
-// Herramienta de desarrollo: vuelve a cargar el estado inicial del MVP.
-// Borra únicamente las claves de datos de Acredita (nunca localStorage.clear(),
-// que arrastraría datos de otras apps del mismo dominio) y fuerza a initDb()
-// a re-sembrar todo desde cero, exactamente como en el primer arranque.
-// Mantiene la sesión activa: es un reinicio de los datos, no un logout.
-export function resetDemoData(): void {
-  clearDerivedStateCache();
-  if (typeof window === 'undefined') return;
-  ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
-  clearRuntimeBusinessData();
-}
-
-// Herramienta de desarrollo: elimina también la sesión activa, dejando el
-// navegador sin ningún dato de Acredita — a diferencia de resetDemoData(),
-// no vuelve a sembrar nada automáticamente (initDb() lo hará en el próximo
-// arranque de la app).
-export function limpiarDatosLocales(): void {
-  clearDerivedStateCache();
-  if (typeof window === 'undefined') return;
-  ACREDITA_DATA_KEYS.forEach(key => localStorage.removeItem(key));
-  clearRuntimeBusinessData();
-  localStorage.removeItem('acredita_session');
-}
-
-const BUSINESS_TODAY_OVERRIDE_KEY = 'acredita_business_today_override';
-
 export function getBusinessToday(): Date {
   const now = new Date();
-  if (typeof window !== 'undefined') {
-    const override = localStorage.getItem(BUSINESS_TODAY_OVERRIDE_KEY);
-    const parsedOverride = override ? parseVencimientoDate(override) : null;
-    if (parsedOverride) return parsedOverride;
-  }
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
@@ -1275,123 +889,15 @@ export function saveInvitaciones(list: Invitacion[]): void {
   localStorage.setItem('acredita_invitaciones', JSON.stringify(list));
 }
 
-export interface UserSession {
-  email: string;
-  role: 'admin' | 'mandante' | 'contratista';
-  mandanteId?: string;
-  contratistaId?: string;
-  nombre?: string;
-}
+export type UserSession = SupabaseUserSession;
 
 export function getCurrentSession(): UserSession | null {
-  if (typeof window === 'undefined') return null;
-  return safeParseStorageValue<UserSession | null>('acredita_session', null, value => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-    const session = value as Partial<UserSession>;
-    return typeof session.email === 'string' && ['admin', 'mandante', 'contratista'].includes(session.role || '');
-  });
-}
-
-export function loginUser(email: string, password: string, role: 'admin' | 'mandante' | 'contratista'): boolean {
-  if (typeof window === 'undefined') return false;
-  
-  const emailClean = email.toLowerCase().trim();
-  
-  if (role === 'admin') {
-    if (emailClean === 'admin@acredita.cl' && password === 'admin123') {
-      const session: UserSession = { email: emailClean, role: 'admin', nombre: 'Ana Díaz' };
-      localStorage.setItem('acredita_session', JSON.stringify(session));
-      registrarAuditoria({
-        usuarioId: emailClean,
-        rol: 'admin',
-        accion: 'login_exitoso',
-        entidad: 'usuario',
-        entidadId: emailClean,
-        detalle: 'Inicio de sesión exitoso como admin'
-      });
-      return true;
-    }
-    return false;
-  }
-
-  if (role === 'mandante') {
-    let mandanteId = '';
-    let nombre = '';
-    if (emailClean === 'andina@andina.cl' && password === 'andina123') {
-      mandanteId = 'andina';
-      nombre = 'Constructora Andina';
-    } else if (emailClean === 'andes@andes.cl' && password === 'andes123') {
-      mandanteId = 'minera-los-andes';
-      nombre = 'Minera Los Andes';
-    } else if (emailClean === 'sur@sur.cl' && password === 'sur123') {
-      mandanteId = 'inmobiliaria-sur';
-      nombre = 'Inmobiliaria del Sur';
-    }
-    
-    if (mandanteId) {
-      const session: UserSession = { email: emailClean, role: 'mandante', mandanteId, nombre };
-      localStorage.setItem('acredita_session', JSON.stringify(session));
-      registrarAuditoria({
-        usuarioId: emailClean,
-        rol: 'mandante',
-        accion: 'login_exitoso',
-        entidad: 'usuario',
-        entidadId: emailClean,
-        detalle: `Inicio de sesión exitoso como mandante (${nombre})`
-      });
-      return true;
-    }
-    return false;
-  }
-
-  if (role === 'contratista') {
-    let contratistaId = '';
-    let nombre = '';
-    if (emailClean === 'tecnico@tecnicosur.cl' && password === 'tecnico123') {
-      contratistaId = 'tecnicosur';
-      nombre = 'TécnicoSur SpA';
-    } else if (emailClean === 'norte@serviciosnorte.cl' && password === 'norte123') {
-      contratistaId = 'servicios-norte';
-      nombre = 'Servicios Norte Ltda.';
-    }
-    
-    if (contratistaId) {
-      const session: UserSession = { email: emailClean, role: 'contratista', contratistaId, nombre };
-      localStorage.setItem('acredita_session', JSON.stringify(session));
-      registrarAuditoria({
-        usuarioId: emailClean,
-        rol: 'contratista',
-        contratistaId,
-        accion: 'login_exitoso',
-        entidad: 'usuario',
-        entidadId: emailClean,
-        detalle: `Inicio de sesión exitoso como contratista (${nombre})`
-      });
-      return true;
-    }
-    return false;
-  }
-
-  return false;
+  return getStoredSupabaseSession();
 }
 
 export function logoutUser(): void {
   clearDerivedStateCache();
-  const session = getCurrentSession();
-  if (session) {
-    registrarAuditoria({
-      usuarioId: session.email,
-      rol: session.role,
-      contratistaId: session.contratistaId,
-      accion: 'logout',
-      entidad: 'usuario',
-      entidadId: session.email,
-      detalle: `Cierre de sesión del usuario (${session.role})`
-    });
-  }
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('acredita_session');
-  }
+  clearSupabaseSession();
 }
 
 export function validarCrearInvitacion(
