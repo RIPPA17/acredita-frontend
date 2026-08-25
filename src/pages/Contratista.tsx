@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Documento, Trabajador } from '../types';
+import { Contratista, Documento, Trabajador } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
@@ -73,7 +73,15 @@ export default function ContratistaPortal() {
   const allMandantes = getMandantes();
 
   const session = getCurrentSession();
-  const contratistaLogueado = allContratistas.find(c => c.id === session?.contratistaId) || allContratistas[0];
+  const contratistaEncontrado = allContratistas.find(c => c.id === session?.contratistaId);
+  const contratistaLogueado: Contratista = contratistaEncontrado || {
+    id: session?.contratistaId || '__unresolved__',
+    nombre: session?.nombre || 'Contratista',
+    rut: '',
+    proyectos: [],
+    documentos: [],
+    trabajadores: [],
+  };
   const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
   const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
   const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
@@ -141,10 +149,21 @@ export default function ContratistaPortal() {
   }, [showNotif]);
 
   const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
-    return misProyectos[0]?.id || 'costanera';
+    return misProyectos[0]?.id || '';
   });
 
   const [documentosData, setDocumentosData] = useState<Documento[]>([]);
+
+  React.useEffect(() => {
+    if (misProyectos.length === 0) {
+      if (selectedProyectoId) setSelectedProyectoId('');
+      return;
+    }
+    if (!misProyectos.some(proyecto => proyecto.id === selectedProyectoId)) {
+      setSelectedProyectoId(misProyectos[0].id);
+      setSelectedWorkerForDocs(null);
+    }
+  }, [misProyectos, selectedProyectoId]);
 
   React.useEffect(() => {
     const list = getContratistas();
@@ -214,6 +233,18 @@ export default function ContratistaPortal() {
     setShowAddWorkerModal(false);
     showToast('Trabajador agregado con éxito');
   };
+
+  if (!contratistaEncontrado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream2 px-6 text-navy">
+        <div className="max-w-md rounded-2xl border border-cream3 bg-white p-6 text-center shadow-sm">
+          <h1 className="text-xl font-semibold">No fue posible cargar tu empresa</h1>
+          <p className="mt-2 text-sm text-gray-500">La sesión es válida, pero no encontramos el contratista asociado dentro de los datos autorizados. Vuelve a iniciar sesión para resincronizar tu acceso.</p>
+          <button className="btn btn-primary mt-5" onClick={handleLogout}>Volver a iniciar sesión</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col font-sans bg-cream2 text-navy">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Search, UserPlus } from 'lucide-react';
 import {
   calcularEstadoTrabajador,
@@ -8,6 +8,7 @@ import {
   obtenerDiasRestantes,
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
+import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
 import {
@@ -15,7 +16,6 @@ import {
   getEstadoDocumentoEfectivo,
   matchDocumentoRequisito,
   normalizarNombreDocumento,
-  subirDocumentoRequisito,
 } from './documentosUtils';
 
 type EstadoTrabajador = ReturnType<typeof calcularEstadoTrabajador>;
@@ -110,6 +110,9 @@ export default function TrabajadoresTab({
 }) {
   const [search, setSearch] = useState('');
   const [filtro, setFiltro] = useState<FiltroEstado>('todos');
+  const [uploadTarget, setUploadTarget] = useState<{ item: ChecklistItem; trabajador: Trabajador } | null>(null);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const proyecto = misProyectos.find(item => item.id === selectedProyectoId) || misProyectos[0];
   const requisitos = getRequisitos().filter(item =>
     item.proyectoId === selectedProyectoId && item.destino === 'trabajador' && item.activo !== false
@@ -128,25 +131,57 @@ export default function TrabajadoresTab({
     setSelectedWorkerForDocs(null);
   };
 
-  const ejecutarAccion = (item: ChecklistItem, trabajador: Trabajador) => {
+  const contextoDocumento = (item: ChecklistItem, trabajador: Trabajador) => ({
+    contratistaId: contratistaLogueado.id,
+    proyectoId: proyecto?.id || selectedProyectoId,
+    requisito: {
+      id: item.requisito.id,
+      nombre: item.requisito.nombre,
+      destino: item.requisito.destino,
+    },
+    trabajadorRut: trabajador.rut,
+  });
+
+  const ejecutarAccion = async (item: ChecklistItem, trabajador: Trabajador) => {
     const action = accionDocumento(item);
     if (!action.actionable) {
-      showToast(item.documento?.archivoReferencia ? `Archivo actual: ${item.documento.archivoReferencia}` : 'Documento sin archivo asociado.', 'success');
+      try {
+        await openDocumentFile(contextoDocumento(item, trabajador));
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'No fue posible abrir el documento.', 'error');
+      }
       return;
     }
-    const result = subirDocumentoRequisito({
-      contratistaId: contratistaLogueado.id,
-      proyectoId: selectedProyectoId,
-      requisito: item.requisito,
-      trabajadorRut: trabajador.rut,
-    });
-    if (!result.success) {
-      showToast(result.error || 'No fue posible actualizar el documento.', 'error');
-      return;
-    }
-    onDataChanged();
-    showToast('Documento enviado a revisión por Acredita.', 'success');
+    setUploadTarget({ item, trabajador });
+    fileInputRef.current?.click();
   };
+
+  const procesarArchivo = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const target = uploadTarget;
+    setUploadTarget(null);
+    if (!file || !target) return;
+    const key = `${target.trabajador.rut}:${target.item.requisito.id}`;
+    setUploadingKey(key);
+    try {
+      const result = await uploadDocumentFile(contextoDocumento(target.item, target.trabajador), file);
+      onDataChanged();
+      showToast(`${result.filename} enviado a revisión (versión ${result.version}).`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible subir el archivo.', 'error');
+    } finally {
+      setUploadingKey(null);
+    }
+  };
+
+  const fileInput = <input
+    ref={fileInputRef}
+    type="file"
+    accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+    style={{ display: 'none' }}
+    onChange={procesarArchivo}
+  />;
 
   if (!proyecto) return <div className="tw-empty">Todavía no tienes proyectos asociados.</div>;
 
@@ -165,6 +200,8 @@ export default function TrabajadoresTab({
       (selected.estado === 'rechazado' ? getMotivoBloqueoTrabajador(selected.trabajador, selectedProyectoId) : undefined);
 
     return (
+      <>
+      {fileInput}
       <section className="tw-detail tw-card">
         <header className="tw-detail-head">
           <div className="tw-worker-identity">
@@ -202,7 +239,11 @@ export default function TrabajadoresTab({
                     </div>
                     <span className={`tw-badge ${estado.badge}`}>{estado.label}</span>
                     <div className="tw-validity">{item.documento?.vencimiento && item.documento.vencimiento !== '—' ? item.documento.vencimiento : '—'}</div>
-                    <button className={`tw-doc-action ${action.className}`} onClick={() => ejecutarAccion(item, selected.trabajador)}>{action.label}</button>
+                    <button
+                      className={`tw-doc-action ${action.className}`}
+                      disabled={uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}`}
+                      onClick={() => void ejecutarAccion(item, selected.trabajador)}
+                    >{uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}` ? 'Subiendo…' : action.label}</button>
                   </div>
                 );
               })}
@@ -222,6 +263,7 @@ export default function TrabajadoresTab({
           </aside>
         </div>
       </section>
+      </>
     );
   }
 
@@ -237,6 +279,8 @@ export default function TrabajadoresTab({
   });
 
   return (
+    <>
+    {fileInput}
     <div className="tw-page">
       <section className="tw-hero">
         <div className="tw-hero-row">
@@ -297,5 +341,6 @@ export default function TrabajadoresTab({
         </div>
       </section>
     </div>
+</>
   );
 }
