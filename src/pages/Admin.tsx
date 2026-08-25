@@ -60,6 +60,7 @@ import OperationalNotificationsPanel from '../components/OperationalNotification
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
+import { confirmBusinessPersistence } from '../data/supabasePersistence';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -194,38 +195,50 @@ export default function AdminPortal() {
 
   const [showNuevoProyectoModal, setShowNuevoProyectoModal] = useState(false);
   const [formNuevoProyecto, setFormNuevoProyecto] = useState({ nombre: "", mandanteId: "" });
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [creatingMandante, setCreatingMandante] = useState(false);
 
   const resetFormNuevoProyecto = () => {
     setShowNuevoProyectoModal(false);
     setFormNuevoProyecto({ nombre: "", mandanteId: "" });
   };
 
-  const handleCrearProyecto = (e: React.FormEvent) => {
+  const handleCrearProyecto = async (e: React.FormEvent) => {
     e.preventDefault();
     const { nombre, mandanteId } = formNuevoProyecto;
-    if (!nombre.trim() || !mandanteId) return;
+    if (!nombre.trim() || !mandanteId || creatingProject) return;
 
-    const nuevoProyecto: Proyecto = {
-      id: `p_${Date.now()}`,
-      nombre: nombre.trim(),
-      mandanteId,
-      estado: 'Activo',
-      contratistas: [],
-    };
-    const listaProyectos = getProyectos();
-    listaProyectos.push(nuevoProyecto);
-    saveProyectos(listaProyectos);
-    setProyectos([...listaProyectos]);
+    setCreatingProject(true);
+    try {
+      const nuevoProyecto: Proyecto = {
+        id: `p_${Date.now()}`,
+        nombre: nombre.trim(),
+        mandanteId,
+        estado: 'Activo',
+        contratistas: [],
+      };
+      const listaProyectos = getProyectos();
+      listaProyectos.push(nuevoProyecto);
+      saveProyectos(listaProyectos);
 
-    const listaMandantes = getMandantes();
-    const mandante = listaMandantes.find(m => m.id === mandanteId);
-    if (mandante && !mandante.proyectos.includes(nuevoProyecto.id)) {
-      mandante.proyectos.push(nuevoProyecto.id);
-      saveMandantes(listaMandantes);
+      const listaMandantes = getMandantes();
+      const mandante = listaMandantes.find(m => m.id === mandanteId);
+      if (mandante && !mandante.proyectos.includes(nuevoProyecto.id)) {
+        mandante.proyectos.push(nuevoProyecto.id);
+        saveMandantes(listaMandantes);
+      }
+
+      await confirmBusinessPersistence('core');
+      setProyectos([...getProyectos()]);
+      resetFormNuevoProyecto();
+      showToast('Proyecto creado correctamente');
+    } catch (error) {
+      setProyectos([...getProyectos()]);
+      console.error('No fue posible crear el proyecto.', error);
+      showToast('No fue posible guardar el proyecto. Intenta nuevamente.', 'error');
+    } finally {
+      setCreatingProject(false);
     }
-
-    resetFormNuevoProyecto();
-    showToast("Proyecto creado correctamente");
   };
 
 
@@ -747,24 +760,33 @@ export default function AdminPortal() {
                   <button onClick={() => { setShowInvitarModal(false); setMandanteCreado(false); setFormInvitacion({ empresa: '', rut: '' }); }} className="btn btn-primary w-full justify-center">Entendido</button>
                 </div>
               ) : (
-                <form onSubmit={(event) => {
+                <form onSubmit={async (event) => {
                   event.preventDefault();
                   const empresa = formInvitacion.empresa.trim();
                   const rut = formInvitacion.rut.trim();
-                  if (!empresa || !rut) return;
+                  if (!empresa || !rut || creatingMandante) return;
                   const list = getMandantes();
                   if (list.some(item => item.rut.trim().toLowerCase() === rut.toLowerCase())) {
                     showToast('Ya existe un mandante con este RUT.', 'warning');
                     return;
                   }
-                  list.push({ id: `m_${Date.now()}`, nombre: empresa, rut, proyectos: [] });
-                  saveMandantes(list);
-                  setMandanteCreado(true);
+                  setCreatingMandante(true);
+                  try {
+                    list.push({ id: `m_${Date.now()}`, nombre: empresa, rut, proyectos: [] });
+                    saveMandantes(list);
+                    await confirmBusinessPersistence('core');
+                    setMandanteCreado(true);
+                  } catch (error) {
+                    console.error('No fue posible crear el mandante.', error);
+                    showToast('No fue posible guardar el mandante. Intenta nuevamente.', 'error');
+                  } finally {
+                    setCreatingMandante(false);
+                  }
                 }} className="flex flex-col gap-4">
                   <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Empresa / Razón social</label><input type="text" value={formInvitacion.empresa} onChange={(event) => setFormInvitacion({ ...formInvitacion, empresa: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="Nombre de la organización" required /></div>
                   <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">RUT</label><input type="text" value={formInvitacion.rut} onChange={(event) => setFormInvitacion({ ...formInvitacion, rut: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="76.999.999-9" required /></div>
                   <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-[11.5px] text-blue-800">Esta acción crea la organización Mandante; no simula el envío de un correo ni la creación de una cuenta de usuario.</div>
-                  <div className="flex justify-end gap-3 mt-2 pt-4 border-t border-cream"><button type="button" onClick={() => setShowInvitarModal(false)} className="btn btn-ghost font-medium">Cancelar</button><button type="submit" className="btn btn-primary">Crear mandante</button></div>
+                  <div className="flex justify-end gap-3 mt-2 pt-4 border-t border-cream"><button type="button" onClick={() => setShowInvitarModal(false)} className="btn btn-ghost font-medium">Cancelar</button><button type="submit" disabled={creatingMandante} className="btn btn-primary disabled:opacity-60 disabled:cursor-not-allowed">{creatingMandante ? 'Guardando…' : 'Crear mandante'}</button></div>
                 </form>
               )}
             </div>
@@ -839,8 +861,8 @@ export default function AdminPortal() {
                   >
                     Cancelar
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    Crear proyecto
+                  <button type="submit" disabled={creatingProject} className="btn btn-primary disabled:opacity-60 disabled:cursor-not-allowed">
+                    {creatingProject ? 'Guardando…' : 'Crear proyecto'}
                   </button>
                 </div>
               </form>

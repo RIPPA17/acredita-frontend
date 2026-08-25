@@ -19,6 +19,7 @@ import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
 import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
+import { confirmBusinessPersistence } from '../data/supabasePersistence';
 
 export default function MandantePortal() {
   const session = getCurrentSession();
@@ -126,6 +127,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
   };
 
   const [isAddDocModalOpen, setIsAddDocModalOpen] = useState(false);
+  const [savingRequirement, setSavingRequirement] = useState(false);
   const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
@@ -209,10 +211,9 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
 
   const [contractorsData, setContractorsData] = useState<any[]>([]);
 
-  const handleAddRequirement = () => {
-    if (!newDocForm.name.trim()) return;
+  const handleAddRequirement = async () => {
+    if (!newDocForm.name.trim() || !activeProjectId || savingRequirement) return;
     const newId = `${activeProjectId}_${newDocForm.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-
     const newReq = {
       id: newId,
       nombre: newDocForm.name,
@@ -225,27 +226,25 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
       proyectoId: activeProjectId,
       activo: true
     };
-
-    const currentReqs = getRequisitos();
-    saveRequisitos([...currentReqs, newReq]);
-
-    // Reload states
-    const updatedReqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
-    setDocumentRequirements(updatedReqs.map(r => ({
-      id: r.id,
-      name: r.nombre,
-      category: r.categoria,
-      frequency: r.frecuencia,
-      obligatorio: r.obligatorio,
-      destino: r.destino,
-      criticidad: r.criticidad,
-      alertaDias: r.alertaDias
-    })));
-    setContractorsData(buildContractorsData(allContratistas, activeProjectId));
-
-    setIsAddDocModalOpen(false);
-    setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
-    showToast('Requisito agregado con éxito');
+    setSavingRequirement(true);
+    try {
+      const currentReqs = getRequisitos();
+      saveRequisitos([...currentReqs, newReq]);
+      await confirmBusinessPersistence('core');
+      const updatedReqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
+      setDocumentRequirements(updatedReqs.map(r => ({ id: r.id, name: r.nombre, category: r.categoria, frequency: r.frecuencia, obligatorio: r.obligatorio, destino: r.destino, criticidad: r.criticidad, alertaDias: r.alertaDias })));
+      setContractorsData(buildContractorsData(allContratistas, activeProjectId));
+      setIsAddDocModalOpen(false);
+      setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
+      showToast('Requisito agregado con éxito');
+    } catch (error) {
+      const restored = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
+      setDocumentRequirements(restored.map(r => ({ id: r.id, name: r.nombre, category: r.categoria, frequency: r.frecuencia, obligatorio: r.obligatorio, destino: r.destino, criticidad: r.criticidad, alertaDias: r.alertaDias })));
+      console.error('No fue posible agregar el requisito.', error);
+      showToast('No fue posible guardar el requisito. Intenta nuevamente.', 'error');
+    } finally {
+      setSavingRequirement(false);
+    }
   };
 
   const menuItems = [
@@ -497,6 +496,31 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
           {toast.type === 'warning' && <AlertTriangle size={18} />}
           {toast.type === 'error' && <XCircle size={18} />}
           {toast.msg}
+        </div>
+      )}
+
+
+      {isAddDocModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[500] flex items-center justify-center p-4" onClick={() => !savingRequirement && setIsAddDocModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[460px] max-h-[calc(100vh-24px)] overflow-y-auto" onClick={event => event.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b border-cream">
+              <div><h3 className="font-medium text-navy text-[17.6px]">Agregar requisito</h3><p className="text-xs text-gray-500 mt-0.5">Configura una obligación para este proyecto.</p></div>
+              <button type="button" disabled={savingRequirement} onClick={() => setIsAddDocModalOpen(false)} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Nombre</label><input value={newDocForm.name} onChange={event => setNewDocForm({ ...newDocForm, name: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="Ej. F30 SII" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Categoría</label><select value={newDocForm.category} onChange={event => setNewDocForm({ ...newDocForm, category: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Laboral</option><option>Tributario</option><option>Prevención de Riesgos</option></select></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Destino</label><select value={newDocForm.destino} onChange={event => setNewDocForm({ ...newDocForm, destino: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="empresa">Empresa</option><option value="trabajador">Trabajador</option></select></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Frecuencia</label><select value={newDocForm.frequency} onChange={event => setNewDocForm({ ...newDocForm, frequency: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Mensual</option><option>Por Proyecto</option><option>6 meses</option><option>1 año</option><option>Indefinido</option></select></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Criticidad</label><select value={newDocForm.criticidad} onChange={event => setNewDocForm({ ...newDocForm, criticidad: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea acceso</option><option value="advertencia">Advertencia</option></select></div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-navy"><input type="checkbox" checked={newDocForm.obligatorio} onChange={event => setNewDocForm({ ...newDocForm, obligatorio: event.target.checked })} /> Requisito obligatorio</label>
+              <div className="flex justify-end gap-3 pt-4 border-t border-cream"><button type="button" disabled={savingRequirement} onClick={() => setIsAddDocModalOpen(false)} className="btn btn-ghost">Cancelar</button><button type="button" disabled={savingRequirement || !newDocForm.name.trim()} onClick={() => void handleAddRequirement()} className="btn btn-primary disabled:opacity-60 disabled:cursor-not-allowed">{savingRequirement ? 'Guardando…' : 'Agregar requisito'}</button></div>
+            </div>
+          </div>
         </div>
       )}
 

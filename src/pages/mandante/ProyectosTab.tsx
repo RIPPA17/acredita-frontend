@@ -4,6 +4,7 @@ import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajado
 import { Contratista, Proyecto, Requisito } from '../../types';
 import { buildMandanteProjectSummaries } from './inicio/inicioUtils';
 import { buildProjectPresentations, companyObligationSummary, projectStateRank, ProjectPresentation } from './proyectos/proyectosUtils';
+import { confirmBusinessPersistence } from '../../data/supabasePersistence';
 import './ProyectosTab.css';
 
 type DetailTab = 'resumen' | 'contratistas' | 'requisitos' | 'acreditaciones';
@@ -68,11 +69,21 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     setProyectoSeleccionadoAjustes(summary.project.id); setSelectedProjectId(summary.project.id); setProyectoArchivado(summary.project.estado === 'Archivado'); setActiveProjectTab('resumen'); setConfiguring(false); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const backToProjects = () => { setProyectoSeleccionadoAjustes(null); setActiveProjectTab('resumen'); setConfiguring(false); };
-  const archiveProject = () => {
+  const archiveProject = async () => {
     if (!selected) return;
     const projects = getProyectos(); const index = projects.findIndex(project => project.id === selected.project.id);
     if (index < 0) return;
-    projects[index].estado = 'Archivado'; saveProyectos(projects); setProyectoArchivado(true); showToast('Proyecto archivado', 'warning');
+    projects[index].estado = 'Archivado';
+    saveProyectos(projects);
+    try {
+      await confirmBusinessPersistence('core');
+      setProyectoArchivado(true);
+      showToast('Proyecto archivado', 'warning');
+    } catch (error) {
+      setProyectoArchivado(getProyectos().find(project => project.id === selected.project.id)?.estado === 'Archivado');
+      console.error('No fue posible archivar el proyecto.', error);
+      showToast('No fue posible archivar el proyecto. Intenta nuevamente.', 'error');
+    }
   };
   const addRequirement = () => {
     if (!selected) return;
@@ -127,9 +138,28 @@ function ContractorsPanel({ selected, projects, onOpen }: { selected: ProjectPre
 }
 
 function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requirements: Requisito[]; onAdd: () => void; onChanged: () => void; showToast: Props['showToast'] }) {
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Requisitos del proyecto</h2><p>Define qué debe cumplir cada empresa y trabajador.</p></div><button type="button" onClick={onAdd}><Plus /> Agregar requisito</button></div><div className="mandante-proyectos-requirements">{requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}><div><strong>{requirement.nombre}</strong><span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {requirement.criticidad.replaceAll('_', ' ')} · Alerta {requirement.alertaDias} días</span></div><button type="button" className={requirement.obligatorio ? 'mandatory' : 'optional'} onClick={() => {
-    const list = getRequisitos(); const index = list.findIndex(item => item.id === requirement.id); if (index < 0) return; list[index].obligatorio = !list[index].obligatorio; saveRequisitos(list); onChanged(); showToast(list[index].obligatorio ? 'Requisito marcado como obligatorio' : 'Requisito marcado como opcional');
-  }}>{requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</button></div>)}{requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}</div></article>;
+  const [savingRequirementId, setSavingRequirementId] = useState<string | null>(null);
+  const toggleRequired = async (requirement: Requisito) => {
+    if (savingRequirementId) return;
+    const list = getRequisitos();
+    const index = list.findIndex(item => item.id === requirement.id);
+    if (index < 0) return;
+    list[index].obligatorio = !list[index].obligatorio;
+    setSavingRequirementId(requirement.id);
+    saveRequisitos(list);
+    try {
+      await confirmBusinessPersistence('core');
+      onChanged();
+      showToast(list[index].obligatorio ? 'Requisito marcado como obligatorio' : 'Requisito marcado como opcional');
+    } catch (error) {
+      onChanged();
+      console.error('No fue posible actualizar el requisito.', error);
+      showToast('No fue posible actualizar el requisito. Intenta nuevamente.', 'error');
+    } finally {
+      setSavingRequirementId(null);
+    }
+  };
+  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Requisitos del proyecto</h2><p>Define qué debe cumplir cada empresa y trabajador.</p></div><button type="button" onClick={onAdd}><Plus /> Agregar requisito</button></div><div className="mandante-proyectos-requirements">{requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}><div><strong>{requirement.nombre}</strong><span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {requirement.criticidad.replaceAll('_', ' ')} · Alerta {requirement.alertaDias} días</span></div><button type="button" disabled={savingRequirementId === requirement.id} className={requirement.obligatorio ? 'mandatory' : 'optional'} onClick={() => void toggleRequired(requirement)}>{savingRequirementId === requirement.id ? 'Guardando…' : requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</button></div>)}{requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}</div></article>;
 }
 
 function AccreditationsPanel({ selected, requirements, onOpen }: { selected: ProjectPresentation; requirements: Requisito[]; onOpen: Props['onOpenContractor'] }) {
