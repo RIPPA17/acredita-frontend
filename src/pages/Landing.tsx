@@ -472,42 +472,31 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </div>
 
       {/* FOOTER */}
-      <footer className="bg-brown py-12 px-12 pb-8 text-cream">
-        <div className="grid md:grid-cols-12 gap-8 mb-12 max-w-[1200px] mx-auto">
-          <div className="md:col-span-5">
+      <footer className="bg-brown py-10 px-12 text-cream">
+        <div className="grid md:grid-cols-3 gap-8 max-w-[1200px] mx-auto mb-8">
+          <div>
             <div className="text-[22px] tracking-[2px] mb-4 text-cream">Acre<b className="text-navy font-normal">dita</b></div>
-            <p className="text-[14.3px] text-white/70 leading-[1.6] max-w-[260px]">Gestión documental especializada para mandantes y contratistas en Chile.</p>
+            <p className="text-[14.3px] text-white/70 leading-[1.6] max-w-[300px]">Gestión de acreditaciones para mandantes, contratistas y trabajadores por proyecto.</p>
           </div>
-          <div className="md:col-span-2">
+          <div>
             <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Producto</h5>
             <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
               <a href="#como-funciona" className="hover:text-cream transition-colors">Cómo funciona</a>
-              <a href="#beneficios" className="hover:text-cream transition-colors">Para mandantes</a>
-              <a href="#beneficios" className="hover:text-cream transition-colors">Para contratistas</a>
+              <a href="#beneficios" className="hover:text-cream transition-colors">Beneficios</a>
+              <a href="#contacto" className="hover:text-cream transition-colors">Solicitar demo</a>
             </div>
           </div>
-          <div className="md:col-span-2">
-            <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Empresa</h5>
+          <div>
+            <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Acceso</h5>
             <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Nosotros</span>
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Blog</span>
+              <Link to="/login" className="hover:text-cream transition-colors">Iniciar sesión</Link>
+              <Link to="/registro?rol=mandante" className="hover:text-cream transition-colors">Solicitar acceso</Link>
               <a href="#contacto" className="hover:text-cream transition-colors">Contacto</a>
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Trabaja con nosotros</span>
-            </div>
-          </div>
-          <div className="md:col-span-3">
-            <h5 className="text-[13.2px] tracking-[1.5px] uppercase text-white/50 mb-4 font-semibold">Legal</h5>
-            <div className="flex flex-col gap-2.5 text-[14.3px] text-white/80">
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Términos de uso</span>
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Privacidad</span>
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Seguridad</span>
-              <span className="text-white/30 cursor-not-allowed" title="No disponible en demo">Cookies</span>
             </div>
           </div>
         </div>
-        <div className="border-t border-white/20 pt-6 flex justify-between items-center text-[13.2px] text-white/60 max-w-[1200px] mx-auto">
-          <p>© 2026 Acredita SpA · Santiago, Chile</p>
-          <p>Hecho con <span className="text-navy">♥</span> para simplificar el cumplimiento laboral</p>
+        <div className="border-t border-white/20 pt-6 text-[13.2px] text-white/60 max-w-[1200px] mx-auto">
+          <p>© 2026 Acredita · Santiago, Chile</p>
         </div>
       </footer>
       {/* LOGIN MODAL */}
