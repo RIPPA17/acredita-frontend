@@ -1,0 +1,27 @@
+name: Point 7 Data Sync
+
+on:
+  push:
+    branches:
+      - fix/data-sync-refresh
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/data-sync-refresh
+      - name: Conectar sincronización en portales
+        run: python .github/scripts/point7_data_sync.py
+      - name: Guardar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Admin.tsx src/pages/Mandante.tsx src/pages/Contratista.tsx
+          git commit -m "Sincroniza portales al volver a la app"
+          git push origin HEAD:fix/data-sync-refresh
