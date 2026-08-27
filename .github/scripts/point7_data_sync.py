@@ -21,7 +21,12 @@ t = replace_once(
     "export default function AdminPortal() {\n  const navigate = useNavigate();\n  const session = getCurrentSession();\n  const { revision: dataSyncRevision } = useDataSync();",
     'Admin hook',
 )
-t = replace_once(t, "  }, [activeTab]);", "  }, [activeTab, dataSyncRevision]);", 'Admin refresh dependency')
+t = replace_once(
+    t,
+    "    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, [activeTab]);",
+    "    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, [activeTab, dataSyncRevision]);",
+    'Admin refresh dependency',
+)
 t = replace_once(
     t,
     '        <div className="flex min-w-0 items-center gap-2 sm:gap-4">\n          <div className="relative">',
