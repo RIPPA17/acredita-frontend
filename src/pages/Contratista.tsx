@@ -13,6 +13,8 @@ import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMand
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
+import DataSyncButton from '../components/DataSyncButton';
+import { useDataSync } from '../components/DataSyncContext';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -25,6 +27,7 @@ import { confirmBusinessPersistence } from '../data/supabasePersistence';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
+  const { revision: dataSyncRevision } = useDataSync();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
@@ -175,7 +178,7 @@ export default function ContratistaPortal() {
       setDocumentosData(filteredDocs);
       
     }
-  }, [selectedProyectoId, dataRevision, contratistaLogueado.id]);
+  }, [selectedProyectoId, dataRevision, contratistaLogueado.id, dataSyncRevision]);
 
 
   const handleAddWorkerSubmit = async (e: React.FormEvent) => {
@@ -262,6 +265,7 @@ export default function ContratistaPortal() {
           Acre<b>dita</b>
         </div>
         <div className="flex items-center gap-4">
+          <DataSyncButton />
           <div className="relative">
             <button 
               onClick={abrirNotificaciones}

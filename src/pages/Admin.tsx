@@ -58,6 +58,8 @@ import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
 import { refreshReviewOperationsCache } from '../data/supabaseReviewOperations';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
+import DataSyncButton from '../components/DataSyncButton';
+import { useDataSync } from '../components/DataSyncContext';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
@@ -68,6 +70,7 @@ const iniciales = (nombre: string) =>
 export default function AdminPortal() {
   const navigate = useNavigate();
   const session = getCurrentSession();
+  const { revision: dataSyncRevision } = useDataSync();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem('sidebar_collapsed');
     if (stored !== null) return stored === 'true';
@@ -121,7 +124,7 @@ export default function AdminPortal() {
       // Conserva el último snapshot válido si Supabase tiene una interrupción breve.
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, dataSyncRevision]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aprobadosHoy, setAprobadosHoy] = useState(0);
   const [rechazadosHoy, setRechazadosHoy] = useState(0);
@@ -482,6 +485,7 @@ export default function AdminPortal() {
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+          <DataSyncButton />
           <div className="relative">
             <button
               onClick={() => setShowNotif(!showNotif)}

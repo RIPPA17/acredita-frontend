@@ -16,18 +16,21 @@ import DashboardTab from './mandante/DashboardTab';
 import ProyectosTab from './mandante/ProyectosTab';
 import ContratistasTab from './mandante/ContratistasTab';
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
+import DataSyncButton from '../components/DataSyncButton';
+import { useDataSync } from '../components/DataSyncContext';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
 import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 
 export default function MandantePortal() {
+  const { revision: dataSyncRevision } = useDataSync();
   const session = getCurrentSession();
   const mandanteLogueado = session?.role === 'mandante' && session.mandanteId
     ? getMandantes().find(m => m.id === session.mandanteId)
     : undefined;
   return mandanteLogueado
-    ? <MandantePortalContent mandanteLogueado={mandanteLogueado} />
+    ? <MandantePortalContent mandanteLogueado={mandanteLogueado} dataSyncRevision={dataSyncRevision} />
     : <InvalidMandanteSession />;
 }
 
@@ -39,7 +42,7 @@ function InvalidMandanteSession() {
   return null;
 }
 
-function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandante }) {
+function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandanteLogueado: Mandante; dataSyncRevision: number }) {
   const navigate = useNavigate();
   const session = getCurrentSession();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -149,7 +152,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
       alertaDias: r.alertaDias
     })));
     setContractorsData(buildContractorsData(allContratistas, activeProjectId));
-  }, [activeProjectId]);
+  }, [activeProjectId, dataSyncRevision]);
 
   const buildContractorsData = (contratistasList: Contratista[], projId: string) => {
     const projReqs = getRequisitos().filter(r => r.proyectoId === projId && r.activo !== false);
@@ -269,6 +272,7 @@ function MandantePortalContent({ mandanteLogueado }: { mandanteLogueado: Mandant
           Acre<b>dita</b>
         </div>
         <div className="flex items-center gap-4">
+          <DataSyncButton />
           <div className="relative">
             <button
               onClick={() => setShowNotif(!showNotif)}
