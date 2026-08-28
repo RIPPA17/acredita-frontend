@@ -15,6 +15,7 @@ import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
+import { usePortalTab } from '../hooks/usePortalTab';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -37,7 +38,7 @@ export default function ContratistaPortal() {
     setSidebarCollapsed(nextState);
     localStorage.setItem('sidebar_collapsed', String(nextState));
   };
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = usePortalTab('contratista');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
