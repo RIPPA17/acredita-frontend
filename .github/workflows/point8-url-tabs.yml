@@ -1,0 +1,23 @@
+name: Point 8 URL Tabs
+
+on:
+  push:
+    branches:
+      - fix/url-tabs
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/url-tabs
+      - name: Migrar pestañas principales a URL
+        run: python .github/scripts/point8_url_tabs.py
+      - name: Guardar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Admin.tsx src/pages/Mandante.tsx src/pages/Contratista.tsx
+          git commit -m "Usa URLs reales para las pestañas principales"
+          git push origin HEAD:fix/url-tabs
