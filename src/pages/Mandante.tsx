@@ -18,6 +18,7 @@ import ContratistasTab from './mandante/ContratistasTab';
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
+import { usePortalTab } from '../hooks/usePortalTab';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
 import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
@@ -54,7 +55,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
     setSidebarCollapsed(nextState);
     localStorage.setItem('sidebar_collapsed', String(nextState));
   };
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = usePortalTab('mandante');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<ConfigTabId>('empresa');
   const [configHasUnsavedChanges, setConfigHasUnsavedChanges] = useState(false);

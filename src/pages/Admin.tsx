@@ -60,6 +60,7 @@ import OperationalNotificationsPanel from '../components/OperationalNotification
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
+import { usePortalTab } from '../hooks/usePortalTab';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
@@ -89,7 +90,7 @@ export default function AdminPortal() {
   const GLOBAL_CONTRATISTAS = getContratistas();
 
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = usePortalTab('admin');
   // Fuente reactiva de contratistas: se actualiza explícitamente al
   // invitar/reasignar (para que la tabla cambie al instante, sin depender
   // de que algún otro estado fuerce un re-render) y se resincroniza al
