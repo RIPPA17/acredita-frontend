@@ -14,10 +14,11 @@ jobs:
           ref: fix/url-tabs
       - name: Migrar pestañas principales a URL
         run: python .github/scripts/point8_url_tabs.py
-      - name: Guardar cambios
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/pages/Admin.tsx src/pages/Mandante.tsx src/pages/Contratista.tsx
-          git commit -m "Usa URLs reales para las pestañas principales"
-          git push origin HEAD:fix/url-tabs
+      - name: Empaquetar archivos modificados
+        uses: actions/upload-artifact@v4
+        with:
+          name: point8-url-tabs-files
+          path: |
+            src/pages/Admin.tsx
+            src/pages/Mandante.tsx
+            src/pages/Contratista.tsx
