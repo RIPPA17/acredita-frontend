@@ -1,4 +1,4 @@
-import { PLANTILLA_DOCUMENTOS } from './mockData';
+import { DEFAULT_DOCUMENT_TEMPLATES } from './defaultTemplates';
 import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, HistorialVersionDocumento } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
@@ -61,7 +61,7 @@ export function saveMandantes(data: Mandante[]) {
 }
 
 export function getPlantillas(): any[] {
-  return getRuntimeArray<any>('acredita_plantillas', PLANTILLA_DOCUMENTOS);
+  return getRuntimeArray<any>('acredita_plantillas', DEFAULT_DOCUMENT_TEMPLATES);
 }
 
 export function savePlantillas(data: any[]) {
