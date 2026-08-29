@@ -1,4 +1,3 @@
-import { CONTRATISTAS, MANDANTES, PROYECTOS } from './mockData';
 import type { Contratista, Mandante, Proyecto, Requisito } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { getRuntimeArray, purgeLegacyBusinessStorage, setRuntimeArray } from './runtimeDataStore';
@@ -164,18 +163,15 @@ function backendFrequency(frequency: string): { frequency: string; validityDays:
 }
 
 function fallbackMandante(id: string): Mandante | undefined {
-  return readArray<Mandante>('acredita_mandantes').find(item => item.id === id)
-    || MANDANTES.find(item => item.id === id);
+  return readArray<Mandante>('acredita_mandantes').find(item => item.id === id);
 }
 
 function fallbackProject(id: string): Proyecto | undefined {
-  return readArray<Proyecto>('acredita_proyectos').find(item => item.id === id)
-    || PROYECTOS.find(item => item.id === id);
+  return readArray<Proyecto>('acredita_proyectos').find(item => item.id === id);
 }
 
 function fallbackContractor(id: string): Contratista | undefined {
-  return readArray<Contratista>('acredita_contratistas').find(item => item.id === id)
-    || CONTRATISTAS.find(item => item.id === id);
+  return readArray<Contratista>('acredita_contratistas').find(item => item.id === id);
 }
 
 async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
