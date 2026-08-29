@@ -492,9 +492,9 @@ async function syncRequirements(
 
 export async function pushCoreDataToSupabase(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
-  const mandantes = readArray<Mandante>('acredita_mandantes', MANDANTES);
-  const projects = readArray<Proyecto>('acredita_proyectos', PROYECTOS);
-  const contractors = readArray<Contratista>('acredita_contratistas', CONTRATISTAS);
+  const mandantes = readArray<Mandante>('acredita_mandantes', []);
+  const projects = readArray<Proyecto>('acredita_proyectos', []);
+  const contractors = readArray<Contratista>('acredita_contratistas', []);
   const requirements = readArray<Requisito>('acredita_requisitos', []);
   const rows = await fetchCoreRows(session._supabase.accessToken);
 
