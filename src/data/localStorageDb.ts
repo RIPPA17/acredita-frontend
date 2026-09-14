@@ -4,6 +4,7 @@ import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditat
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
+import { getAsignacionProyecto } from './operationalCore';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
@@ -206,6 +207,14 @@ export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito):
   return true;
 }
 
+export function requisitoAplicaATrabajador(req: Requisito, trabajador: Trabajador, proyectoId: string): boolean {
+  const requiredCategories = (req.categoriasAplicables || []).map(item => item.trim().toLocaleLowerCase('es')).filter(Boolean);
+  if (requiredCategories.length === 0 || requiredCategories.includes('general')) return true;
+  const assignment = getAsignacionProyecto(trabajador, proyectoId);
+  const workerCategories = (assignment?.categorias || []).map(item => item.trim().toLocaleLowerCase('es'));
+  return requiredCategories.some(category => workerCategories.includes(category));
+}
+
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
   const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
   if (backendState) {
@@ -213,7 +222,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
     if (backendState.status === 'vencido_bloqueado') return 'rechazado';
     return 'pendiente';
   }
-  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
+  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const documentos = w.documentos || [];
 
   if (reqs.length === 0) return 'aprobado';
@@ -255,6 +264,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
 }
 
 export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyectos?: Proyecto[]): boolean {
+  if (w.asignaciones !== undefined) return Boolean(getAsignacionProyecto(w, proyectoId));
   const hasDocs = w.documentos?.some(d => d.proyectoId === proyectoId);
   if (hasDocs) return true;
 
@@ -435,21 +445,19 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
 } {
   const backendState = getBackendAccreditationState(c.id, proyectoId);
   if (backendState) {
-    const bloqueado = backendState.status === 'vencido_bloqueado';
-    const accesoPendiente = !backendState.accessAllowed && !bloqueado;
-    const pagoPendiente = !backendState.paymentAllowed && !bloqueado;
-    const motivo = bloqueado
-      ? 'Acreditación vencida o bloqueada según el estado oficial de Supabase'
-      : 'La acreditación todavía no está aprobada según el estado oficial de Supabase';
+    const accesoBloqueado = backendState.accessBlockedCount > 0;
+    const pagoBloqueado = backendState.paymentBlockedCount > 0;
+    const accesoPendiente = backendState.accessPendingCount > 0;
+    const pagoPendiente = backendState.paymentPendingCount > 0;
     return {
-      accesoEstado: backendState.accessAllowed ? 'habilitado' : bloqueado ? 'bloqueado' : 'pendiente',
-      accesoBloqueado: bloqueado,
+      accesoEstado: backendState.accessAllowed ? 'habilitado' : accesoBloqueado ? 'bloqueado' : 'pendiente',
+      accesoBloqueado,
       accesoPendiente,
-      motivoAcceso: backendState.accessAllowed ? undefined : motivo,
-      pagoEstado: backendState.paymentAllowed ? 'habilitado' : bloqueado ? 'bloqueado' : 'pendiente',
-      pagoBloqueado: bloqueado,
+      motivoAcceso: backendState.accessAllowed ? undefined : accesoBloqueado ? `${backendState.accessBlockedCount} obligación(es) de acceso rechazada(s) o vencida(s)` : `${backendState.accessPendingCount} obligación(es) de acceso pendiente(s)`,
+      pagoEstado: backendState.paymentAllowed ? 'habilitado' : pagoBloqueado ? 'bloqueado' : 'pendiente',
+      pagoBloqueado,
       pagoPendiente,
-      motivoPago: backendState.paymentAllowed ? undefined : motivo,
+      motivoPago: backendState.paymentAllowed ? undefined : pagoBloqueado ? `${backendState.paymentBlockedCount} obligación(es) de pago rechazada(s) o vencida(s)` : `${backendState.paymentPendingCount} obligación(es) de pago pendiente(s)`,
     };
   }
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
@@ -500,7 +508,7 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
   projectWorkers.forEach(w => {
     const wState = calcularEstadoTrabajador(w, proyectoId);
     if (wState === 'rechazado') {
-      const wkReqs = reqs.filter(r => r.destino === 'trabajador');
+      const wkReqs = reqs.filter(r => r.destino === 'trabajador' && requisitoAplicaATrabajador(r, w, proyectoId));
       wkReqs.forEach(req => {
         const doc = (w.documentos || []).find(d => 
           d.proyectoId === proyectoId &&
@@ -583,7 +591,7 @@ export function evaluarHabilitacionCompuerta(
     projectWorkers.forEach(w => {
       const wState = calcularEstadoTrabajador(w, proyectoId);
       if (wState === 'rechazado') {
-        const wkReqs = reqs.filter(r => r.destino === 'trabajador');
+        const wkReqs = reqs.filter(r => r.destino === 'trabajador' && requisitoAplicaATrabajador(r, w, proyectoId));
         wkReqs.forEach(req => {
           const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
           const estadoBloqueante = estadoBloqueanteRequisito(req, doc);
@@ -797,7 +805,7 @@ export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
 }
 
 export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): string {
-  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false);
+  const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const docs = w.documentos || [];
   
   let result = '';

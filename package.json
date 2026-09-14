@@ -8,7 +8,8 @@
     "build": "vite build --configLoader runner",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:domain": "node --import tsx src/data/__tests__/verify_operational_core_v2.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -28,6 +29,7 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
+    "tsx": "4.22.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
   }

@@ -11,6 +11,7 @@ import {
   obtenerDiasRestantes,
   calcularAccesoPago,
   calcularEstadoTrabajador,
+  requisitoAplicaATrabajador,
 } from '../../../data/localStorageDb';
 import { docEstadoLabel, DocEstado } from '../../admin/acreditacionUtils';
 import { matchDocumentoRequisito } from '../documentosUtils';
@@ -44,7 +45,7 @@ export function buildRequisitosTrabajador(
   requisitos: Requisito[]
 ): RequisitoConDoc[] {
   return requisitos
-    .filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false)
+    .filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, worker, proyectoId))
     .map(requisito => {
       const doc = matchDocumentoRequisito(worker.documentos, proyectoId, requisito.nombre);
       return { requisito, doc, estado: docEstadoLabel(doc, requisito), cumplido: esDocumentoCumplido(doc, requisito), worker };

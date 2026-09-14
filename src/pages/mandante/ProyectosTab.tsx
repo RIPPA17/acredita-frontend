@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, KeyRound, MapPin, Plus, Settings2, UsersRound, WalletCards } from 'lucide-react';
-import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, esTrabajadorAsignado, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/localStorageDb';
+import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, Download, KeyRound, MapPin, Plus, Settings2, UsersRound, WalletCards } from 'lucide-react';
+import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/localStorageDb';
 import { Contratista, Proyecto, Requisito } from '../../types';
 import { buildMandanteProjectSummaries } from './inicio/inicioUtils';
 import { buildProjectPresentations, companyObligationSummary, projectStateRank, ProjectPresentation } from './proyectos/proyectosUtils';
 import { confirmBusinessPersistence } from '../../data/supabasePersistence';
 import './ProyectosTab.css';
+import ServicesPanel from '../../components/ServicesPanel';
+import { buildComplianceCsv, downloadCsv, getCierresDocumentales, getObligacionesDocumentales, getServiciosProyecto } from '../../data/operationalCore';
+import CompliancePeriodsPanel from '../../components/CompliancePeriodsPanel';
+import { setContractorParent } from '../../data/supabaseContractorHierarchy';
 
-type DetailTab = 'resumen' | 'contratistas' | 'requisitos' | 'acreditaciones';
+type DetailTab = 'resumen' | 'contratistas' | 'servicios' | 'requisitos' | 'periodos' | 'acreditaciones';
 type ProjectFilter = 'Todos los estados' | 'Bloqueado' | 'En proceso' | 'Acreditado';
 interface Props {
   activeProjectTab: string; setActiveProjectTab: (value: string) => void;
@@ -54,12 +58,16 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
   const [requirementsVersion, setRequirementsVersion] = useState(0);
-  const summaries = useMemo(() => buildProjectPresentations(misProyectos, allContratistas), [misProyectos, allContratistas, requirementsVersion]);
+  const [servicesVersion, setServicesVersion] = useState(0);
+  const [periodsVersion, setPeriodsVersion] = useState(0);
+  const [contractorsVersion, setContractorsVersion] = useState(0);
+  const contractors = contractorsVersion > 0 ? getContratistas() : allContratistas;
+  const summaries = useMemo(() => buildProjectPresentations(misProyectos, contractors), [misProyectos, contractors, requirementsVersion, contractorsVersion]);
   const selectedId = proyectoSeleccionadoAjustes || (activeProjectTab !== 'resumen' ? selectedProjectId : null);
   const selected = summaries.find(summary => summary.project.id === selectedId);
-  const detailTab = (['resumen', 'contratistas', 'requisitos', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
+  const detailTab = (['resumen', 'contratistas', 'servicios', 'requisitos', 'periodos', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
   const requirements = selected ? getRequisitos().filter(requirement => requirement.proyectoId === selected.project.id && requirement.activo !== false) : [];
-  const executive = selected ? buildMandanteProjectSummaries([selected.project], allContratistas)[0] : null;
+  const executive = selected ? buildMandanteProjectSummaries([selected.project], contractors)[0] : null;
   const visible = summaries.filter(summary => filter === 'Todos los estados' || summary.state === filter).filter(summary => {
     const query = search.trim().toLocaleLowerCase('es');
     return !query || `${summary.project.nombre} ${projectLocation(summary.project)}`.toLocaleLowerCase('es').includes(query);
@@ -87,7 +95,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   };
   const addRequirement = () => {
     if (!selected) return;
-    setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', projectId: selected.project.id }); setIsAddDocModalOpen(true);
+    setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5, projectId: selected.project.id }); setIsAddDocModalOpen(true);
   };
 
   if (!selected) return <section className="mandante-proyectos fade-in">
@@ -112,10 +120,12 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   return <section className="mandante-proyectos mandante-proyectos-detail fade-in">
     <button type="button" className="mandante-proyectos-back" onClick={backToProjects}><ArrowLeft /> Volver a proyectos</button>
     <header className="mandante-proyectos-hero"><div><span>{selected.project.estado === 'Archivado' ? 'Proyecto archivado' : 'Proyecto activo'}</span><h1>{selected.project.nombre}</h1><p>Gestiona la acreditación completa del proyecto desde un espacio dedicado.</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.state)}`}>{selected.state}</b><button type="button" onClick={() => setConfiguring(true)}><Settings2 /> Configurar proyecto</button></div></header>
-    <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'requisitos', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
+    <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'requisitos', 'periodos', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
-    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={misProyectos} onOpen={onOpenContractor} />}
+    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={misProyectos} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'acreditaciones' && <AccreditationsPanel selected={selected} requirements={requirements} onOpen={onOpenContractor} />}
   </section>;
 }
@@ -127,13 +137,40 @@ function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; 
   </div>;
 }
 
-function ContractorsPanel({ selected, projects, onOpen }: { selected: ProjectPresentation; projects: Proyecto[]; onOpen: Props['onOpenContractor'] }) {
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Contratistas del proyecto</h2><p>Cada empresa se evalúa dentro de este proyecto, nunca de forma global.</p><div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Contratista</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acción</th></tr></thead><tbody>{selected.contractors.map(contractor => {
+function ContractorsPanel({ selected, projects, onOpen, onChanged, showToast }: { selected: ProjectPresentation; projects: Proyecto[]; onOpen: Props['onOpenContractor']; onChanged: () => void; showToast: Props['showToast'] }) {
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const contractorById = new Map(selected.contractors.map(item => [item.id, item]));
+  const canBeParent = (candidate: Contratista, childId: string) => {
+    if (candidate.id === childId) return false;
+    let current: Contratista | undefined = candidate;
+    const visited = new Set<string>();
+    while (current?.contratistaPadreId && !visited.has(current.id)) {
+      if (current.contratistaPadreId === childId) return false;
+      visited.add(current.id);
+      current = contractorById.get(current.contratistaPadreId);
+    }
+    return true;
+  };
+  const updateParent = async (contractor: Contratista, parentId: string) => {
+    if (savingId) return;
+    setSavingId(contractor.id);
+    try {
+      await setContractorParent(selected.project.id, contractor.id, parentId || undefined);
+      onChanged();
+      showToast(parentId ? 'Relación de subcontratación actualizada.' : 'Contratista marcado como principal.');
+    } catch (error) {
+      console.error('No fue posible actualizar la relación del contratista.', error);
+      showToast('No fue posible actualizar la relación de subcontratación.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Contratistas del proyecto</h2><p>Organiza contratistas principales y subcontratistas, manteniendo una acreditación independiente por empresa.</p><div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Contratista</th><th>Relación</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acción</th></tr></thead><tbody>{selected.contractors.map(contractor => {
     const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
     const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
     const enabled = assigned.filter(worker => ['aprobado', 'por_vencer'].includes(calcularEstadoTrabajador(worker, selected.project.id))).length;
     const result = calcularAccesoPago(contractor, selected.project.id);
-    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{result.accesoEstado === 'bloqueado' ? 'Con bloqueos' : result.accesoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
+    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><select aria-label={`Relación de ${contractor.nombre}`} value={contractor.contratistaPadreId || ''} disabled={savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{result.accesoEstado === 'bloqueado' ? 'Con bloqueos' : result.accesoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
   })}</tbody></table></div></article>;
 }
 
@@ -159,11 +196,17 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
       setSavingRequirementId(null);
     }
   };
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Requisitos del proyecto</h2><p>Define qué debe cumplir cada empresa y trabajador.</p></div><button type="button" onClick={onAdd}><Plus /> Agregar requisito</button></div><div className="mandante-proyectos-requirements">{requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}><div><strong>{requirement.nombre}</strong><span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {requirement.criticidad.replaceAll('_', ' ')} · Alerta {requirement.alertaDias} días</span></div><button type="button" disabled={savingRequirementId === requirement.id} className={requirement.obligatorio ? 'mandatory' : 'optional'} onClick={() => void toggleRequired(requirement)}>{savingRequirementId === requirement.id ? 'Guardando…' : requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</button></div>)}{requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}</div></article>;
+  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Requisitos del proyecto</h2><p>Define qué debe cumplir cada empresa y trabajador.</p></div><button type="button" onClick={onAdd}><Plus /> Agregar requisito</button></div><div className="mandante-proyectos-requirements">{requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}><div><strong>{requirement.nombre}</strong><span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {requirement.criticidad.replaceAll('_', ' ')} · Alerta {requirement.alertaDias} días · Plazo {requirement.diasPlazo ?? 5} días</span>{requirement.descripcion && <p>{requirement.descripcion}</p>}{Boolean(requirement.checklistRevision?.length) && <small>{requirement.checklistRevision!.length} criterios de revisión</small>}{Boolean(requirement.categoriasAplicables?.length) && <small>Aplica a: {requirement.categoriasAplicables!.join(', ')}</small>}</div><button type="button" disabled={savingRequirementId === requirement.id} className={requirement.obligatorio ? 'mandatory' : 'optional'} onClick={() => void toggleRequired(requirement)}>{savingRequirementId === requirement.id ? 'Guardando…' : requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</button></div>)}{requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}</div></article>;
 }
 
 function AccreditationsPanel({ selected, requirements, onOpen }: { selected: ProjectPresentation; requirements: Requisito[]; onOpen: Props['onOpenContractor'] }) {
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Acreditaciones del proyecto</h2><p>Vista consolidada de Contratista + Mandante + Proyecto.</p><div className="mandante-proyectos-accreditations">{selected.contractors.map(contractor => {
+  const exportReport = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const obligations = getObligacionesDocumentales().filter(item => item.proyectoId === selected.project.id && item.activo && item.periodoInicio <= today);
+    const csv = buildComplianceCsv(obligations, new Map(requirements.map(item => [item.id, item.nombre])), new Map(selected.contractors.map(item => [item.id, item.nombre])));
+    downloadCsv(`acredita-${selected.project.id}-cumplimiento.csv`, csv);
+  };
+  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Acreditaciones del proyecto</h2><p>Vista consolidada de Contratista + Mandante + Proyecto.</p></div><button type="button" onClick={exportReport}><Download /> Exportar CSV</button></div><div className="mandante-proyectos-accreditations">{selected.contractors.map(contractor => {
     const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id)); const workers = selected.workers.filter(item => item.contractor.id === contractor.id); const enabled = workers.filter(item => ['aprobado', 'por_vencer'].includes(calcularEstadoTrabajador(item.worker, selected.project.id))).length; const result = calcularAccesoPago(contractor, selected.project.id);
     return <div key={contractor.id}><span><strong>{contractor.nombre}</strong><small>{selected.project.nombre}</small></span><span><small>Estado</small><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></span><span><small>Empresa</small><strong>{companyObligationSummary(contractor, selected.project.id, requirements)}</strong></span><span><small>Trabajadores</small><strong>{enabled}/{workers.length}</strong></span><span><small>Acceso</small><strong>{result.accesoEstado === 'bloqueado' ? 'Bloqueado' : result.accesoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><span><small>Pago</small><strong>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Abrir</button></div>;
   })}</div></article>;

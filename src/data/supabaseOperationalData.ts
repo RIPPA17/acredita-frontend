@@ -4,11 +4,16 @@ import type {
   HistorialVersionDocumento,
   Proyecto,
   Requisito,
+  AsignacionTrabajador,
+  CierreDocumental,
+  ObligacionDocumental,
+  ServicioContrato,
   Trabajador,
 } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { formatPeriodo, setCierresDocumentales, setObligacionesDocumentales } from './operationalCore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
   || 'https://jwlscxbmttpicwljozwf.supabase.co';
@@ -43,12 +48,48 @@ type BackendAssignment = {
   accreditation_id: string;
   worker_id: string;
   is_active: boolean;
+  service_id: string | null;
+  job_title: string | null;
+  categories: string[] | null;
+  assignment_status: AsignacionTrabajador['estado'];
+  access_status: AsignacionTrabajador['estadoAcceso'];
+  assigned_at: string | null;
+  unassigned_at: string | null;
 };
 type BackendDocument = {
   id: string;
   accreditation_id: string;
   requirement_id: string;
   worker_id: string | null;
+  obligation_id: string | null;
+};
+type BackendService = {
+  id: string;
+  accreditation_id: string;
+  integration_key: string | null;
+};
+type BackendObligation = {
+  obligation_id: string;
+  accreditation_id: string;
+  service_id: string | null;
+  worker_assignment_id: string | null;
+  requirement_id: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  is_active: boolean;
+  effective_status: ObligacionDocumental['estado'];
+  version_number: number | null;
+};
+type BackendClosure = {
+  id: string;
+  project_id: string;
+  period_start: string;
+  period_end: string;
+  upload_deadline: string | null;
+  status: CierreDocumental['estado'];
+  closed_at: string | null;
+  snapshot: Record<string, unknown> | null;
 };
 type BackendVersion = {
   id: string;
@@ -76,6 +117,9 @@ type BackendRows = {
   assignments: BackendAssignment[];
   documents: BackendDocument[];
   versions: BackendVersion[];
+  services: BackendService[];
+  obligations: BackendObligation[];
+  closures: BackendClosure[];
 };
 
 function headers(accessToken: string, extra: HeadersInit = {}): HeadersInit {
@@ -186,6 +230,9 @@ function projectMatchesFaena(worker: Trabajador, project: Proyecto): boolean {
 }
 
 function workerAssignedToProject(worker: Trabajador, project: Proyecto): boolean {
+  if (worker.asignaciones !== undefined) {
+    return worker.asignaciones.some(item => item.proyectoId === project.id && item.estado === 'activa');
+  }
   return (worker.documentos || []).some(doc => doc.proyectoId === project.id) || projectMatchesFaena(worker, project);
 }
 
@@ -260,17 +307,20 @@ function hasUploadedVersion(doc: Documento): boolean {
 }
 
 async function fetchRows(token: string): Promise<BackendRows> {
-  const [projects, contractors, accreditations, requirements, workers, assignments, documents, versions] = await Promise.all([
+  const [projects, contractors, accreditations, requirements, workers, assignments, documents, versions, services, obligations, closures] = await Promise.all([
     selectRows<BackendProject>('projects', token, 'id,name,integration_key'),
     selectRows<BackendContractor>('contratistas', token, 'id,integration_key'),
     selectRows<BackendAccreditation>('accreditations', token, 'id,project_id,contratista_id,is_active'),
     selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,alert_days,is_active'),
     selectRows<BackendWorker>('workers', token, 'id,contratista_id,rut,full_name,job_title,is_active'),
-    selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active'),
-    selectRows<BackendDocument>('documents', token, 'id,accreditation_id,requirement_id,worker_id'),
+    selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active,service_id,job_title,categories,assignment_status,access_status,assigned_at,unassigned_at'),
+    selectRows<BackendDocument>('documents', token, 'id,accreditation_id,requirement_id,worker_id,obligation_id'),
     selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata'),
+    selectRows<BackendService>('services', token, 'id,accreditation_id,integration_key'),
+    selectRows<BackendObligation>('obligation_statuses', token, 'obligation_id,accreditation_id,service_id,worker_assignment_id,requirement_id,period_start,period_end,due_date,is_active,effective_status,version_number'),
+    selectRows<BackendClosure>('compliance_periods', token, 'id,project_id,period_start,period_end,upload_deadline,status,closed_at,snapshot'),
   ]);
-  return { projects, contractors, accreditations, requirements, workers, assignments, documents, versions };
+  return { projects, contractors, accreditations, requirements, workers, assignments, documents, versions, services, obligations, closures };
 }
 
 function localScope(session: SupabaseUserSession, contractors: Contratista[]): Contratista[] {
@@ -308,6 +358,7 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
   const projectUuidByKey = new Map(refreshed.projects.filter(p => p.integration_key).map(p => [p.integration_key as string, p.id]));
   const workerByContractorRut = new Map(refreshed.workers.map(w => [`${w.contratista_id}:${normalizeRut(w.rut)}`, w]));
   const accreditationByContext = new Map(refreshed.accreditations.filter(a => a.is_active).map(a => [`${a.project_id}:${a.contratista_id}`, a]));
+  const serviceUuidByKey = new Map(refreshed.services.filter(item => item.integration_key).map(item => [item.integration_key as string, item.id]));
   const desiredAssignments = new Set<string>();
 
   for (const contractor of scoped) {
@@ -325,9 +376,16 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
         if (!accreditation) continue;
         const key = `${accreditation.id}:${backendWorker.id}`;
         desiredAssignments.add(key);
+        const localAssignment = worker.asignaciones?.find(item => item.proyectoId === project.id && item.estado === 'activa');
         await insertRows('worker_assignments', token, {
           accreditation_id: accreditation.id,
           worker_id: backendWorker.id,
+          service_id: localAssignment?.servicioId ? serviceUuidByKey.get(localAssignment.servicioId) || null : null,
+          job_title: localAssignment?.cargo || worker.cargo || null,
+          categories: localAssignment?.categorias || [],
+          assignment_status: localAssignment?.estado || 'activa',
+          access_status: localAssignment?.estadoAcceso || 'pendiente',
+          assigned_at: localAssignment?.fechaIngreso || new Date().toISOString().slice(0, 10),
           is_active: true,
           unassigned_at: null,
         }, 'accreditation_id,worker_id');
@@ -455,17 +513,20 @@ async function ensureDocument(
   accreditationId: string,
   requirementId: string,
   workerId: string | null,
+  obligationId?: string,
 ): Promise<BackendDocument> {
   const found = existing.find(d =>
     d.accreditation_id === accreditationId
     && d.requirement_id === requirementId
     && d.worker_id === workerId
+    && (!obligationId || d.obligation_id === obligationId)
   );
   if (found) return found;
   const created = await insertReturning<BackendDocument>('documents', token, {
     accreditation_id: accreditationId,
     requirement_id: requirementId,
     worker_id: workerId,
+    obligation_id: obligationId || null,
   });
   existing.push(created);
   return created;
@@ -495,7 +556,7 @@ async function syncDocuments(session: SupabaseUserSession, rows: BackendRows): P
     if (!requirement) return;
     const backendWorker = worker ? workerByContractorRut.get(`${contractorUuid}:${normalizeRut(worker.rut)}`) : undefined;
     if (worker && !backendWorker) return;
-    const backendDocument = await ensureDocument(token, backendDocuments, accreditation.id, requirement.id, backendWorker?.id || null);
+    const backendDocument = await ensureDocument(token, backendDocuments, accreditation.id, requirement.id, backendWorker?.id || null, doc.obligacionId);
     await syncVersions(session, doc, backendDocument, versions);
     versions = await selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata');
   };
@@ -532,6 +593,7 @@ function backendDocumentToFrontend(
   requirement: BackendRequirement,
   projectKey: string,
   versions: BackendVersion[],
+  obligation?: BackendObligation,
 ): Documento {
   const ordered = versions.filter(v => v.document_id === document.id).sort((a, b) => a.version_number - b.version_number);
   const latest = ordered[ordered.length - 1];
@@ -556,6 +618,11 @@ function backendDocumentToFrontend(
     fechaRevisado: latest?.reviewed_at ? String(metadata.frontend_reviewed_text || formatDate(latest.reviewed_at)) : undefined,
     version: latest?.version_number || 1,
     historial: ordered.slice(0, -1).map(versionToHistory),
+    obligacionId: obligation?.obligation_id,
+    periodoEtiqueta: obligation ? formatPeriodo(obligation.period_start, obligation.period_end) : undefined,
+    periodoInicio: obligation?.period_start,
+    periodoFin: obligation?.period_end,
+    fechaLimite: obligation?.due_date,
   };
 }
 
@@ -583,17 +650,62 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
   const accreditationById = new Map(rows.accreditations.map(a => [a.id, a]));
   const requirementById = new Map(rows.requirements.map(r => [r.id, r]));
   const workerById = new Map(rows.workers.map(w => [w.id, w]));
+  const assignmentById = new Map(rows.assignments.map(item => [item.id, item]));
+  const serviceKeyByUuid = new Map(rows.services.map(item => [item.id, item.integration_key || item.id]));
+  const obligationById = new Map(rows.obligations.map(item => [item.obligation_id, item]));
+
+  const frontendObligations: ObligacionDocumental[] = rows.obligations.map(item => {
+    const accreditation = accreditationById.get(item.accreditation_id);
+    const assignment = item.worker_assignment_id ? assignmentById.get(item.worker_assignment_id) : undefined;
+    const worker = assignment ? workerById.get(assignment.worker_id) : undefined;
+    return {
+      id: item.obligation_id,
+      proyectoId: accreditation ? (projectKeyByUuid.get(accreditation.project_id) || accreditation.project_id) : '',
+      contratistaId: accreditation ? (contractorKeyByUuid.get(accreditation.contratista_id) || accreditation.contratista_id) : '',
+      requisitoId: requirementById.get(item.requirement_id)?.integration_key || item.requirement_id,
+      servicioId: item.service_id ? serviceKeyByUuid.get(item.service_id) : undefined,
+      asignacionId: item.worker_assignment_id || undefined,
+      trabajadorRut: worker?.rut,
+      periodoInicio: item.period_start,
+      periodoFin: item.period_end,
+      fechaLimite: item.due_date,
+      periodoEtiqueta: formatPeriodo(item.period_start, item.period_end),
+      estado: item.effective_status,
+      versionActual: item.version_number || undefined,
+      activo: item.is_active,
+    };
+  }).filter(item => item.proyectoId && item.contratistaId);
+  const today = new Date().toISOString().slice(0, 10);
+  const latestDueObligation = (items: ObligacionDocumental[]) => items
+    .filter(item => item.activo !== false && item.periodoInicio <= today)
+    .sort((a, b) => b.periodoInicio.localeCompare(a.periodoInicio))[0];
+  setObligacionesDocumentales(frontendObligations);
+  setCierresDocumentales(rows.closures.map(item => ({
+    id: item.id,
+    proyectoId: projectKeyByUuid.get(item.project_id) || item.project_id,
+    periodoInicio: item.period_start,
+    periodoFin: item.period_end,
+    estado: item.status,
+    fechaCargaHasta: item.upload_deadline || undefined,
+    fechaCierre: item.closed_at || undefined,
+    snapshot: item.snapshot || undefined,
+  })));
 
   const backendCompanyDocs = new Map<string, Documento[]>();
   const backendWorkerDocs = new Map<string, Documento[]>();
-  for (const document of rows.documents) {
+  const orderedDocuments = [...rows.documents].sort((a, b) => {
+    const aPeriod = a.obligation_id ? obligationById.get(a.obligation_id)?.period_start || '' : '';
+    const bPeriod = b.obligation_id ? obligationById.get(b.obligation_id)?.period_start || '' : '';
+    return aPeriod.localeCompare(bPeriod);
+  });
+  for (const document of orderedDocuments) {
     const accreditation = accreditationById.get(document.accreditation_id);
     const requirement = requirementById.get(document.requirement_id);
     if (!accreditation || !requirement) continue;
     const contractorKey = contractorKeyByUuid.get(accreditation.contratista_id);
     const projectKey = projectKeyByUuid.get(accreditation.project_id);
     if (!contractorKey || !projectKey) continue;
-    const frontend = backendDocumentToFrontend(document, requirement, projectKey, rows.versions);
+    const frontend = backendDocumentToFrontend(document, requirement, projectKey, rows.versions, document.obligation_id ? obligationById.get(document.obligation_id) : undefined);
     if (document.worker_id) {
       const worker = workerById.get(document.worker_id);
       if (!worker) continue;
@@ -608,15 +720,25 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     }
   }
 
-  const assignmentProjectsByWorker = new Map<string, string[]>();
+  const assignmentsByWorker = new Map<string, AsignacionTrabajador[]>();
   for (const assignment of rows.assignments.filter(a => a.is_active)) {
     const accreditation = accreditationById.get(assignment.accreditation_id);
     if (!accreditation) continue;
     const projectKey = projectKeyByUuid.get(accreditation.project_id);
     if (!projectKey) continue;
-    const current = assignmentProjectsByWorker.get(assignment.worker_id) || [];
-    current.push(projectKey);
-    assignmentProjectsByWorker.set(assignment.worker_id, current);
+    const current = assignmentsByWorker.get(assignment.worker_id) || [];
+    current.push({
+      id: assignment.id,
+      proyectoId: projectKey,
+      servicioId: assignment.service_id ? serviceKeyByUuid.get(assignment.service_id) : undefined,
+      cargo: assignment.job_title || undefined,
+      categorias: assignment.categories || [],
+      fechaIngreso: assignment.assigned_at || undefined,
+      fechaSalida: assignment.unassigned_at || undefined,
+      estado: assignment.assignment_status || 'activa',
+      estadoAcceso: assignment.access_status || 'pendiente',
+    });
+    assignmentsByWorker.set(assignment.worker_id, current);
   }
 
   const workersByContractor = new Map<string, Trabajador[]>();
@@ -626,14 +748,29 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     const localContractor = contractors.find(c => c.id === contractorKey);
     const localWorker = localContractor?.trabajadores?.find(w => normalizeRut(w.rut) === normalizeRut(backendWorker.rut));
     let docs = [...(backendWorkerDocs.get(`${contractorKey}:${normalizeRut(backendWorker.rut)}`) || [])];
-    const assignedProjectKeys = assignmentProjectsByWorker.get(backendWorker.id) || [];
+    const assignments = assignmentsByWorker.get(backendWorker.id) || [];
+    const assignedProjectKeys = assignments.filter(item => item.estado === 'activa').map(item => item.proyectoId);
 
     // Los placeholders pendientes mantienen visible una asignación incluso si
     // todavía no existe una versión subida en documents/document_versions.
     for (const projectKey of assignedProjectKeys) {
       const workerReqs = requirements.filter(r => r.proyectoId === projectKey && r.destino === 'trabajador' && r.activo !== false);
+      const workerAssignment = assignments.find(item => item.proyectoId === projectKey && item.estado === 'activa');
       for (const req of workerReqs) {
-        if (docs.some(d => d.proyectoId === projectKey && normalize(d.nombre) === normalize(req.nombre))) continue;
+        const categories = (workerAssignment?.categorias || []).map(item => normalize(item));
+        const appliesByCategory = !req.categoriasAplicables?.length
+          || req.categoriasAplicables.some(item => normalize(item) === 'general' || categories.includes(normalize(item)));
+        const appliesByService = !req.servicioId || req.servicioId === workerAssignment?.servicioId;
+        if (!appliesByCategory || !appliesByService) continue;
+        const obligationCandidates = frontendObligations.filter(item => item.asignacionId === workerAssignment?.id && item.requisitoId === req.id);
+        const obligation = latestDueObligation(obligationCandidates);
+        const matchingDocument = obligation ? docs.find(item => item.obligacionId === obligation.id) : undefined;
+        docs = docs.filter(item => item.proyectoId !== projectKey || normalize(item.nombre) !== normalize(req.nombre));
+        if (matchingDocument) {
+          docs.push(matchingDocument);
+          continue;
+        }
+        if (!obligation && frontendObligations.some(item => item.asignacionId === workerAssignment?.id)) continue;
         docs.push({
           id: `doc_${slug(contractorKey)}_${slug(projectKey)}_${slug(req.id)}_${slug(backendWorker.rut)}`,
           nombre: req.nombre,
@@ -643,6 +780,11 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
           proyectoId: projectKey,
           version: 1,
           historial: [],
+          obligacionId: obligation?.id,
+          periodoEtiqueta: obligation?.periodoEtiqueta,
+          periodoInicio: obligation?.periodoInicio,
+          periodoFin: obligation?.periodoFin,
+          fechaLimite: obligation?.fechaLimite,
         });
       }
     }
@@ -655,6 +797,7 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
       cargo: backendWorker.job_title || undefined,
       faena: firstProject?.nombre,
       documentos: docs,
+      asignaciones: assignments,
     };
     const list = workersByContractor.get(contractorKey) || [];
     list.push(worker);
@@ -666,7 +809,15 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     for (const projectKey of contractor.proyectos || []) {
       const companyReqs = requirements.filter(r => r.proyectoId === projectKey && r.destino === 'empresa' && r.activo !== false);
       for (const req of companyReqs) {
-        if (companyDocs.some(d => d.proyectoId === projectKey && normalize(d.nombre) === normalize(req.nombre))) continue;
+        const obligationCandidates = frontendObligations.filter(item => item.contratistaId === contractor.id && item.proyectoId === projectKey && !item.asignacionId && item.requisitoId === req.id);
+        const obligation = latestDueObligation(obligationCandidates);
+        const matchingDocument = obligation ? companyDocs.find(item => item.obligacionId === obligation.id) : undefined;
+        companyDocs.splice(0, companyDocs.length, ...companyDocs.filter(item => item.proyectoId !== projectKey || normalize(item.nombre) !== normalize(req.nombre)));
+        if (matchingDocument) {
+          companyDocs.push(matchingDocument);
+          continue;
+        }
+        if (!obligation && frontendObligations.some(item => item.contratistaId === contractor.id && item.proyectoId === projectKey && !item.asignacionId)) continue;
         companyDocs.push({
 id: `doc_${slug(contractor.id)}_${slug(projectKey)}_${slug(req.id)}_empresa`,
 nombre: req.nombre,
@@ -676,6 +827,11 @@ vencimiento: '—',
 proyectoId: projectKey,
 version: 1,
 historial: [],
+obligacionId: obligation?.id,
+periodoEtiqueta: obligation?.periodoEtiqueta,
+periodoInicio: obligation?.periodoInicio,
+periodoFin: obligation?.periodoFin,
+fechaLimite: obligation?.fechaLimite,
         });
       }
     }
@@ -693,5 +849,3 @@ export async function prepareOperationalDataForSession(session: SupabaseUserSess
   if (typeof window === 'undefined') return;
   await hydrateOperationalDataFromSupabase(session);
 }
-
-

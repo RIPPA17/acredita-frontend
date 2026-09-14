@@ -6,11 +6,13 @@ import {
   getMotivoBloqueoTrabajador,
   getRequisitos,
   obtenerDiasRestantes,
+  requisitoAplicaATrabajador,
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
+import { getAsignacionProyecto, getServiciosProyecto } from '../../data/operationalCore';
 import {
   documentoVigente,
   getEstadoDocumentoEfectivo,
@@ -57,7 +59,7 @@ function iniciales(nombre: string): string {
 }
 
 function buildResumen(trabajador: Trabajador, proyectoId: string, requisitos: Requisito[]): ResumenTrabajador {
-  const checklist = requisitos.map(requisito => {
+  const checklist = requisitos.filter(requisito => requisitoAplicaATrabajador(requisito, trabajador, proyectoId)).map(requisito => {
     const documento = matchDocumentoRequisito(trabajador.documentos, proyectoId, requisito.nombre);
     return { requisito, documento, estado: getEstadoDocumentoEfectivo(documento, requisito) };
   });
@@ -125,6 +127,8 @@ export default function TrabajadoresTab({
     ? trabajadores.find(item => item.rut === selectedWorkerForDocs.rut)
     : undefined;
   const selected = selectedWorker ? buildResumen(selectedWorker, selectedProyectoId, requisitos) : undefined;
+  const servicios = getServiciosProyecto(selectedProyectoId, contratistaLogueado.id);
+  const servicioPorId = new Map(servicios.map(item => [item.id, item]));
 
   const cambiarProyecto = (id: string) => {
     setSelectedProyectoId(id);
@@ -140,6 +144,7 @@ export default function TrabajadoresTab({
       destino: item.requisito.destino,
     },
     trabajadorRut: trabajador.rut,
+    obligacionId: item.documento?.obligacionId,
   });
 
   const ejecutarAccion = async (item: ChecklistItem, trabajador: Trabajador) => {
@@ -186,7 +191,10 @@ export default function TrabajadoresTab({
   if (!proyecto) return <div className="tw-empty">Todavía no tienes proyectos asociados.</div>;
 
   if (selected) {
-    const accesoHabilitado = selected.estado === 'aprobado' || selected.estado === 'por_vencer';
+    const asignacion = getAsignacionProyecto(selected.trabajador, selectedProyectoId);
+    const servicio = asignacion?.servicioId ? servicioPorId.get(asignacion.servicioId) : undefined;
+    const acreditacionHabilita = selected.estado === 'aprobado' || selected.estado === 'por_vencer';
+    const accesoHabilitado = acreditacionHabilita && asignacion?.estadoAcceso !== 'bloqueado';
     const candidatosVencimiento = selected.checklist
       .filter(item => item.documento && documentoVigente(item.documento, item.requisito))
       .map(item => ({ item, dias: obtenerDiasRestantes(item.documento!.vencimiento) }))
@@ -209,7 +217,7 @@ export default function TrabajadoresTab({
             <div className="tw-avatar">{iniciales(selected.trabajador.nombre)}</div>
             <div className="tw-min-0">
               <h2>{selected.trabajador.nombre}</h2>
-              <p>{selected.trabajador.rut} · {selected.trabajador.cargo || 'Sin cargo'} · {proyecto.nombre}</p>
+              <p>{selected.trabajador.rut} · {asignacion?.cargo || selected.trabajador.cargo || 'Sin cargo'} · {servicio?.nombre || proyecto.nombre}</p>
             </div>
           </div>
           <div className="tw-detail-actions">
@@ -218,7 +226,7 @@ export default function TrabajadoresTab({
         </header>
 
         <div className="tw-folder-summary">
-          <div className="tw-folder-kpi"><span>Estado</span><b>{ESTADO_UI[selected.estado].label}</b></div>
+          <div className="tw-folder-kpi"><span>Asignación</span><b>{asignacion?.estado === 'activa' ? 'Activa' : asignacion?.estado || 'Activa'}</b></div>
           <div className="tw-folder-kpi"><span>Acceso a faena</span><b className={accesoHabilitado ? 'tw-text-green' : 'tw-text-red'}>{accesoHabilitado ? 'Habilitado' : 'No habilitado'}</b></div>
           <div className="tw-folder-kpi"><span>Documentos vigentes</span><b>{selected.vigentes}/{selected.totalObligatorios} · {selected.porcentaje}%</b></div>
           <div className="tw-folder-kpi"><span>Próximo vencimiento</span><b>{proximo?.item.documento?.vencimiento || 'Sin alertas'}</b></div>
@@ -330,7 +338,11 @@ export default function TrabajadoresTab({
             return (
               <div className="tw-table-row" key={item.trabajador.rut}>
                 <div className="tw-person"><div className="tw-avatar">{iniciales(item.trabajador.nombre)}</div><div className="tw-min-0"><strong>{item.trabajador.nombre}</strong><small>{item.trabajador.rut}</small></div></div>
-                <div className="tw-cargo">{item.trabajador.cargo || 'Sin cargo'}</div>
+                <div className="tw-cargo">{(() => {
+                  const assignment = getAsignacionProyecto(item.trabajador, selectedProyectoId);
+                  const service = assignment?.servicioId ? servicioPorId.get(assignment.servicioId) : undefined;
+                  return <>{assignment?.cargo || item.trabajador.cargo || 'Sin cargo'}{service && <small>{service.nombre}</small>}</>;
+                })()}</div>
                 <div><span className={`tw-badge ${ESTADO_UI[item.estado].badge}`}>{ESTADO_UI[item.estado].label}</span></div>
                 <div className="tw-progress-cell"><div><span>{item.vigentes}/{item.totalObligatorios} vigentes</span><b>{item.porcentaje}%</b></div><div className="tw-progress"><i style={{ width: `${item.porcentaje}%` }} /></div></div>
                 <div><strong className={acceso ? 'tw-access-ok' : 'tw-access-no'}>{acceso ? 'Habilitado' : 'No habilitado'}</strong><small>{item.estado === 'por_vencer' ? 'Válido hasta su vencimiento.' : item.estado === 'pendiente' ? 'Faltan requisitos obligatorios.' : motivo || 'Sin bloqueos.'}</small></div>

@@ -23,6 +23,7 @@ import OperationalNotificationsPanel from '../components/OperationalNotification
 import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
+import { getServiciosProyecto } from '../data/operationalCore';
 
 export default function MandantePortal() {
   const { revision: dataSyncRevision } = useDataSync();
@@ -132,7 +133,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
   const [isAddDocModalOpen, setIsAddDocModalOpen] = useState(false);
   const [savingRequirement, setSavingRequirement] = useState(false);
-  const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
+  const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5 });
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
   const [formInvitacion, setFormInvitacion] = useState({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
@@ -226,9 +227,16 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
       obligatorio: newDocForm.obligatorio,
       frecuencia: newDocForm.frequency,
       alertaDias: newDocForm.destino === 'trabajador' ? 15 : 7,
-      criticidad: newDocForm.criticidad as 'bloquea_pago' | 'bloquea_acceso' | 'advertencia',
+      criticidad: newDocForm.criticidad as 'bloquea_pago' | 'bloquea_acceso' | 'bloquea_ambas' | 'advertencia',
       proyectoId: activeProjectId,
-      activo: true
+      activo: true,
+      descripcion: newDocForm.description.trim() || undefined,
+      checklistRevision: newDocForm.checklist.split('\n').map(item => item.trim()).filter(Boolean),
+      categoriasAplicables: newDocForm.categories.split(',').map(item => item.trim()).filter(Boolean),
+      bloqueaTrabajo: newDocForm.bloqueaTrabajo,
+      bloqueaAsignacion: newDocForm.bloqueaAsignacion,
+      servicioId: newDocForm.servicioId || undefined,
+      diasPlazo: Math.min(90, Math.max(0, Number(newDocForm.dueDays) || 0)),
     };
     setSavingRequirement(true);
     try {
@@ -239,7 +247,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
       setDocumentRequirements(updatedReqs.map(r => ({ id: r.id, name: r.nombre, category: r.categoria, frequency: r.frecuencia, obligatorio: r.obligatorio, destino: r.destino, criticidad: r.criticidad, alertaDias: r.alertaDias })));
       setContractorsData(buildContractorsData(allContratistas, activeProjectId));
       setIsAddDocModalOpen(false);
-      setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago' });
+      setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5 });
       showToast('Requisito agregado con éxito');
     } catch (error) {
       const restored = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
@@ -518,10 +526,16 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
                 <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Categoría</label><select value={newDocForm.category} onChange={event => setNewDocForm({ ...newDocForm, category: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Laboral</option><option>Tributario</option><option>Prevención de Riesgos</option></select></div>
                 <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Destino</label><select value={newDocForm.destino} onChange={event => setNewDocForm({ ...newDocForm, destino: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="empresa">Empresa</option><option value="trabajador">Trabajador</option></select></div>
               </div>
+              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Ámbito del requisito</label><select value={newDocForm.servicioId} onChange={event => setNewDocForm({ ...newDocForm, servicioId: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="">Todo el proyecto</option>{getServiciosProyecto(activeProjectId).map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}</select></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Frecuencia</label><select value={newDocForm.frequency} onChange={event => setNewDocForm({ ...newDocForm, frequency: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Mensual</option><option>Por Proyecto</option><option>6 meses</option><option>1 año</option><option>Indefinido</option></select></div>
-                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Criticidad</label><select value={newDocForm.criticidad} onChange={event => setNewDocForm({ ...newDocForm, criticidad: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea acceso</option><option value="advertencia">Advertencia</option></select></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Frecuencia</label><select value={newDocForm.frequency} onChange={event => setNewDocForm({ ...newDocForm, frequency: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Mensual</option><option>Bimensual</option><option>Trimestral</option><option>Por Proyecto</option><option>6 meses</option><option>1 año</option><option>Indefinido</option></select></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Criticidad</label><select value={newDocForm.criticidad} onChange={event => setNewDocForm({ ...newDocForm, criticidad: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea acceso</option><option value="bloquea_ambas">Bloquea acceso y pago</option><option value="advertencia">Solo advertencia</option></select></div>
               </div>
+              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Días de plazo después del período</label><input type="number" min="0" max="90" value={newDocForm.dueDays} onChange={event => setNewDocForm({ ...newDocForm, dueDays: Number(event.target.value) })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" /><p className="text-[10.5px] text-gray-500 mt-1">Define la fecha límite automática de cada obligación.</p></div>
+              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Descripción para el contratista</label><textarea value={newDocForm.description} onChange={event => setNewDocForm({ ...newDocForm, description: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg min-h-20" placeholder="Qué debe presentar y a qué período debe corresponder." /></div>
+              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Checklist de revisión</label><textarea value={newDocForm.checklist} onChange={event => setNewDocForm({ ...newDocForm, checklist: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg min-h-24" placeholder={'Un criterio por línea\nRUT correcto\nPeríodo correcto\nDocumento íntegro y legible'} /><p className="text-[10.5px] text-gray-500 mt-1">La misma pauta será visible para quien carga y quien revisa.</p></div>
+              {newDocForm.destino === 'trabajador' && <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Categorías aplicables</label><input value={newDocForm.categories} onChange={event => setNewDocForm({ ...newDocForm, categories: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="General, Conductor, Trabajo en altura" /><p className="text-[10.5px] text-gray-500 mt-1">Sepáralas por coma. Vacío significa que aplica a todos.</p></div>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg bg-cream2 p-3"><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={newDocForm.bloqueaTrabajo} onChange={event => setNewDocForm({ ...newDocForm, bloqueaTrabajo: event.target.checked })} /> Bloquea trabajo</label><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={newDocForm.bloqueaAsignacion} onChange={event => setNewDocForm({ ...newDocForm, bloqueaAsignacion: event.target.checked })} /> Bloquea asignación</label></div>
               <label className="flex items-center gap-2 text-sm text-navy"><input type="checkbox" checked={newDocForm.obligatorio} onChange={event => setNewDocForm({ ...newDocForm, obligatorio: event.target.checked })} /> Requisito obligatorio</label>
               <div className="flex justify-end gap-3 pt-4 border-t border-cream"><button type="button" disabled={savingRequirement} onClick={() => setIsAddDocModalOpen(false)} className="btn btn-ghost">Cancelar</button><button type="button" disabled={savingRequirement || !newDocForm.name.trim()} onClick={() => void handleAddRequirement()} className="btn btn-primary disabled:opacity-60 disabled:cursor-not-allowed">{savingRequirement ? 'Guardando…' : 'Agregar requisito'}</button></div>
             </div>

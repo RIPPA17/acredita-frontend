@@ -15,6 +15,7 @@ import {
   RequisitoConDoc,
 } from './inicio/inicioUtils';
 import { getEstadoDocumentoEfectivo } from './documentosUtils';
+import { getObligacionesDocumentales } from '../../data/operationalCore';
 
 // Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
 // reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
@@ -197,6 +198,7 @@ export default function SubirTab({
       destino: item.requisito.destino,
     },
     trabajadorRut: item.worker?.rut,
+    obligacionId: item.doc?.obligacionId,
   });
 
   const seleccionarArchivo = (item: Row) => {
@@ -374,6 +376,7 @@ export default function SubirTab({
                             <span>{impactoLabel(item.requisito)}</span>
                             <span>·</span>
                             <span>{item.requisito.frecuencia}</span>
+                            {item.doc?.periodoEtiqueta && <><span>·</span><span>{item.doc.periodoEtiqueta}</span></>}
                           </div>
                         </div>
                         <div className="doc-owner">
@@ -414,6 +417,15 @@ export default function SubirTab({
             ) : (() => {
               const { label, cls } = accionDoc(selected);
               const historial = selected.doc?.historial || [];
+              const today = new Date().toISOString().slice(0, 10);
+              const periodos = getObligacionesDocumentales().filter(item =>
+                item.activo
+                && item.periodoInicio <= today
+                && item.proyectoId === selectedProyectoId
+                && item.contratistaId === contratistaLogueado.id
+                && item.requisitoId === selected.requisito.id
+                && (selected.worker?.rut ? item.trabajadorRut === selected.worker.rut : !item.trabajadorRut)
+              ).sort((a, b) => b.periodoInicio.localeCompare(a.periodoInicio)).slice(0, 12);
               const isUploading = uploadingKey === selected.key;
               return (
                 <>
@@ -437,7 +449,12 @@ export default function SubirTab({
                     <div className="doc-tags">
                       <span className={`doc-req-chip ${selected.requisito.obligatorio ? 'required' : 'optional'}`}>{selected.requisito.obligatorio ? 'Obligatorio' : 'Opcional'}</span>
                       <span className="doc-req-chip">{selected.requisito.frecuencia}</span>
+                      {selected.doc?.periodoEtiqueta && <span className="doc-req-chip">Período: {selected.doc.periodoEtiqueta}</span>}
                     </div>
+
+                    {selected.requisito.descripcion && <div className="doc-info-box"><strong>Qué debes presentar</strong><p>{selected.requisito.descripcion}</p></div>}
+
+                    {Boolean(selected.requisito.checklistRevision?.length) && <div className="doc-info-box"><strong>Qué revisará Acredita</strong><ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>{selected.requisito.checklistRevision!.map(criterion => <li key={criterion} style={{ marginBottom: 4 }}>{criterion}</li>)}</ul></div>}
 
                     <div className={`doc-info-box ${stateBoxClass(selected.estado)}`}>
                       <strong>{selected.estado}</strong>
@@ -463,7 +480,10 @@ export default function SubirTab({
                       <div className="doc-mini"><span>Vigencia actual</span><b>{selected.doc?.vencimiento && selected.doc.vencimiento !== '-' ? selected.doc.vencimiento : '—'}</b></div>
                       <div className="doc-mini"><span>Frecuencia</span><b>{selected.requisito.frecuencia}</b></div>
                       <div className="doc-mini"><span>Consecuencia</span><b>{impactoLabel(selected.requisito)}</b></div>
+                      {selected.doc?.fechaLimite && <div className="doc-mini"><span>Fecha límite</span><b>{selected.doc.fechaLimite}</b></div>}
                     </div>
+
+                    {periodos.length > 0 && <div className="doc-history"><div className="doc-history-head">Cumplimiento por período</div>{periodos.map(periodo => <div key={periodo.id} className="doc-history-row"><div className="doc-history-date">{periodo.periodoEtiqueta}</div><div><div className="doc-history-name">Vence {periodo.fechaLimite}</div><div className="doc-history-note">{periodo.trabajadorRut || 'Empresa'}</div></div><span className={`doc-badge ${periodo.estado === 'aprobado' ? 'doc-badge-green' : ['rechazado', 'vencido'].includes(periodo.estado) ? 'doc-badge-red' : periodo.estado === 'por_vencer' ? 'doc-badge-yellow' : periodo.estado === 'revision' ? 'doc-badge-blue' : 'doc-badge-gray'}`}>{periodo.estado.replace('_', ' ')}</span></div>)}</div>}
 
                     {selected.doc?.archivoReferencia ? (
                       <div className="doc-upload-box">

@@ -27,9 +27,28 @@ export interface Proyecto {
   urgenciaBadge?: string; // "b-red" | "b-yellow" | "b-green"
   urgenciaLabel?: string; // e.g. "3 urgentes", "1 normal", "Al día"
   contratistas: string[]; // IDs de contratistas asociados
+  ubicacion?: string;
+  fechaInicio?: string;
+  fechaTermino?: string;
+}
+
+export type EstadoAsignacion = 'activa' | 'inactiva' | 'baja';
+export type EstadoAcceso = 'habilitado' | 'pendiente' | 'bloqueado';
+
+export interface AsignacionTrabajador {
+  id: string;
+  proyectoId: string;
+  servicioId?: string;
+  cargo?: string;
+  categorias: string[];
+  fechaIngreso?: string;
+  fechaSalida?: string;
+  estado: EstadoAsignacion;
+  estadoAcceso: EstadoAcceso;
 }
 
 export interface Trabajador {
+  id?: string;
   nombre: string;
   rut: string;
   estado: 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente';
@@ -38,6 +57,7 @@ export interface Trabajador {
   cumplimiento?: number;
   detalle?: string;
   documentos?: Documento[];
+  asignaciones?: AsignacionTrabajador[];
 }
 
 export interface HistorialVersionDocumento {
@@ -67,6 +87,11 @@ export interface Documento {
   archivoReferencia?: string;
   version?: number;                          // Defaults to 1 when absent
   historial?: HistorialVersionDocumento[];    // Versiones anteriores (superadas por una nueva carga)
+  obligacionId?: string;
+  periodoEtiqueta?: string;
+  periodoInicio?: string;
+  periodoFin?: string;
+  fechaLimite?: string;
 }
 
 export interface Requisito {
@@ -80,6 +105,56 @@ export interface Requisito {
   criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' | 'bloquea_ambas';
   proyectoId: string;
   activo?: boolean;
+  descripcion?: string;
+  checklistRevision?: string[];
+  categoriasAplicables?: string[];
+  bloqueaTrabajo?: boolean;
+  bloqueaAsignacion?: boolean;
+  servicioId?: string;
+  diasPlazo?: number;
+}
+
+export interface ServicioContrato {
+  id: string;
+  proyectoId: string;
+  contratistaId: string;
+  nombre: string;
+  codigo: string;
+  categoria?: string;
+  responsableContratista?: string;
+  responsableMandante?: string;
+  fechaInicio?: string;
+  fechaTermino?: string;
+  estado: 'borrador' | 'activo' | 'suspendido' | 'finalizado';
+  activo: boolean;
+}
+
+export interface ObligacionDocumental {
+  id: string;
+  proyectoId: string;
+  contratistaId: string;
+  requisitoId: string;
+  servicioId?: string;
+  asignacionId?: string;
+  trabajadorRut?: string;
+  periodoInicio: string;
+  periodoFin: string;
+  fechaLimite: string;
+  periodoEtiqueta: string;
+  estado: 'pendiente' | 'revision' | 'aprobado' | 'rechazado' | 'vencido' | 'por_vencer' | 'no_aplica';
+  versionActual?: number;
+  activo: boolean;
+}
+
+export interface CierreDocumental {
+  id: string;
+  proyectoId: string;
+  periodoInicio: string;
+  periodoFin: string;
+  estado: 'abierto' | 'en_revision' | 'cerrado' | 'reabierto';
+  fechaCargaHasta?: string;
+  fechaCierre?: string;
+  snapshot?: Record<string, unknown>;
 }
 
 export interface Contratista {
@@ -90,6 +165,7 @@ export interface Contratista {
   documentos: Documento[];
   trabajadores?: Trabajador[];
   isNew?: boolean;
+  contratistaPadreId?: string;
 }
 
 export interface PreferenciasNotificacionesContratista {
