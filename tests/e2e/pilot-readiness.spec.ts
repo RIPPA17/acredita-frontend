@@ -109,7 +109,7 @@ test('20 Acredita puede ver y resolver solicitudes de acceso', async ({ page }) 
   const { calls } = await mockAdmin(page);
   await page.goto('/admin');
   await expect(page.locator('body')).toContainText('Acredita');
-  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByTitle('Configuración').click();
   await page.getByRole('button', { name: 'Solicitudes de acceso', exact: true }).click();
   await expect(page.getByText('Mandante Solicitud QA')).toBeVisible();
   await expect(page.getByText('Jefa Piloto')).toBeVisible();
