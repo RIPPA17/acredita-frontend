@@ -239,8 +239,8 @@ export async function requestSupabasePasswordReset(email: string, redirectTo?: s
 export async function completeSupabasePasswordRecovery(password: string, hash?: string): Promise<void> {
   if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
   const parsed = tokensFromAuthHash(hash);
-  if (!parsed || parsed.type !== 'recovery') {
-    throw new Error('El enlace de recuperación no es válido o ya venció. Solicita uno nuevo.');
+  if (!parsed || !['recovery', 'invite'].includes(parsed.type || '')) {
+    throw new Error('El enlace de recuperación o invitación no es válido o ya venció. Solicita uno nuevo.');
   }
   await updateSupabaseUser(parsed.tokens.accessToken, { password });
   if (typeof window !== 'undefined') {
