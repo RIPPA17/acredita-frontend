@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, KeyRound, Mail, ShieldCheck } from 'lucide-react';
 import { completeSupabasePasswordRecovery, requestSupabasePasswordReset, tokensFromAuthHash } from '../data/supabaseAuth';
+import { PASSWORD_MIN_LENGTH, passwordValidationError } from '../utils/password';
 
 export default function RecuperarPasswordPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -36,6 +37,11 @@ export default function RecuperarPasswordPage() {
     event.preventDefault();
     if (loading) return;
     setError('');
+    const passwordError = passwordValidationError(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden.');
       return;
@@ -85,9 +91,9 @@ export default function RecuperarPasswordPage() {
             </div>
           ) : isPasswordSetupLink ? (
             <form onSubmit={submitPassword} className="flex flex-col gap-4">
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-[12px] text-blue-800 flex gap-2"><KeyRound size={16} className="shrink-0 mt-0.5" /><span>Usa al menos 8 caracteres y evita reutilizar una contraseña de otro servicio.</span></div>
-              <label className="block"><span className="block text-[12.5px] font-medium text-gray-700 mb-1.5">Nueva contraseña</span><input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} className="form-input w-full" placeholder="Mínimo 8 caracteres" /></label>
-              <label className="block"><span className="block text-[12.5px] font-medium text-gray-700 mb-1.5">Repetir contraseña</span><input required minLength={8} type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} className="form-input w-full" placeholder="Repite la contraseña" /></label>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-[12px] text-blue-800 flex gap-2"><KeyRound size={16} className="shrink-0 mt-0.5" /><span>Usa al menos {PASSWORD_MIN_LENGTH} caracteres, con mayúscula, minúscula, número y símbolo. No reutilices una contraseña de otro servicio.</span></div>
+              <label className="block"><span className="block text-[12.5px] font-medium text-gray-700 mb-1.5">Nueva contraseña</span><input required minLength={PASSWORD_MIN_LENGTH} type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} className="form-input w-full" placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`} /></label>
+              <label className="block"><span className="block text-[12.5px] font-medium text-gray-700 mb-1.5">Repetir contraseña</span><input required minLength={PASSWORD_MIN_LENGTH} type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} className="form-input w-full" placeholder="Repite la contraseña" /></label>
               {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-700">{error}</div>}
               <button disabled={loading} className="btn btn-primary w-full justify-center py-2.5 disabled:opacity-60">{loading ? 'Actualizando…' : isInviteLink ? 'Activar acceso' : 'Guardar nueva contraseña'}</button>
             </form>
