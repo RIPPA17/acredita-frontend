@@ -38,7 +38,10 @@ test('21 Acredita puede invitar la cuenta administradora de un Mandante', async 
   await page.goto('/admin');
   await page.getByTitle('Configuración').click();
   await page.getByRole('button', { name: 'Accesos Mandante', exact: true }).click();
-  await expect(page.getByText('Mandante Invitación QA')).toBeVisible();
+  const organization = page.getByLabel('Organización');
+  await expect(organization).toBeVisible();
+  await organization.selectOption(MANDANTE);
+  await expect(organization).toHaveValue(MANDANTE);
   await page.getByLabel('Nombre de la persona').fill('Gerencia Mandante');
   await page.getByLabel('Correo').fill('gerencia@qa.invalid');
   await page.getByRole('button', { name: 'Invitar y otorgar acceso' }).click();
