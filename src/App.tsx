@@ -20,8 +20,11 @@ const MandanteRoute = lazy(() => import('./components/MandanteRoute'));
 
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
-  const recoveryAtRoot = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery';
+  const authHashType = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type')
+    : null;
+  const passwordSetupLink = authHashType === 'recovery' || authHashType === 'invite';
+  const passwordSetupTarget = typeof window !== 'undefined' ? `/recuperar${window.location.hash}` : '/recuperar';
 
   return (
     <BrowserRouter>
@@ -38,8 +41,8 @@ export default function App() {
       <ErrorBoundary>
         <Suspense fallback={<div className="min-h-screen grid place-items-center bg-cream2 text-navy" role="status">Cargando Acredita…</div>}>
           <Routes>
-          <Route path="/" element={recoveryAtRoot ? <Navigate to={`/recuperar${window.location.hash}`} replace /> : <LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LandingPage />} />
+          <Route path="/login" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LoginPage />} />
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
           <Route path="/recuperar" element={<RecuperarPasswordPage />} />
