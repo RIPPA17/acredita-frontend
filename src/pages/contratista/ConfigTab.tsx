@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, KeyRound, LogOut, UserRound, Users } from 'lucide-react';
+import { Bell, Briefcase, Building2, KeyRound, LogOut, UserRound, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { SupabaseUserSession as UserSession } from '../../data/supabaseAuth';
 import { Contratista, Mandante, PreferenciasNotificacionesContratista, Proyecto } from '../../types';
 import BulkWorkersConfig from './BulkWorkersConfig';
+import OperationsTab from './OperationsTab';
 
-type ConfigSubTab = 'empresa' | 'notificaciones' | 'carga' | 'cuenta';
+type ConfigSubTab = 'empresa' | 'operacion' | 'notificaciones' | 'carga' | 'cuenta';
 
 const PREFERENCIAS = [
   ['documentoRechazado', 'Documento rechazado', 'Avísame cuando Acredita rechace un documento de empresa o trabajador y requiera corrección.'],
@@ -29,6 +30,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
   onGuardarPreferencias: (preferencias: PreferenciasNotificacionesContratista) => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<ConfigSubTab>('empresa');
+  const [operationsProjectId, setOperationsProjectId] = useState(() => misProyectos[0]?.id || '');
   const [preferencias, setPreferencias] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardando, setGuardando] = useState(false);
@@ -38,6 +40,16 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
     setPreferencias(preferenciasNotificaciones);
     setGuardadas(preferenciasNotificaciones);
   }, [preferenciasNotificaciones]);
+
+  useEffect(() => {
+    if (misProyectos.length === 0) {
+      setOperationsProjectId('');
+      return;
+    }
+    if (!misProyectos.some(proyecto => proyecto.id === operationsProjectId)) {
+      setOperationsProjectId(misProyectos[0].id);
+    }
+  }, [misProyectos, operationsProjectId]);
 
   const guardarPreferencias = async () => {
     setGuardando(true);
@@ -56,8 +68,8 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
     <div className="cfg-page">
       <section className="cfg-hero">
         <div className="cfg-eyebrow">Portal contratista</div>
-        <h1>Configuración</h1>
-        <p>Consulta los datos de tu empresa, administra tus avisos, carga personal y gestiona el acceso a tu cuenta.</p>
+        <h1>Gestión y configuración</h1>
+        <p>Consulta los datos de tu empresa, revisa evaluaciones y pagos, responde planes de acción, administra avisos, carga personal y gestiona tu cuenta.</p>
       </section>
 
       <section className="cfg-floating">
@@ -69,8 +81,8 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
         </div>
 
         <div className="cfg-workspace">
-          <nav className="cfg-nav" aria-label="Secciones de configuración">
-            {([['empresa', 'Empresa', Building2], ['notificaciones', 'Notificaciones', Bell], ['carga', 'Carga masiva', Users], ['cuenta', 'Cuenta', UserRound]] as const).map(([id, label, Icon]) => (
+          <nav className="cfg-nav" aria-label="Secciones de gestión">
+            {([['empresa', 'Empresa', Building2], ['operacion', 'Operación', Briefcase], ['notificaciones', 'Notificaciones', Bell], ['carga', 'Carga masiva', Users], ['cuenta', 'Cuenta', UserRound]] as const).map(([id, label, Icon]) => (
               <button key={id} className={activeTab === id ? 'active' : ''} onClick={() => setActiveTab(id)} aria-current={activeTab === id ? 'page' : undefined}><span className="cfg-nav-icon"><Icon size={14} /></span>{label}</button>
             ))}
           </nav>
@@ -91,6 +103,16 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
                 </div></div>
               </section>
             </>}
+
+            {activeTab === 'operacion' && (
+              <OperationsTab
+                contratista={contratistaLogueado}
+                proyectos={misProyectos}
+                selectedProyectoId={operationsProjectId}
+                setSelectedProyectoId={setOperationsProjectId}
+                showToast={showToast}
+              />
+            )}
 
             {activeTab === 'notificaciones' && <section className="cfg-card">
               <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos operativos quieres recibir como avisos dentro del portal.</p></header>
