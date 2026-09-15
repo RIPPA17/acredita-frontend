@@ -23,7 +23,7 @@ test.describe('superficie pública de lanzamiento', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.goto('/');
 
-    await expect(page.getByRole('link', { name: 'Cómo funciona' })).toBeVisible();
+    await expect(page.locator('nav').getByRole('link', { name: 'Cómo funciona' })).toBeVisible();
     await expect(page.locator('nav').getByRole('link', { name: 'Solicitar acceso' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
