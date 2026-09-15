@@ -47,7 +47,7 @@ export default function LoginPage() {
               Simplifica tu<br />cumplimiento laboral
             </h1>
             <p className="text-white/80 text-[17.6px] leading-relaxed max-w-[400px] mb-12">
-              La plataforma más rápida y segura para la gestión de documentos entre mandantes y contratistas en Chile.
+              Una plataforma para centralizar la acreditación documental entre mandantes, contratistas y trabajadores.
             </p>
 
             <div className="flex flex-col gap-6">
@@ -84,7 +84,7 @@ export default function LoginPage() {
           </div>
 
           <div className="text-[13.2px] text-white/50">
-            © 2026 Acredita SpA
+            © 2026 Acredita
           </div>
         </div>
 
@@ -138,7 +138,10 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label htmlFor="login-password" className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contraseña</label>
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <label htmlFor="login-password" className="block text-[13.2px] font-medium text-gray-700">Contraseña</label>
+                  <Link to={`/recuperar${email ? `?email=${encodeURIComponent(email)}` : ''}`} className="text-[12px] text-brown font-semibold hover:underline">¿Olvidaste tu contraseña?</Link>
+                </div>
                 <input
                   id="login-password"
                   type="password"

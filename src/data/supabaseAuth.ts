@@ -222,6 +222,33 @@ export function tokensFromAuthHash(hash?: string): { tokens: SupabaseRawTokens; 
   };
 }
 
+export async function requestSupabasePasswordReset(email: string, redirectTo?: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error('Ingresa tu correo.');
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({
+      email: normalizedEmail,
+      ...(redirectTo ? { redirect_to: redirectTo } : {}),
+    }),
+  });
+  await parseResponse(response);
+}
+
+export async function completeSupabasePasswordRecovery(password: string, hash?: string): Promise<void> {
+  if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+  const parsed = tokensFromAuthHash(hash);
+  if (!parsed || !['recovery', 'invite'].includes(parsed.type || '')) {
+    throw new Error('El enlace de recuperación o invitación no es válido o ya venció. Solicita uno nuevo.');
+  }
+  await updateSupabaseUser(parsed.tokens.accessToken, { password });
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(SESSION_KEY);
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  }
+}
+
 export async function loginWithSupabase(email: string, password: string): Promise<SupabaseUserSession> {
   return finalizeSupabaseSession(await authenticateSupabaseCredentials(email, password));
 }

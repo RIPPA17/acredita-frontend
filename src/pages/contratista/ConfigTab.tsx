@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, LogOut, UserRound } from 'lucide-react';
+import { Bell, Building2, KeyRound, LogOut, UserRound, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { SupabaseUserSession as UserSession } from '../../data/supabaseAuth';
 import { Contratista, Mandante, PreferenciasNotificacionesContratista, Proyecto } from '../../types';
+import BulkWorkersConfig from './BulkWorkersConfig';
 
-type ConfigSubTab = 'empresa' | 'notificaciones' | 'cuenta';
+type ConfigSubTab = 'empresa' | 'notificaciones' | 'carga' | 'cuenta';
 
 const PREFERENCIAS = [
   ['documentoRechazado', 'Documento rechazado', 'Avísame cuando Acredita rechace un documento de empresa o trabajador y requiera corrección.'],
@@ -55,7 +57,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
       <section className="cfg-hero">
         <div className="cfg-eyebrow">Portal contratista</div>
         <h1>Configuración</h1>
-        <p>Consulta los datos de tu empresa y define qué avisos quieres ver en Acredita. Las opciones de esta sección afectan solo a tu experiencia dentro del portal.</p>
+        <p>Consulta los datos de tu empresa, administra tus avisos, carga personal y gestiona el acceso a tu cuenta.</p>
       </section>
 
       <section className="cfg-floating">
@@ -68,7 +70,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
 
         <div className="cfg-workspace">
           <nav className="cfg-nav" aria-label="Secciones de configuración">
-            {([['empresa', 'Empresa', Building2], ['notificaciones', 'Notificaciones', Bell], ['cuenta', 'Cuenta', UserRound]] as const).map(([id, label, Icon]) => (
+            {([['empresa', 'Empresa', Building2], ['notificaciones', 'Notificaciones', Bell], ['carga', 'Carga masiva', Users], ['cuenta', 'Cuenta', UserRound]] as const).map(([id, label, Icon]) => (
               <button key={id} className={activeTab === id ? 'active' : ''} onClick={() => setActiveTab(id)} aria-current={activeTab === id ? 'page' : undefined}><span className="cfg-nav-icon"><Icon size={14} /></span>{label}</button>
             ))}
           </nav>
@@ -77,7 +79,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
             {activeTab === 'empresa' && <>
               <section className="cfg-card">
                 <header><h2>Datos de la empresa</h2><p>Información utilizada para identificar al contratista dentro de los proyectos y acreditaciones.</p></header>
-                <div className="cfg-card-body"><div className="cfg-fields"><label><span>Razón social</span><input value={contratistaLogueado.nombre} readOnly /></label><label><span>RUT empresa</span><input value={contratistaLogueado.rut} readOnly /></label></div><div className="cfg-note">Estos datos son parte de la identidad del contratista en Acredita. Para evitar inconsistencias entre proyectos y acreditaciones, no se modifican desde esta pantalla en el MVP.</div></div>
+                <div className="cfg-card-body"><div className="cfg-fields"><label><span>Razón social</span><input value={contratistaLogueado.nombre} readOnly /></label><label><span>RUT empresa</span><input value={contratistaLogueado.rut} readOnly /></label></div><div className="cfg-note">Estos datos forman parte de la identidad de la empresa en Acredita. Para evitar inconsistencias entre proyectos y acreditaciones, su modificación se gestiona mediante administración.</div></div>
               </section>
               <section className="cfg-card">
                 <header><h2>Proyectos asociados</h2><p>Proyectos en los que actualmente tu empresa participa como contratista.</p></header>
@@ -91,15 +93,21 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
             </>}
 
             {activeTab === 'notificaciones' && <section className="cfg-card">
-              <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos quieres que aparezcan como avisos dentro del portal. No se configuran canales externos en este MVP.</p></header>
+              <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos operativos quieres recibir como avisos dentro del portal.</p></header>
               <div className="cfg-card-body"><div className="cfg-pref-list">
                 {PREFERENCIAS.map(([key, titulo, descripcion]) => <div className="cfg-pref-row" key={key}><div><strong>{titulo}</strong><p>{descripcion}</p></div><button type="button" role="switch" aria-checked={preferencias[key]} aria-label={titulo} className={`cfg-switch ${preferencias[key] ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, [key]: !actual[key] }))}><span /></button></div>)}
               </div><div className="cfg-pref-foot"><span>Los cambios se guardan en tu cuenta y se aplican en cualquier dispositivo.</span><button className="cfg-save" disabled={!hayCambios || guardando} onClick={guardarPreferencias}>{guardando ? 'Guardando…' : 'Guardar preferencias'}</button></div></div>
             </section>}
 
+            {activeTab === 'carga' && <BulkWorkersConfig contratista={contratistaLogueado} proyectos={misProyectos} showToast={showToast} />}
+
             {activeTab === 'cuenta' && <section className="cfg-card">
-              <header><h2>Cuenta y sesión</h2><p>Información básica de la sesión actual. La gestión de contraseñas no forma parte del frontend MVP.</p></header>
-              <div className="cfg-card-body"><div className="cfg-session-row"><div className="cfg-session-box"><span>Tipo de acceso</span><b>Portal Contratista</b></div><div className="cfg-session-box"><span>Empresa activa</span><b>{contratistaLogueado.nombre}</b></div>{session?.email && <div className="cfg-session-box"><span>Cuenta</span><b>{session.email}</b></div>}</div><div className="cfg-logout"><div><strong>Cerrar sesión</strong><p>Finaliza la sesión actual y vuelve a la pantalla de acceso.</p></div><button onClick={onLogout}><LogOut size={14} />Cerrar sesión</button></div></div>
+              <header><h2>Cuenta y sesión</h2><p>Gestiona el acceso a tu cuenta y la sesión actual.</p></header>
+              <div className="cfg-card-body">
+                <div className="cfg-session-row"><div className="cfg-session-box"><span>Tipo de acceso</span><b>Portal Contratista</b></div><div className="cfg-session-box"><span>Empresa activa</span><b>{contratistaLogueado.nombre}</b></div>{session?.email && <div className="cfg-session-box"><span>Cuenta</span><b>{session.email}</b></div>}</div>
+                {session?.email && <div className="cfg-logout"><div><strong>Contraseña</strong><p>Solicita un enlace seguro por correo para definir una nueva contraseña.</p></div><Link to={`/recuperar?email=${encodeURIComponent(session.email)}`}><KeyRound size={14} />Cambiar contraseña</Link></div>}
+                <div className="cfg-logout"><div><strong>Cerrar sesión</strong><p>Finaliza la sesión actual y vuelve a la pantalla de acceso.</p></div><button onClick={onLogout}><LogOut size={14} />Cerrar sesión</button></div>
+              </div>
             </section>}
           </div>
         </div>
