@@ -10,6 +10,15 @@ function toHex(bytes: ArrayBuffer): string {
   return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function passwordError(password: string): string | null {
+  if (password.length < 12) return "La contraseña debe tener al menos 12 caracteres";
+  if (!/[a-záéíóúñ]/.test(password)) return "La contraseña debe incluir al menos una letra minúscula";
+  if (!/[A-ZÁÉÍÓÚÑ]/.test(password)) return "La contraseña debe incluir al menos una letra mayúscula";
+  if (!/\d/.test(password)) return "La contraseña debe incluir al menos un número";
+  if (!/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]/.test(password)) return "La contraseña debe incluir al menos un símbolo";
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -20,7 +29,8 @@ Deno.serve(async (req: Request) => {
     const password = String(body?.password || "");
     const fullName = String(body?.full_name || "").trim();
     if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Invitación inválida");
-    if (password.length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres");
+    const validationError = passwordError(password);
+    if (validationError) throw new Error(validationError);
     if (fullName.length < 2 || fullName.length > 120) throw new Error("Nombre inválido");
 
     const tokenHash = toHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
