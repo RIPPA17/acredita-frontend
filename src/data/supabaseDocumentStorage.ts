@@ -22,7 +22,7 @@ type BackendRequirement = {
   is_active: boolean;
 };
 type BackendWorker = { id: string; contratista_id: string; rut: string; is_active: boolean };
-type BackendDocument = { id: string; accreditation_id: string; requirement_id: string; worker_id: string | null };
+type BackendDocument = { id: string; accreditation_id: string; requirement_id: string; worker_id: string | null; obligation_id: string | null };
 type BackendVersion = {
   id: string;
   document_id: string;
@@ -40,6 +40,7 @@ export interface DocumentStorageContext {
   proyectoId: string;
   requisito: Pick<Requisito, 'id' | 'nombre' | 'destino'>;
   trabajadorRut?: string;
+  obligacionId?: string;
 }
 
 function authHeaders(accessToken: string, json = true): HeadersInit {
@@ -167,17 +168,19 @@ async function resolveDocumentContext(
   }
 
   const documents = await selectRows<BackendDocument>('documents', token, {
-    select: 'id,accreditation_id,requirement_id,worker_id',
+    select: 'id,accreditation_id,requirement_id,worker_id,obligation_id',
     accreditation_id: `eq.${accreditation.id}`,
     requirement_id: `eq.${requirement.id}`,
+    ...(context.obligacionId ? { obligation_id: `eq.${context.obligacionId}` } : {}),
   });
-  let document = documents.find(item => item.worker_id === workerId);
+  let document = documents.find(item => item.worker_id === workerId && (!context.obligacionId || item.obligation_id === context.obligacionId));
 
   if (!document && ensureDocument) {
     document = await insertReturning<BackendDocument>('documents', token, {
       accreditation_id: accreditation.id,
       requirement_id: requirement.id,
       worker_id: workerId,
+      obligation_id: context.obligacionId || null,
     });
   }
   if (!document) throw new Error('Este requisito todavía no tiene un documento asociado.');
@@ -250,6 +253,7 @@ export async function uploadDocumentFile(
     size_bytes: file.size,
     metadata: {
       frontend_document_id: `${context.proyectoId}:${context.requisito.id}:${context.trabajadorRut || 'empresa'}`,
+      obligation_id: context.obligacionId || null,
       real_storage_upload: true,
     },
   });

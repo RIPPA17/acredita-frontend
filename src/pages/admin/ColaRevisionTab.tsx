@@ -69,6 +69,7 @@ export default function ColaRevisionTab({
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [checks, setChecks] = useState({ legible: false, datos: false, vigencia: false });
+  const [criterionChecks, setCriterionChecks] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -116,6 +117,7 @@ export default function ColaRevisionTab({
 
   const resetForm = () => {
     setChecks({ legible: false, datos: false, vigencia: false });
+    setCriterionChecks({});
     setReason('');
     setNote('');
   };
@@ -126,11 +128,12 @@ export default function ColaRevisionTab({
       contratistaId: item.contratistaId,
       proyectoId: item.proyectoId,
       requisito: {
-        id: item.docId,
+        id: item.requisitoId || item.docId,
         nombre: item.title,
         destino: item.origen === 'Trabajador' ? 'trabajador' as const : 'empresa' as const,
       },
       trabajadorRut: item.trabajadorRut,
+      obligacionId: item.obligacionId,
     };
   };
 
@@ -197,8 +200,9 @@ export default function ColaRevisionTab({
 
   const aprobar = async () => {
     if (!current || !isMine || busy) return;
-    if (!(checks.legible && checks.datos && checks.vigencia)) {
-      showToast('Completa el chequeo mínimo antes de aprobar.', 'warning');
+    const customComplete = (current.criteriosRevision || []).every((criterion: string) => criterionChecks[criterion]);
+    if (!(checks.legible && checks.datos && checks.vigencia && customComplete)) {
+      showToast('Completa todos los criterios de revisión antes de aprobar.', 'warning');
       return;
     }
     setBusy(true);
@@ -351,6 +355,7 @@ export default function ColaRevisionTab({
                   <div className="border border-cream3 rounded-lg p-2"><span className="text-[8px] uppercase text-gray-400">Vigencia</span><strong className="block text-[10.5px] mt-0.5">{current.vigenciaLabel}</strong></div>
                   <div className="border border-cream3 rounded-lg p-2"><span className="text-[8px] uppercase text-gray-400">Trabajador</span><strong className="block text-[10.5px] mt-0.5 truncate">{current.trabajadorNombre || 'No aplica'}</strong></div>
                 </div>
+                {current.periodoEtiqueta && <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800"><strong>Período:</strong> {current.periodoEtiqueta}</div>}
                 <div className="bg-gray-50 border border-cream3 rounded-xl min-h-[430px] flex items-center justify-center p-4">
                   <DocumentPreview item={current} />
                 </div>
@@ -395,6 +400,8 @@ export default function ColaRevisionTab({
                   </label>
                 ))}
               </div>
+
+              {Boolean(current.criteriosRevision?.length) && <><div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold mb-2">Criterios del requisito</div><div className="flex flex-col gap-2 mb-3">{current.criteriosRevision.map((criterion: string) => <label key={criterion} className="flex items-start gap-2 border border-cream3 rounded-lg p-2 text-[11px]"><input type="checkbox" disabled={!isMine || busy} checked={Boolean(criterionChecks[criterion])} onChange={event => setCriterionChecks(value => ({ ...value, [criterion]: event.target.checked }))} /><span>{criterion}</span></label>)}</div></>}
 
               <select disabled={!isMine || busy} value={reason} onChange={event => setReason(event.target.value)} className="form-input w-full text-[11px] mb-2">
                 <option value="">Motivo si rechazas...</option>

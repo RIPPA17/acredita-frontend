@@ -3,17 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import LandingPage from './pages/Landing';
-import AdminPortal from './pages/Admin';
-import ContratistaPortal from './pages/Contratista';
-import LoginPage from './pages/Login';
-import RegistroPage from './pages/Registro';
-import InvitacionPage from './pages/Invitacion';
-import NotFoundPage from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
-import MandanteRoute from './components/MandanteRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
+
+const LandingPage = lazy(() => import('./pages/Landing'));
+const AdminPortal = lazy(() => import('./pages/Admin'));
+const ContratistaPortal = lazy(() => import('./pages/Contratista'));
+const LoginPage = lazy(() => import('./pages/Login'));
+const RegistroPage = lazy(() => import('./pages/Registro'));
+const InvitacionPage = lazy(() => import('./pages/Invitacion'));
+const NotFoundPage = lazy(() => import('./pages/NotFound'));
+const MandanteRoute = lazy(() => import('./components/MandanteRoute'));
 
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
@@ -31,7 +33,8 @@ export default function App() {
       )}
 
       <ErrorBoundary>
-        <Routes>
+        <Suspense fallback={<div className="min-h-screen grid place-items-center bg-cream2 text-navy" role="status">Cargando Acredita…</div>}>
+          <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/registro" element={<RegistroPage />} />
@@ -53,7 +56,8 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   );

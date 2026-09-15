@@ -14,6 +14,10 @@ type BackendAccreditationStatus = {
   access_allowed: boolean;
   payment_allowed: boolean;
   near_expiry_count: number;
+  access_blocked_count: number;
+  access_pending_count: number;
+  payment_blocked_count: number;
+  payment_pending_count: number;
 };
 
 type BackendWorkerStatus = {
@@ -41,6 +45,10 @@ export type DerivedAccreditationState = {
   accessAllowed: boolean;
   paymentAllowed: boolean;
   nearExpiryCount: number;
+  accessBlockedCount: number;
+  accessPendingCount: number;
+  paymentBlockedCount: number;
+  paymentPendingCount: number;
 };
 
 export type DerivedWorkerState = {
@@ -132,7 +140,7 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
     selectRows<BackendAccreditationStatus>(
       'accreditation_statuses',
       token,
-      'accreditation_id,project_id,contratista_id,status,compliance_percent,access_allowed,payment_allowed,near_expiry_count',
+      'accreditation_id,project_id,contratista_id,status,compliance_percent,access_allowed,payment_allowed,near_expiry_count,access_blocked_count,access_pending_count,payment_blocked_count,payment_pending_count',
     ),
     selectRows<BackendWorkerStatus>(
       'worker_accreditation_statuses',
@@ -156,6 +164,10 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
       accessAllowed: Boolean(row.access_allowed),
       paymentAllowed: Boolean(row.payment_allowed),
       nearExpiryCount: Number(row.near_expiry_count || 0),
+      accessBlockedCount: Number(row.access_blocked_count || 0),
+      accessPendingCount: Number(row.access_pending_count || 0),
+      paymentBlockedCount: Number(row.payment_blocked_count || 0),
+      paymentPendingCount: Number(row.payment_pending_count || 0),
     };
   }
 

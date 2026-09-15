@@ -22,6 +22,7 @@ function buildContext(item: any): DocumentStorageContext | null {
       destino: item.origen === 'Trabajador' ? 'trabajador' : 'empresa',
     },
     trabajadorRut: item.origen === 'Trabajador' ? item.trabajadorRut : undefined,
+    obligacionId: item.raw?.obligacionId,
   };
 }
 

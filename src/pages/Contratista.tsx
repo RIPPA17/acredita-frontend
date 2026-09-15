@@ -25,6 +25,7 @@ import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
+import { getServiciosProyecto } from '../data/operationalCore';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -52,6 +53,9 @@ export default function ContratistaPortal() {
     nombre: '',
     rut: '',
     cargo: '',
+    servicioId: '',
+    categorias: '',
+    fechaIngreso: new Date().toISOString().slice(0, 10),
   });
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
@@ -207,11 +211,22 @@ export default function ContratistaPortal() {
     }
 
     const workerDocs = crearDocumentosPendientesProyecto(projectReqs, contratista.id, selectedProyectoId, newWorkerForm.rut);
+    const assignment = {
+      id: `asignacion_${crypto.randomUUID()}`,
+      proyectoId: selectedProyectoId,
+      servicioId: newWorkerForm.servicioId || undefined,
+      cargo: newWorkerForm.cargo || undefined,
+      categorias: newWorkerForm.categorias.split(',').map(item => item.trim()).filter(Boolean),
+      fechaIngreso: newWorkerForm.fechaIngreso || undefined,
+      estado: 'activa' as const,
+      estadoAcceso: 'pendiente' as const,
+    };
 
     setSavingWorker(true);
     try {
       if (existingWorker) {
         existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
+        existingWorker.asignaciones = [...(existingWorker.asignaciones || []), assignment];
         existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
       } else {
         contratista.trabajadores.push({
@@ -222,12 +237,13 @@ export default function ContratistaPortal() {
           faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
           cumplimiento: 0,
           documentos: workerDocs,
+          asignaciones: [assignment],
         });
       }
       saveContratistas(list);
       await confirmBusinessPersistence('all');
       setDataRevision(value => value + 1);
-      setNewWorkerForm({ nombre: '', rut: '', cargo: '' });
+      setNewWorkerForm({ nombre: '', rut: '', cargo: '', servicioId: '', categorias: '', fechaIngreso: new Date().toISOString().slice(0, 10) });
       setShowAddWorkerModal(false);
       showToast('Trabajador agregado con éxito');
     } catch (error) {
@@ -570,6 +586,19 @@ export default function ContratistaPortal() {
                   placeholder="Ej. Operador"
                   required 
                 />
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Servicio o contrato</label>
+                <select value={newWorkerForm.servicioId} onChange={(e) => setNewWorkerForm({...newWorkerForm, servicioId: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm">
+                  <option value="">Asignación general al proyecto</option>
+                  {getServiciosProyecto(selectedProyectoId, contratistaLogueado.id).map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de ingreso</label><input type="date" value={newWorkerForm.fechaIngreso} onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaIngreso: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" /></div>
+                <div><label className="block text-[13px] font-medium text-gray-700 mb-1.5">Categorías</label><input value={newWorkerForm.categorias} onChange={(e) => setNewWorkerForm({...newWorkerForm, categorias: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" placeholder="Conductor, Altura" /></div>
               </div>
 
               <div className="text-[11px] leading-relaxed bg-cream2 p-3 rounded-lg text-gray-600">

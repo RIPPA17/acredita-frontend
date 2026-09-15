@@ -341,6 +341,7 @@ function DocumentsV5({
             destino: requirement.destino,
           },
           trabajadorRut: worker?.rut,
+          obligacionId: document.obligacionId,
         });
       } catch (error) {
         setFileError(error instanceof Error ? error.message : 'No fue posible abrir el archivo.');

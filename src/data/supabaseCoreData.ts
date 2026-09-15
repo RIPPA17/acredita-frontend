@@ -1,4 +1,4 @@
-import type { Contratista, Mandante, Proyecto, Requisito } from '../types';
+import type { Contratista, Mandante, Proyecto, Requisito, ServicioContrato } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { getRuntimeArray, purgeLegacyBusinessStorage, setRuntimeArray } from './runtimeDataStore';
 
@@ -22,6 +22,9 @@ type BackendProject = {
   name: string;
   status: 'draft' | 'active' | 'archived';
   integration_key: string | null;
+  location: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
 };
 
 type BackendContratista = {
@@ -30,6 +33,7 @@ type BackendContratista = {
   rut: string | null;
   integration_key: string | null;
   is_active: boolean;
+  parent_contratista_id: string | null;
 };
 
 type BackendAccreditation = {
@@ -53,6 +57,28 @@ type BackendRequirement = {
   criticality: Requisito['criticidad'];
   is_active: boolean;
   sort_order: number;
+  description: string | null;
+  review_checklist: string[];
+  applicability: { categories?: string[] } | null;
+  blocks_work: boolean;
+  blocks_assignment: boolean;
+  service_id: string | null;
+  due_days: number;
+};
+
+type BackendService = {
+  id: string;
+  accreditation_id: string;
+  integration_key: string | null;
+  code: string;
+  name: string;
+  category: string | null;
+  contractor_contact: string | null;
+  mandante_contact: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  status: ServicioContrato['estado'];
+  is_active: boolean;
 };
 
 type CoreRows = {
@@ -61,6 +87,7 @@ type CoreRows = {
   contratistas: BackendContratista[];
   accreditations: BackendAccreditation[];
   requirements: BackendRequirement[];
+  services: BackendService[];
 };
 
 function apiHeaders(accessToken: string, extra: HeadersInit = {}): HeadersInit {
@@ -144,6 +171,8 @@ function backendStatus(status: string): BackendProject['status'] {
 function frontendFrequency(frequency: string): string {
   switch (frequency) {
     case 'mensual': return 'Mensual';
+    case 'bimensual': return 'Bimensual';
+    case 'trimestral': return 'Trimestral';
     case 'seis_meses': return '6 meses';
     case 'un_ano': return '1 año';
     case 'sin_vencimiento': return 'Indefinido';
@@ -154,6 +183,8 @@ function frontendFrequency(frequency: string): string {
 
 function backendFrequency(frequency: string): { frequency: string; validityDays: number | null } {
   const normalized = (frequency || '').trim().toLowerCase();
+  if (normalized.includes('bimens')) return { frequency: 'bimensual', validityDays: 60 };
+  if (normalized.includes('trimes')) return { frequency: 'trimestral', validityDays: 90 };
   if (normalized.includes('mens')) return { frequency: 'mensual', validityDays: 30 };
   if (normalized.includes('6') || normalized.includes('seis')) return { frequency: 'seis_meses', validityDays: 180 };
   if (normalized.includes('1 año') || normalized.includes('un año') || normalized.includes('anual')) return { frequency: 'un_ano', validityDays: 365 };
@@ -175,14 +206,15 @@ function fallbackContractor(id: string): Contratista | undefined {
 }
 
 async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
-  const [mandantes, projects, contratistas, accreditations, requirements] = await Promise.all([
+  const [mandantes, projects, contratistas, accreditations, requirements, services] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
-    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key'),
-    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active'),
+    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at'),
+    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active'),
-    selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order'),
+    selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
+    selectRows<BackendService>('services', accessToken, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active'),
   ]);
-  return { mandantes, projects, contratistas, accreditations, requirements };
+  return { mandantes, projects, contratistas, accreditations, requirements, services };
 }
 
 function scopeLocalProjects(session: SupabaseUserSession, projects: Proyecto[]): Proyecto[] {
@@ -211,6 +243,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   const mandanteKeyByUuid = new Map(rows.mandantes.map(row => [row.id, row.integration_key || row.id]));
   const projectKeyByUuid = new Map(rows.projects.map(row => [row.id, row.integration_key || row.id]));
   const contractorKeyByUuid = new Map(rows.contratistas.map(row => [row.id, row.integration_key || row.id]));
+  const serviceKeyByUuid = new Map(rows.services.map(row => [row.id, row.integration_key || row.id]));
 
   const activeContractorsByProject = new Map<string, string[]>();
   rows.accreditations.filter(row => row.is_active).forEach(row => {
@@ -251,6 +284,9 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         mandanteId: mandanteKeyByUuid.get(row.mandante_id)!,
         estado: frontendStatus(row.status),
         contratistas: activeContractorsByProject.get(id) || [],
+        ubicacion: row.location || fallback?.ubicacion,
+        fechaInicio: row.starts_at || fallback?.fechaInicio,
+        fechaTermino: row.ends_at || fallback?.fechaTermino,
       };
     });
 
@@ -274,6 +310,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         nombre: row.name,
         rut: row.rut || fallback?.rut || '',
         proyectos: projectIdsByContractor.get(id) || [],
+        contratistaPadreId: row.parent_contratista_id ? contractorKeyByUuid.get(row.parent_contratista_id) : undefined,
       };
     });
 
@@ -291,12 +328,39 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
       criticidad: row.criticality,
       proyectoId: projectKeyByUuid.get(row.project_id)!,
       activo: row.is_active,
+      descripcion: row.description || undefined,
+      checklistRevision: Array.isArray(row.review_checklist) ? row.review_checklist : [],
+      categoriasAplicables: Array.isArray(row.applicability?.categories) ? row.applicability!.categories : [],
+      bloqueaTrabajo: row.blocks_work,
+      bloqueaAsignacion: row.blocks_assignment,
+      servicioId: row.service_id ? serviceKeyByUuid.get(row.service_id) : undefined,
+      diasPlazo: row.due_days,
     }));
+
+  const accreditationById = new Map(rows.accreditations.map(row => [row.id, row]));
+  const frontendServices: ServicioContrato[] = rows.services.map(row => {
+    const accreditation = accreditationById.get(row.accreditation_id);
+    return {
+      id: row.integration_key || row.id,
+      proyectoId: accreditation ? (projectKeyByUuid.get(accreditation.project_id) || accreditation.project_id) : '',
+      contratistaId: accreditation ? (contractorKeyByUuid.get(accreditation.contratista_id) || accreditation.contratista_id) : '',
+      nombre: row.name,
+      codigo: row.code,
+      categoria: row.category || undefined,
+      responsableContratista: row.contractor_contact || undefined,
+      responsableMandante: row.mandante_contact || undefined,
+      fechaInicio: row.starts_at || undefined,
+      fechaTermino: row.ends_at || undefined,
+      estado: row.status,
+      activo: row.is_active,
+    };
+  }).filter(row => row.proyectoId && row.contratistaId);
 
   writeArray('acredita_mandantes', frontendMandantes);
   writeArray('acredita_proyectos', frontendProjects);
   writeArray('acredita_contratistas', frontendContractors);
   writeArray('acredita_requisitos', frontendRequirements);
+  writeArray('acredita_servicios', frontendServices);
 }
 
 async function syncMandantes(
@@ -367,8 +431,15 @@ async function syncContractors(
     }
   }
 
-  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,integration_key,is_active');
-  return new Map(refreshed.filter(row => row.integration_key).map(row => [row.integration_key as string, row.id]));
+  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,integration_key,is_active,parent_contratista_id');
+  const uuidByKey = new Map(refreshed.filter(row => row.integration_key).map(row => [row.integration_key as string, row.id]));
+  if (session.role === 'admin') {
+    for (const contractor of scoped) {
+      const parentUuid = contractor.contratistaPadreId ? uuidByKey.get(contractor.contratistaPadreId) : null;
+      await patchRows('contratistas', token, { integration_key: `eq.${contractor.id}` }, { parent_contratista_id: parentUuid });
+    }
+  }
+  return uuidByKey;
 }
 
 async function syncProjects(
@@ -395,6 +466,9 @@ async function syncProjects(
         status: backendStatus(project.estado),
         mandante_id: mandanteUuid,
         updated_at: new Date().toISOString(),
+        location: project.ubicacion || null,
+        starts_at: project.fechaInicio || null,
+        ends_at: project.fechaTermino || null,
       });
     } else {
       await insertRows('projects', token, {
@@ -403,6 +477,9 @@ async function syncProjects(
         name: project.nombre,
         code: project.id.toUpperCase().slice(0, 64),
         status: backendStatus(project.estado),
+        location: project.ubicacion || null,
+        starts_at: project.fechaInicio || null,
+        ends_at: project.fechaTermino || null,
       }, 'integration_key');
     }
   }
@@ -459,6 +536,8 @@ async function syncRequirements(
 ): Promise<void> {
   if (session.role === 'contratista') return;
   const token = session._supabase.accessToken;
+  const backendServices = await selectRows<BackendService>('services', token, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active');
+  const serviceUuidByKey = new Map(backendServices.filter(item => item.integration_key).map(item => [item.integration_key as string, item.id]));
   const scoped = scopeLocalRequirements(session, localRequirements, localProjects);
   const payload = scoped.map((requirement, index) => {
     const frequency = backendFrequency(requirement.frecuencia);
@@ -475,12 +554,19 @@ async function syncRequirements(
       criticality: requirement.criticidad,
       is_active: requirement.activo !== false,
       sort_order: index + 1,
+      description: requirement.descripcion || null,
+      review_checklist: requirement.checklistRevision || [],
+      applicability: { categories: requirement.categoriasAplicables || [] },
+      blocks_work: requirement.bloqueaTrabajo || false,
+      blocks_assignment: requirement.bloqueaAsignacion || false,
+      service_id: requirement.servicioId ? serviceUuidByKey.get(requirement.servicioId) || null : null,
+      due_days: Math.min(90, Math.max(0, requirement.diasPlazo ?? 5)),
     };
   }).filter(row => Boolean(row.project_id));
 
   if (payload.length > 0) await insertRows('requirements', token, payload, 'integration_key');
 
-  const backend = await selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order');
+  const backend = await selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days');
   const scopedProjectUuids = new Set(scopeLocalProjects(session, localProjects).map(project => projectUuidByKey.get(project.id)).filter(Boolean) as string[]);
   const desiredKeys = new Set(payload.map(row => row.integration_key));
 
@@ -490,12 +576,54 @@ async function syncRequirements(
   }
 }
 
+async function syncServices(
+  session: SupabaseUserSession,
+  rows: CoreRows,
+  projectUuidByKey: Map<string, string>,
+  contractorUuidByKey: Map<string, string>,
+  projects: Proyecto[],
+  services: ServicioContrato[],
+): Promise<void> {
+  if (session.role === 'contratista') return;
+  const token = session._supabase.accessToken;
+  const scopedProjectIds = new Set(scopeLocalProjects(session, projects).map(item => item.id));
+  const accreditationByContext = new Map(rows.accreditations.map(item => [`${item.project_id}:${item.contratista_id}`, item]));
+  const desired = services.filter(item => scopedProjectIds.has(item.proyectoId));
+  for (const service of desired) {
+    const projectUuid = projectUuidByKey.get(service.proyectoId);
+    const contractorUuid = contractorUuidByKey.get(service.contratistaId);
+    const accreditation = projectUuid && contractorUuid ? accreditationByContext.get(`${projectUuid}:${contractorUuid}`) : undefined;
+    if (!accreditation) continue;
+    await insertRows('services', token, {
+      accreditation_id: accreditation.id,
+      integration_key: service.id,
+      code: service.codigo,
+      name: service.nombre,
+      category: service.categoria || null,
+      contractor_contact: service.responsableContratista || null,
+      mandante_contact: service.responsableMandante || null,
+      starts_at: service.fechaInicio || null,
+      ends_at: service.fechaTermino || null,
+      status: service.estado,
+      is_active: service.activo,
+      updated_at: new Date().toISOString(),
+    }, 'integration_key');
+  }
+  const desiredKeys = new Set(desired.map(item => item.id));
+  for (const service of rows.services) {
+    if (service.integration_key && !desiredKeys.has(service.integration_key) && service.is_active) {
+      await patchRows('services', token, { id: `eq.${service.id}` }, { is_active: false, updated_at: new Date().toISOString() });
+    }
+  }
+}
+
 export async function pushCoreDataToSupabase(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
   const mandantes = readArray<Mandante>('acredita_mandantes', []);
   const projects = readArray<Proyecto>('acredita_proyectos', []);
   const contractors = readArray<Contratista>('acredita_contratistas', []);
   const requirements = readArray<Requisito>('acredita_requisitos', []);
+  const services = readArray<ServicioContrato>('acredita_servicios', []);
   const rows = await fetchCoreRows(session._supabase.accessToken);
 
   await syncMandantes(session, rows, mandantes);
@@ -504,6 +632,8 @@ export async function pushCoreDataToSupabase(session: SupabaseUserSession): Prom
   const refreshedRows = await fetchCoreRows(session._supabase.accessToken);
   const projectUuidByKey = await syncProjects(session, refreshedRows, projects);
   await syncAccreditations(session, projectUuidByKey, contractorUuidByKey, projects);
+  const rowsAfterAccreditations = await fetchCoreRows(session._supabase.accessToken);
+  await syncServices(session, rowsAfterAccreditations, projectUuidByKey, contractorUuidByKey, projects, services);
   await syncRequirements(session, projectUuidByKey, projects, requirements);
 }
 
@@ -513,4 +643,3 @@ export async function prepareCoreDataForSession(session: SupabaseUserSession): P
   purgeLegacyBusinessStorage();
   await hydrateCoreDataFromSupabase(session);
 }
-
