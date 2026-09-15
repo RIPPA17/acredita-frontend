@@ -2,6 +2,7 @@ import React from 'react';
 import { Copy, Send, X } from 'lucide-react';
 import type { Contratista, Proyecto } from '../types';
 import { restoreSupabaseSession } from '../data/supabaseAuth';
+import { isValidRut } from '../utils/rut';
 import {
   contractorInvitationLink,
   createContractorInvitation,
@@ -39,7 +40,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
     setMessage('');
     setInviteLink(null);
     setMailSent(false);
-  }, [open]);
+  }, [open, projects]);
 
   if (!open) return null;
 
@@ -54,6 +55,10 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
     if (!email.trim() || !projectKey) return;
     if (mode === 'existing' && !contractorKey) return;
     if (mode === 'new' && (!name.trim() || !rut.trim())) return;
+    if (mode === 'new' && !isValidRut(rut)) {
+      showToast('El RUT del contratista no es válido. Revisa el número y dígito verificador.', 'error');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -76,7 +81,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
         await sendContractorInvitationEmail(invitation.invitation_id, invitation.token, session._supabase.accessToken);
         setMailSent(true);
         showToast(`Invitación enviada a ${email.trim().toLowerCase()}`);
-      } catch (mailError) {
+      } catch {
         setMailSent(false);
         showToast('Invitación creada. El correo no pudo enviarse; puedes copiar el enlace.', 'warning');
       }
@@ -121,6 +126,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
               <div>
                 <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">RUT</label>
                 <input value={rut} onChange={(e) => setRut(e.target.value)} className="form-input w-full" placeholder="76.123.456-7" required />
+                {rut.trim() && !isValidRut(rut) && <p className="text-[11px] text-red-600 mt-1">RUT inválido.</p>}
               </div>
             </div>
           )}
@@ -153,7 +159,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
 
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="btn btn-secondary">Cerrar</button>
-            {!inviteLink && <button type="submit" disabled={submitting} className="btn btn-primary"><Send size={15} /> {submitting ? 'Enviando…' : 'Enviar invitación'}</button>}
+            {!inviteLink && <button type="submit" disabled={submitting || (mode === 'new' && !!rut.trim() && !isValidRut(rut))} className="btn btn-primary"><Send size={15} /> {submitting ? 'Enviando…' : 'Enviar invitación'}</button>}
           </div>
         </form>
       </div>
