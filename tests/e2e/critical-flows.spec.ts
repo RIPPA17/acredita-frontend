@@ -203,10 +203,11 @@ test('12 Contratista ve trabajador asignado', async ({ page }) => {
   await expect(page.getByText('Trabajador Piloto')).toBeVisible();
 });
 
-test('13 Contratista puede abrir configuración sin perder sesión', async ({ page }) => {
+test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
   await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Notificaciones', exact: true }).click();
   await expect(page.locator('body')).toContainText('Documento rechazado');
 });
 
