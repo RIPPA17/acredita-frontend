@@ -5,7 +5,7 @@ import { completeSupabasePasswordRecovery, requestSupabasePasswordReset, tokensF
 
 export default function RecuperarPasswordPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const authLink = tokensFromAuthHash();
+  const authLink = useMemo(() => tokensFromAuthHash(), []);
   const isInviteLink = authLink?.type === 'invite';
   const isPasswordSetupLink = authLink?.type === 'recovery' || isInviteLink;
   const [email, setEmail] = useState(params.get('email') || '');
