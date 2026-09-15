@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Ese correo ya tiene acceso a otra organización Mandante. Usa una cuenta separada para evitar ambigüedad." }, 409);
       }
     } else {
-      const redirectTo = "https://acredita-frontend.vercel.app/login?rol=mandante";
+      const redirectTo = "https://acredita-frontend.vercel.app/recuperar";
       const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
         redirectTo,
         data: { full_name: fullName },
