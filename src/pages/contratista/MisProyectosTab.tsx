@@ -8,6 +8,8 @@ import {
   getRequisitos,
 } from '../../data/localStorageDb';
 import { Contratista, Proyecto, Mandante, Requisito, Trabajador } from '../../types';
+import AssetsPanel from '../../components/AssetsPanel';
+import { getServiciosProyecto } from '../../data/operationalCore';
 import { buildAcreditacionRows, estadoUILabel, DocEstado, EstadoUI } from '../admin/acreditacionUtils';
 import {
   accionEmpresaLabel,
@@ -128,18 +130,20 @@ function DetalleProyecto({
   onIrATrabajadores,
   onVerFicha,
   detalleRef,
+  showToast,
 }: {
   info: ProyectoInfo;
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
   requisitosAll: Requisito[];
-  detalleTab: 'resumen' | 'empresa' | 'trabajadores';
-  setDetalleTab: (t: 'resumen' | 'empresa' | 'trabajadores') => void;
+  detalleTab: 'resumen' | 'empresa' | 'trabajadores' | 'activos';
+  setDetalleTab: (t: 'resumen' | 'empresa' | 'trabajadores' | 'activos') => void;
   onClose: () => void;
   onIrADocumentos: (proyectoId: string) => void;
   onIrATrabajadores: (proyectoId: string, worker?: Trabajador) => void;
   onVerFicha?: (proyectoId: string) => void;
   detalleRef: RefObject<HTMLDivElement>;
+  showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const { proyecto: p, mandante, estadoUI, accesoPago, estadoAcceso, proximoVenc, problemaPrincipal, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct } = info;
 
@@ -166,13 +170,13 @@ function DetalleProyecto({
         </div>
 
         <div className="mp-detail-tabs">
-          {(['resumen', 'empresa', 'trabajadores'] as const).map(t => (
+          {(['resumen', 'empresa', 'trabajadores', 'activos'] as const).map(t => (
             <button
               key={t}
               className={`mp-detail-tab ${detalleTab === t ? 'active' : ''}`}
               onClick={() => setDetalleTab(t)}
             >
-              {t === 'resumen' ? 'Resumen' : t === 'empresa' ? 'Empresa' : 'Trabajadores'}
+              {t === 'resumen' ? 'Resumen' : t === 'empresa' ? 'Empresa' : t === 'trabajadores' ? 'Trabajadores' : 'Vehículos y equipos'}
             </button>
           ))}
         </div>
@@ -289,6 +293,7 @@ function DetalleProyecto({
             )}
           </div>
         )}
+        {detalleTab === 'activos' && <AssetsPanel project={p} contractors={[contratistaLogueado]} services={getServiciosProyecto(p.id, contratistaLogueado.id)} contractorKey={contratistaLogueado.id} showToast={showToast} />}
       </div>
     </div>
   );
@@ -302,6 +307,7 @@ export default function MisProyectosTab({
   setActiveTab,
   setSelectedWorkerForDocs,
   setShowFichaAcreditacion,
+  showToast,
 }: {
   contratistaLogueado: Contratista;
   misProyectos: Proyecto[];
@@ -311,11 +317,12 @@ export default function MisProyectosTab({
   setActiveTab: (v: string) => void;
   setSelectedWorkerForDocs?: (v: Trabajador | null) => void;
   setShowFichaAcreditacion?: (v: boolean) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'Todos' | EstadoUI>('Todos');
   const [detalleProyectoId, setDetalleProyectoId] = useState<string | null>(null);
-  const [detalleTab, setDetalleTab] = useState<'resumen' | 'empresa' | 'trabajadores'>('resumen');
+  const [detalleTab, setDetalleTab] = useState<'resumen' | 'empresa' | 'trabajadores' | 'activos'>('resumen');
   const detalleRef = useRef<HTMLDivElement>(null);
 
   // --- Única fuente de verdad de acreditación: la misma que usa Inicio ---
@@ -595,6 +602,7 @@ export default function MisProyectosTab({
             onIrATrabajadores={irATrabajadores}
             onVerFicha={verFicha}
             detalleRef={detalleRef}
+            showToast={showToast}
           />
         )}
       </section>
