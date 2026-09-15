@@ -1,3 +1,5 @@
+import { passwordValidationError } from '../utils/password';
+
 export type AppRole = 'admin' | 'mandante' | 'contratista';
 
 export interface SupabaseUserSession {
@@ -237,7 +239,8 @@ export async function requestSupabasePasswordReset(email: string, redirectTo?: s
 }
 
 export async function completeSupabasePasswordRecovery(password: string, hash?: string): Promise<void> {
-  if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+  const validationError = passwordValidationError(password);
+  if (validationError) throw new Error(validationError);
   const parsed = tokensFromAuthHash(hash);
   if (!parsed || !['recovery', 'invite'].includes(parsed.type || '')) {
     throw new Error('El enlace de recuperación o invitación no es válido o ya venció. Solicita uno nuevo.');

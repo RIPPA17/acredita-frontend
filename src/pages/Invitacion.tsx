@@ -9,6 +9,7 @@ import {
   tokensFromAuthHash,
   type InvitationPreview,
 } from '../data/supabaseInvitations';
+import { PASSWORD_MIN_LENGTH, passwordValidationError } from '../utils/password';
 
 type Mode = 'choose' | 'login' | 'signup' | 'email-invite' | 'email-existing';
 
@@ -52,6 +53,19 @@ export default function InvitacionPage() {
     }
   };
 
+  const validateNewPassword = () => {
+    const validationError = passwordValidationError(password);
+    if (validationError) {
+      setError(validationError);
+      return false;
+    }
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return false;
+    }
+    return true;
+  };
+
   const submitExisting = (event: React.FormEvent) => {
     event.preventDefault();
     if (!preview) return;
@@ -60,20 +74,13 @@ export default function InvitacionPage() {
 
   const submitSignup = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!preview) return;
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
-    }
+    if (!preview || !validateNewPassword()) return;
     void finish(() => signupAndAcceptContractorInvitation(token, preview.invited_email, fullName, password));
   };
 
   const submitEmailInvite = (event: React.FormEvent) => {
     event.preventDefault();
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
-    }
+    if (!validateNewPassword()) return;
     void finish(async () => {
       const session = await finishEmailInvite(token, fullName, password);
       if (!session) throw new Error('El enlace de autenticación no contiene una sesión válida');
@@ -86,6 +93,12 @@ export default function InvitacionPage() {
       if (!session) throw new Error('El enlace de autenticación no contiene una sesión válida');
     });
   };
+
+  const passwordHint = (
+    <p className="text-[11px] text-gray-500 mt-1">
+      Mínimo {PASSWORD_MIN_LENGTH} caracteres, con mayúscula, minúscula, número y símbolo.
+    </p>
+  );
 
   if (loading) {
     return (
@@ -181,11 +194,12 @@ export default function InvitacionPage() {
             </div>
             <div>
               <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contraseña</label>
-              <input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              <input type="password" minLength={PASSWORD_MIN_LENGTH} value={password} onChange={(e) => setPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              {passwordHint}
             </div>
             <div>
               <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Repetir contraseña</label>
-              <input type="password" minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              <input type="password" minLength={PASSWORD_MIN_LENGTH} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
             </div>
             <button disabled={submitting} className="btn btn-primary w-full justify-center">{submitting ? 'Creando cuenta…' : 'Crear cuenta y aceptar'}</button>
             <button type="button" className="text-sm text-gray-500" onClick={() => setMode('choose')}>Volver</button>
@@ -201,11 +215,12 @@ export default function InvitacionPage() {
             </div>
             <div>
               <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contraseña</label>
-              <input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              <input type="password" minLength={PASSWORD_MIN_LENGTH} value={password} onChange={(e) => setPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              {passwordHint}
             </div>
             <div>
               <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Repetir contraseña</label>
-              <input type="password" minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
+              <input type="password" minLength={PASSWORD_MIN_LENGTH} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="form-input w-full" autoComplete="new-password" />
             </div>
             <button disabled={submitting} className="btn btn-primary w-full justify-center">{submitting ? 'Activando…' : 'Activar cuenta y aceptar'}</button>
           </form>
