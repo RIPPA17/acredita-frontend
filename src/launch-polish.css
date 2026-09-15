@@ -1,0 +1,85 @@
+/* Final launch polish for the public surface. Kept separate from the portal styles
+   so the operational interfaces remain untouched. */
+
+@media (max-width: 767px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav {
+    min-height: 56px;
+    height: auto;
+    gap: 0.75rem;
+    padding: 0.55rem 1rem;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav > div:first-child {
+    flex-shrink: 0;
+    font-size: 20px;
+    letter-spacing: 1.5px;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav > div:last-child {
+    min-width: 0;
+    gap: 0.4rem;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav > div:last-child .btn {
+    white-space: nowrap;
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+
+  /* The hero already carries the public access CTA. Keeping only login in the
+     mobile navbar prevents a 320–360 px header from overflowing. */
+  #root > .bg-white.min-h-screen.text-navy > nav > div:last-child > a.btn-primary {
+    display: none;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > .px-12 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div {
+    padding-top: 3.5rem;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div > h1 {
+    max-width: 520px;
+    font-size: 36px;
+    line-height: 1.08;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div > p {
+    font-size: 16px;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div > .flex.gap-3.justify-center {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div > .flex.gap-3.justify-center > * {
+    width: min(100%, 270px);
+  }
+
+  #root > .bg-white.min-h-screen.text-navy h2.text-\[44px\] {
+    font-size: 34px;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+@media (max-width: 380px) {
+  #root > .bg-white.min-h-screen.text-navy > nav + div > h1 {
+    font-size: 32px;
+  }
+
+  #root > .bg-white.min-h-screen.text-navy > nav + div > div:first-child {
+    font-size: 12px;
+  }
+}
