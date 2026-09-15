@@ -8,6 +8,7 @@ import {
   type SupabaseRawTokens,
   type SupabaseUserSession,
 } from './supabaseAuth';
+import { passwordValidationError } from '../utils/password';
 
 export type InvitationPreview = {
   invitation_id: string;
@@ -124,6 +125,8 @@ export async function getContractorInvitationPreview(token: string): Promise<Inv
 }
 
 export async function signupFromContractorInvitation(token: string, fullName: string, password: string): Promise<void> {
+  const validationError = passwordValidationError(password);
+  if (validationError) throw new Error(validationError);
   const response = await fetch(`${SUPABASE_URL}/functions/v1/signup-contractor-invitation`, {
     method: 'POST',
     headers: headers(),
@@ -171,7 +174,9 @@ export async function finishEmailInvite(
   const parsed = tokensFromAuthHash();
   if (!parsed) return null;
   if (parsed.type === 'invite') {
-    if (!password || password.length < 8) throw new Error('Debes crear una contraseña de al menos 8 caracteres');
+    if (!password) throw new Error('Debes crear una contraseña.');
+    const validationError = passwordValidationError(password);
+    if (validationError) throw new Error(validationError);
     await updateSupabaseUser(parsed.tokens.accessToken, { password, fullName });
   }
   const session = await acceptContractorInvitation(token, parsed.tokens);
