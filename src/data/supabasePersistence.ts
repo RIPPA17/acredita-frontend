@@ -3,6 +3,12 @@ import { getStoredSupabaseSession, getSupabaseSessionForRequest } from './supaba
 import { hydrateCoreDataFromSupabase, pushCoreDataToSupabase } from './supabaseCoreData';
 import { hydrateOperationalDataFromSupabase, pushOperationalDataToSupabase } from './supabaseOperationalData';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
+import {
+  BusinessSyncConflictError,
+  captureBusinessRevision,
+  claimBusinessSync,
+  releaseBusinessSync,
+} from './supabaseBusinessSync';
 
 export type BusinessPersistenceScope = 'core' | 'operational' | 'all';
 
@@ -16,9 +22,19 @@ let lastPersistenceError: unknown = null;
 async function persistBatch(core: boolean, operational: boolean, sessionHint: SupabaseUserSession | null): Promise<void> {
   const session = await getSupabaseSessionForRequest(sessionHint);
   if (!session) throw new Error('La sesión expiró antes de guardar los cambios.');
-  if (core) await pushCoreDataToSupabase(session);
-  if (operational) await pushOperationalDataToSupabase(session);
-  if (core || operational) await refreshDerivedStateCache(session);
+
+  await claimBusinessSync(session);
+  try {
+    if (core) await pushCoreDataToSupabase(session);
+    if (operational) await pushOperationalDataToSupabase(session);
+    if (core || operational) await refreshDerivedStateCache(session);
+  } finally {
+    try {
+      await releaseBusinessSync(session);
+    } catch (releaseError) {
+      console.error('No fue posible liberar el bloqueo de sincronización.', releaseError);
+    }
+  }
 }
 
 function enqueuePendingBatch(): void {
@@ -77,9 +93,11 @@ async function restoreBusinessState(scope: BusinessPersistenceScope, session: Su
 }
 
 /**
- * Espera a que los cambios ya encolados lleguen a Supabase antes de que la UI
- * informe éxito. Si la escritura falla, vuelve a hidratar desde el backend para
- * retirar cualquier estado optimista que solo existía en memoria.
+ * La memoria del frontend es solo una caché optimista. Antes de escribir, el
+ * coordinador comprueba que la revisión de Supabase siga siendo la misma que
+ * se hidrató al abrir/refrescar la sesión y serializa los lotes. Después de
+ * cada escritura se vuelve a hidratar desde Supabase, que queda como única
+ * fuente de verdad. Ante concurrencia se descarta el snapshot local obsoleto.
  */
 export async function confirmBusinessPersistence(scope: BusinessPersistenceScope): Promise<void> {
   const session = await getSupabaseSessionForRequest(getStoredSupabaseSession());
@@ -88,12 +106,16 @@ export async function confirmBusinessPersistence(scope: BusinessPersistenceScope
   requestBusinessPersistence(scope);
   try {
     await flushBusinessPersistence();
+    await restoreBusinessState(scope, session);
+    await captureBusinessRevision(session);
   } catch (error) {
     try {
       await restoreBusinessState(scope, session);
+      await captureBusinessRevision(session);
     } catch (recoveryError) {
       console.error('No fue posible restaurar el estado desde Supabase tras un fallo de persistencia.', recoveryError);
     }
+    if (error instanceof BusinessSyncConflictError) throw error;
     throw error;
   }
 }
