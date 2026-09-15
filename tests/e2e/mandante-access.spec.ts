@@ -36,7 +36,7 @@ async function mockAdmin(page: Page) {
 test('21 Acredita puede invitar la cuenta administradora de un Mandante', async ({ page }) => {
   const calls = await mockAdmin(page);
   await page.goto('/admin');
-  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByTitle('Configuración').click();
   await page.getByRole('button', { name: 'Accesos Mandante', exact: true }).click();
   await expect(page.getByText('Mandante Invitación QA')).toBeVisible();
   await page.getByLabel('Nombre de la persona').fill('Gerencia Mandante');
