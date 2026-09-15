@@ -459,6 +459,7 @@ export default function ContratistaPortal() {
               setActiveTab={setActiveTab}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
+              showToast={showToast}
             />
           )}
 
