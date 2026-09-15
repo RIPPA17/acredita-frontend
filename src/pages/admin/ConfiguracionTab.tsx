@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { PlantillaBase, Verificador } from '../../types';
 import { loadDocumentTemplates } from '../../data/supabaseTemplates';
+import AccessRequestsConfig from './configuracion/AccessRequestsConfig';
 import GeneralConfig from './configuracion/GeneralConfig';
 import PlantillasSupabaseConfig from './configuracion/PlantillasSupabaseConfig';
 
-type Tab = 'general' | 'plantillas';
+type Tab = 'general' | 'solicitudes' | 'plantillas';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'general', label: 'General' },
+  { id: 'solicitudes', label: 'Solicitudes de acceso' },
   { id: 'plantillas', label: 'Plantillas base' },
 ];
 
@@ -49,7 +51,7 @@ export default function ConfiguracionTab({
         <div className="max-w-[1200px] mx-auto">
           <span className="text-[11px] tracking-[2px] uppercase font-semibold text-gold-hover">Panel de administración</span>
           <h2 className="text-2xl font-semibold text-white mt-1">Configuración</h2>
-          <p className="text-[13.5px] text-gray-300 mt-1.5 max-w-[650px]">Parámetros operativos del producto y catálogo base para requisitos.</p>
+          <p className="text-[13.5px] text-gray-300 mt-1.5 max-w-[650px]">Parámetros operativos, solicitudes de acceso y catálogo base de requisitos.</p>
         </div>
       </div>
 
@@ -70,6 +72,8 @@ export default function ConfiguracionTab({
           <div className="p-5">
             {tab === 'general' ? (
               <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} />
+            ) : tab === 'solicitudes' ? (
+              <AccessRequestsConfig showToast={showToast} />
             ) : loadingPlantillas ? (
               <div className="py-14 text-center text-[13px] text-gray-400">Cargando plantillas desde Supabase…</div>
             ) : plantillasError ? (
