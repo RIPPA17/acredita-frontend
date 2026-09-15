@@ -135,22 +135,6 @@ export async function createPayment(projectKey: string, contractorKey: string, i
   });
 }
 
-export async function updatePaymentStatus(id: string, status: 'observado' | 'retenido' | 'liberado' | 'pagado', reason?: string) {
-  const session = await getSupabaseSessionForRequest();
-  if (!session) throw new Error('Tu sesión expiró.');
-  const now = new Date().toISOString();
-  await request<void>(`payment_cases?id=eq.${id}`, {
-    method: 'PATCH', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({
-      status,
-      block_reason: status === 'retenido' || status === 'observado' ? (reason || 'Pendiente de regularización') : null,
-      released_by: status === 'liberado' || status === 'pagado' ? session.profileId : null,
-      released_at: status === 'liberado' || status === 'pagado' ? now : null,
-      paid_at: status === 'pagado' ? now : null,
-    }),
-  });
-}
-
 export async function listPaymentApprovals(paymentCaseId: string): Promise<PaymentApprovalRecord[]> {
   return request<PaymentApprovalRecord[]>(`payment_approvals?select=*&payment_case_id=eq.${paymentCaseId}&order=created_at.desc`);
 }

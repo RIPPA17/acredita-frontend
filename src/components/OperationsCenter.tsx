@@ -6,12 +6,12 @@ import {
   createPayment,
   createTicket,
   loadOperations,
-  updatePaymentStatus,
   updateTicketStatus,
   type EvaluationRecord,
   type PaymentRecord,
   type TicketRecord,
 } from '../data/supabaseOperations';
+import { markPaymentPaid } from '../data/supabasePaymentState';
 import { EvaluationActionPlans, PaymentApprovals, TicketConversation } from './OperationsWorkflowPanels';
 import IntegrationsPanel from './IntegrationsPanel';
 
@@ -63,16 +63,19 @@ export default function OperationsCenter({
       }
       setSubject(''); setDescription(''); setAmount(''); setInvoiceNumber('');
       await load();
-      showToast(mode === 'evaluacion' ? 'Evaluación publicada.' : mode === 'pago' ? 'Estado de pago creado y pendiente de decisión.' : 'Ticket creado.');
+      showToast(mode === 'evaluacion' ? 'Evaluación publicada.' : mode === 'pago' ? 'Estado de pago creado y pendiente de aprobación.' : 'Ticket creado.');
     } catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible guardar.', 'error'); }
     finally { setSaving(false); }
   };
 
-  const changePayment = async (id: string, status: 'retenido' | 'liberado' | 'pagado') => {
-    const reason = status === 'retenido' ? window.prompt('Motivo de la retención:') || '' : undefined;
-    if (status === 'retenido' && !reason) return;
-    try { await updatePaymentStatus(id, status, reason); await load(); showToast(`Estado de pago ${status}.`); }
-    catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible actualizar el pago.', 'error'); }
+  const confirmPaid = async (id: string) => {
+    try {
+      await markPaymentPaid(id);
+      await load();
+      showToast('Pago marcado como pagado.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible marcar el pago como pagado.', 'error');
+    }
   };
 
   const changeTicket = async (id: string, status: 'en_progreso' | 'resuelto' | 'cerrado') => {
@@ -85,7 +88,7 @@ export default function OperationsCenter({
   const openDetail = (key: string) => setExpanded(current => current === key ? undefined : key);
 
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel">
-    <div className="mandante-proyectos-section-head"><div><h2>Operación avanzada</h2><p>Evaluación y riesgo, planes de acción, pagos con aprobaciones, soporte conversacional e integraciones auditables.</p></div><button type="button" onClick={() => void load()}><RefreshCw />Actualizar</button></div>
+    <div className="mandante-proyectos-section-head"><div><h2>Operación avanzada</h2><p>Evaluación y riesgo, planes de acción, pagos gobernados por aprobaciones, soporte conversacional e integraciones auditables.</p></div><button type="button" onClick={() => void load()}><RefreshCw />Actualizar</button></div>
 
     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 my-4">
       <button type="button" onClick={() => { setMode('evaluacion'); setExpanded(undefined); }} className="rounded-lg border p-4 text-left"><ClipboardCheck /><strong className="block">Evaluaciones</strong><span>{data.evaluations.length} registradas</span></button>
@@ -99,7 +102,7 @@ export default function OperationsCenter({
       <label className="text-sm">Contratista<select required={mode !== 'ticket'} value={contractor} onChange={event => setContractor(event.target.value)} className="form-input w-full mt-1 p-2 border rounded"><option value="">Proyecto general</option>{contractors.map(item => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></label>
       {mode !== 'ticket' && <><label className="text-sm">Inicio<input type="date" required value={start} onChange={event => setStart(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">Término<input type="date" required value={end} onChange={event => setEnd(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label></>}
       {mode === 'evaluacion' && <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2">{Object.entries(scores).map(([key, value]) => <label className="text-sm" key={key}>{key === 'safety' ? 'Seguridad' : key === 'quality' ? 'Calidad' : key === 'labor' ? 'Laboral' : 'Cumplimiento'}<input type="number" min="0" max="100" value={value} onChange={event => setScores({ ...scores, [key]: Number(event.target.value) })} className="form-input w-full mt-1 p-2 border rounded" /></label>)}</div>}
-      {mode === 'pago' && <><label className="text-sm">Monto CLP<input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">N° factura / referencia<input value={invoiceNumber} onChange={event => setInvoiceNumber(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label></>}
+      {mode === 'pago' && <><label className="text-sm">Monto CLP<input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">N° factura / referencia<input value={invoiceNumber} onChange={event => setInvoiceNumber(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><p className="sm:col-span-2 text-xs text-gray-500">El pago nace observado. Solo una decisión registrada en “Aprobaciones” puede liberarlo; “Pagado” solo aparece después de quedar liberado.</p></>}
       {mode === 'ticket' && <label className="sm:col-span-2 text-sm">Asunto<input required value={subject} onChange={event => setSubject(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label>}
       <label className="sm:col-span-2 text-sm">{mode === 'ticket' ? 'Descripción' : 'Observaciones'}<textarea required={mode === 'ticket'} value={description} onChange={event => setDescription(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label>
       <button className="btn btn-primary sm:col-span-2" type="submit" disabled={saving}><Plus />{saving ? 'Guardando…' : 'Guardar'}</button>
@@ -107,7 +110,7 @@ export default function OperationsCenter({
 
     {mode === 'integracion' ? <IntegrationsPanel projectKey={project.id} showToast={showToast} /> : <div className="mt-5 mandante-proyectos-table-wrap"><table><thead><tr><th>Tipo</th><th>Período / asunto</th><th>Resultado</th><th>Estado y acciones</th></tr></thead><tbody>
       {mode === 'evaluacion' && data.evaluations.map(item => <tr key={item.id}><td>Evaluación</td><td>{item.period_start} — {item.period_end}</td><td>{item.total_score}% · Riesgo {item.risk_level}</td><td><strong className="block capitalize">{item.status}</strong><button type="button" onClick={() => openDetail(`eval:${item.id}`)}>Planes de acción</button>{expanded === `eval:${item.id}` && <EvaluationActionPlans evaluationId={item.id} showToast={showToast} />}</td></tr>)}
-      {mode === 'pago' && data.payments.map(item => <tr key={item.id}><td>Pago</td><td>{item.period_start} — {item.period_end}{item.invoice_number && <small className="block text-gray-500">Ref. {item.invoice_number}</small>}</td><td>{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.block_reason && <small className="block text-red-700">{item.block_reason}</small>}</td><td><strong className="block capitalize">{item.status}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`pay:${item.id}`)}>Aprobaciones</button><button type="button" onClick={() => void changePayment(item.id, 'retenido')}>Retener</button><button type="button" onClick={() => void changePayment(item.id, 'liberado')}>Liberar</button><button type="button" onClick={() => void changePayment(item.id, 'pagado')}>Pagado</button></div>{expanded === `pay:${item.id}` && <PaymentApprovals paymentId={item.id} showToast={showToast} onChanged={() => void load()} />}</td></tr>)}
+      {mode === 'pago' && data.payments.map(item => <tr key={item.id}><td>Pago</td><td>{item.period_start} — {item.period_end}{item.invoice_number && <small className="block text-gray-500">Ref. {item.invoice_number}</small>}</td><td>{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.block_reason && <small className="block text-red-700">{item.block_reason}</small>}</td><td><strong className="block capitalize">{item.status}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`pay:${item.id}`)}>Aprobaciones</button>{item.status === 'liberado' && <button type="button" onClick={() => void confirmPaid(item.id)}>Marcar pagado</button>}</div>{expanded === `pay:${item.id}` && <PaymentApprovals paymentId={item.id} showToast={showToast} onChanged={() => void load()} />}</td></tr>)}
       {mode === 'ticket' && data.tickets.map(item => <tr key={item.id}><td>{item.category}</td><td>{item.subject}<small className="block text-gray-500">{item.resolution || item.description}</small></td><td>{item.priority}</td><td><strong className="block capitalize">{item.status.replace('_', ' ')}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`ticket:${item.id}`)}>Conversación</button><button type="button" onClick={() => void changeTicket(item.id, 'en_progreso')}>Tomar</button><button type="button" onClick={() => void changeTicket(item.id, 'resuelto')}>Resolver</button><button type="button" onClick={() => void changeTicket(item.id, 'cerrado')}>Cerrar</button></div>{expanded === `ticket:${item.id}` && <TicketConversation ticketId={item.id} showToast={showToast} />}</td></tr>)}
     </tbody></table>{loading && <p className="p-4 text-sm text-gray-500">Cargando operación…</p>}</div>}
   </article>;

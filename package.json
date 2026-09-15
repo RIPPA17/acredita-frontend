@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test:domain": "node --import tsx src/data/__tests__/verify_operational_core_v2.ts"
+    "test:domain": "node --import tsx src/data/__tests__/verify_operational_core_v2.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

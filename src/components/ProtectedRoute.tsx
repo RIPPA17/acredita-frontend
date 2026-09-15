@@ -4,6 +4,7 @@ import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '
 import { prepareCoreDataForSession } from '../data/supabaseCoreData';
 import { prepareOperationalDataForSession } from '../data/supabaseOperationalData';
 import { prepareReviewOperationsForSession } from '../data/supabaseReviewOperations';
+import { captureBusinessRevision, clearBusinessRevisionBaseline } from '../data/supabaseBusinessSync';
 import { DataSyncProvider } from './DataSyncContext';
 
 interface ProtectedRouteProps {
@@ -32,6 +33,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
       try {
         const restored = await restoreSupabaseSession();
         if (!restored) {
+          clearBusinessRevisionBaseline();
           if (activeRef.current) setSession(null);
           return false;
         }
@@ -39,6 +41,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
         await prepareCoreDataForSession(restored);
         await prepareOperationalDataForSession(restored);
         await prepareReviewOperationsForSession(restored);
+        await captureBusinessRevision(restored);
         if (!activeRef.current) return false;
 
         setSession(restored);
@@ -72,6 +75,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           const refreshed = await restoreSupabaseSession();
           if (!activeRef.current) return;
           if (!refreshed) {
+            clearBusinessRevisionBaseline();
             setSession(null);
             return;
           }
@@ -86,6 +90,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
     return () => {
       activeRef.current = false;
+      clearBusinessRevisionBaseline();
       if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, [synchronizeBusinessData]);
