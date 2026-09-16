@@ -147,9 +147,7 @@ async function mockContractor(page: Page) {
 async function openOperations(page: Page) {
   await page.goto('/contratista');
   await expect(page.getByText('Contratista Operaciones QA').first()).toBeVisible();
-  await page.getByText('Configuración', { exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: 'Gestión y configuración' })).toBeVisible();
-  await page.getByRole('button', { name: 'Operación', exact: true }).click();
+  await page.getByText('Operación', { exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
 }
 
