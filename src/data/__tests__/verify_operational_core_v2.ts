@@ -1,5 +1,6 @@
 import {
   calcularAccesoPago,
+  calcularEstadoAcreditacion,
   calcularEstadoTrabajador,
   requisitoAplicaATrabajador,
   saveContratistas,
@@ -70,12 +71,17 @@ const guardRequirement: Requisito = {
   nombre: 'Curso OS10',
   categoriasAplicables: ['guardia'],
 };
-const document = (id: string, requirement: Requisito, estado: Documento['estado']): Documento => ({
+const document = (
+  id: string,
+  requirement: Requisito,
+  estado: Documento['estado'],
+  vencimiento = '2030-12-31',
+): Documento => ({
   id,
   nombre: requirement.nombre,
   categoria: requirement.categoria,
   estado,
-  vencimiento: '2030-12-31',
+  vencimiento,
   proyectoId: project.id,
 });
 const contractor: Contratista = {
@@ -103,6 +109,67 @@ const gates = calcularAccesoPago(contractor, project.id);
 assert(gates.accesoEstado === 'bloqueado', 'Un rechazo de acceso debe bloquear acceso.');
 assert(gates.pagoEstado === 'habilitado', 'Un rechazo solo de acceso no debe retener el pago.');
 
+const approvedWorker: Trabajador = {
+  ...worker,
+  estado: 'aprobado',
+  asignaciones: [{ ...assignment }],
+  documentos: [document('doc-licencia', driverRequirement, 'aprobado')],
+};
+const approvedContractor: Contratista = {
+  ...contractor,
+  documentos: [
+    document('doc-acceso-ok', accessRequirement, 'aprobado'),
+    document('doc-pago-ok', paymentRequirement, 'aprobado'),
+  ],
+  trabajadores: [approvedWorker],
+};
+saveContratistas([approvedContractor]);
+assert(calcularEstadoTrabajador(approvedWorker, project.id) === 'aprobado', 'Un trabajador con todos sus requisitos vigentes debe quedar aprobado.');
+assert(calcularEstadoAcreditacion(approvedContractor, project.id) === 'Aprobado', 'La empresa solo debe acreditarse cuando empresa y 100% de trabajadores cumplen.');
+const approvedGates = calcularAccesoPago(approvedContractor, project.id);
+assert(approvedGates.accesoEstado === 'habilitado', 'Con documentos de acceso vigentes, el acceso debe quedar habilitado.');
+assert(approvedGates.pagoEstado === 'habilitado', 'Con documentos de pago vigentes, el pago debe quedar habilitado.');
+
+const secondWorkerPending: Trabajador = {
+  ...worker,
+  rut: '22.222.222-2',
+  nombre: 'Segundo Trabajador Pendiente',
+  asignaciones: [{ ...assignment, id: 'asignacion-v2-2' }],
+  documentos: [],
+};
+const notFullyAccredited: Contratista = {
+  ...approvedContractor,
+  trabajadores: [approvedWorker, secondWorkerPending],
+};
+saveContratistas([notFullyAccredited]);
+assert(calcularEstadoAcreditacion(notFullyAccredited, project.id) === 'En proceso', 'Un solo trabajador pendiente debe impedir acreditar a la empresa completa.');
+
+const expiredPaymentContractor: Contratista = {
+  ...approvedContractor,
+  documentos: [
+    document('doc-acceso-vigente', accessRequirement, 'aprobado'),
+    document('doc-pago-vencido', paymentRequirement, 'aprobado', '2020-01-01'),
+  ],
+  trabajadores: [approvedWorker],
+};
+saveContratistas([expiredPaymentContractor]);
+assert(calcularEstadoAcreditacion(expiredPaymentContractor, project.id) === 'Vencido/Bloqueado', 'Un documento obligatorio vencido debe bloquear la acreditación.');
+const expiredPaymentGates = calcularAccesoPago(expiredPaymentContractor, project.id);
+assert(expiredPaymentGates.pagoEstado === 'bloqueado', 'Un requisito bloquea_pago vencido debe bloquear el pago.');
+assert(expiredPaymentGates.accesoEstado === 'habilitado', 'Un requisito solo de pago vencido no debe bloquear el acceso si lo demás está vigente.');
+
+const workerWithExpiredAccess: Trabajador = {
+  ...approvedWorker,
+  documentos: [document('doc-licencia-vencida', driverRequirement, 'aprobado', '2020-01-01')],
+};
+const expiredWorkerContractor: Contratista = {
+  ...approvedContractor,
+  trabajadores: [workerWithExpiredAccess],
+};
+saveContratistas([expiredWorkerContractor]);
+assert(calcularEstadoTrabajador(workerWithExpiredAccess, project.id) === 'rechazado', 'Un documento obligatorio de acceso vencido debe inhabilitar al trabajador.');
+assert(calcularEstadoAcreditacion(expiredWorkerContractor, project.id) === 'Vencido/Bloqueado', 'Un trabajador con requisito obligatorio vencido debe bloquear la acreditación global.');
+
 assert(formatPeriodo('2026-09-01', '2026-09-30') === 'Septiembre de 2026', 'El período mensual debe tener una etiqueta legible.');
 const csv = buildComplianceCsv([
   {
@@ -113,4 +180,4 @@ const csv = buildComplianceCsv([
 ], new Map([[paymentRequirement.id, paymentRequirement.nombre]]), new Map([[contractor.id, contractor.nombre]]));
 assert(csv.includes('F30 mensual') && csv.includes('Septiembre de 2026'), 'La exportación debe identificar requisito y período.');
 
-console.log('PASS operational core v2: asignaciones, aplicabilidad, compuertas, períodos y exportación.');
+console.log('PASS operational core v2: asignaciones, 100% trabajadores, vencimientos, compuertas, períodos y exportación.');
