@@ -49,7 +49,8 @@ Después del cambio desapareció el hallazgo `unindexed_foreign_keys`. Permanece
 - `.env.example` contiene placeholders y advierte explícitamente que no se agregue `SUPABASE_SERVICE_ROLE_KEY` al frontend.
 - Búsquedas sobre la rama principal no encontraron `SUPABASE_SERVICE_ROLE_KEY`, `service_role`, `sb_secret_`, `DATABASE_URL` ni cadenas `postgresql://`.
 - La publishable key del frontend no es una credencial privada; la seguridad continúa dependiendo de RLS y de la sesión autenticada.
-- El repositorio sigue reportándose como **público** por GitHub/Vercel. Antes de operación comercial se recomienda cambiarlo a privado y revisar colaboradores.
+- El repositorio sigue reportándose como **público** por GitHub/Vercel. Antes de operación comercial debe cambiarse a privado y revisarse colaboradores.
+- GitHub reporta cero repository rulesets. Antes del go-live debe protegerse `main` para exigir PR/CI y evitar saltarse los controles mediante push directo.
 
 ## CI
 
@@ -62,13 +63,14 @@ La única advertencia de seguridad pendiente es **Leaked Password Protection Dis
 ## Bloqueos externos antes de documentación sensible real
 
 1. **Supabase Pro / continuidad.** La organización `ACREDITA` sigue en Free. Para producción comercial se recomienda Pro o superior para backups automáticos y para evitar pausas por inactividad. En Free, Supabase recomienda dumps externos periódicos.
-2. **Storage backup.** Los backups de Postgres no restauran los archivos de Storage; debe existir un respaldo separado de los objetos documentales y una prueba de recuperación.
-3. **Leaked Password Protection.** Activarla después de subir el plan.
-4. **Correo transaccional.** Configurar Custom SMTP antes de invitar clientes externos. El SMTP incorporado de Supabase es para desarrollo y restringe destinatarios.
-5. **MFA administrativo.** Proteger las cuentas administradoras de Supabase, GitHub y Vercel; con Pro también puede exigirse MFA a nivel de organización Supabase.
-6. **Repositorio GitHub.** Cambiar a privado y revisar accesos antes de operar comercialmente.
-7. **Recuperación.** Ejecutar una restauración controlada y documentar RPO/RTO antes del go-live.
-8. **Configuración de plataforma.** Revisar/activar SSL Enforcement y Network Restrictions cuando se definan los orígenes administrativos permitidos. No aplicar Network Restrictions sin una lista de IPs válida, porque podría bloquear acceso legítimo.
+2. **Vercel Pro.** El workspace actual está en Hobby. Los términos vigentes de Vercel reservan Hobby para uso personal/no comercial; Acredita debe pasar a Pro antes de operar como servicio comercial.
+3. **Storage backup.** Los backups de Postgres no restauran los archivos de Storage; debe existir un respaldo separado de los objetos documentales y una prueba de recuperación.
+4. **Leaked Password Protection.** Activarla después de subir Supabase a Pro.
+5. **Correo transaccional.** Configurar Custom SMTP antes de invitar clientes externos. El SMTP incorporado de Supabase es para desarrollo y restringe destinatarios.
+6. **MFA administrativo.** Proteger las cuentas administradoras de Supabase, GitHub y Vercel; con Pro también puede exigirse MFA a nivel de organización Supabase.
+7. **Repositorio GitHub.** Cambiar a privado, revisar accesos y proteger `main` con ruleset/branch protection que exija CI antes del merge.
+8. **Recuperación.** Ejecutar una restauración controlada y documentar RPO/RTO antes del go-live.
+9. **Configuración de plataforma.** Revisar/activar SSL Enforcement y Network Restrictions cuando se definan los orígenes administrativos permitidos. No aplicar Network Restrictions sin una lista de IPs válida, porque podría bloquear acceso legítimo.
 
 ## Piloto interno disponible
 
@@ -84,4 +86,4 @@ La Ley 21.719 entra en vigencia general el 1 de diciembre de 2026. La revisión 
 
 **Desarrollo, flujos, backend, RLS, privacidad y hardening técnico:** listo para cierre mediante CI y piloto interno.
 
-**Go-live comercial con documentos sensibles:** no se declara 100% hasta cerrar los puntos externos de plan/backups, Storage backup, SMTP, Leaked Password Protection, MFA/controles administrativos, repositorio privado y prueba de recuperación.
+**Go-live comercial con documentos sensibles:** no se declara 100% hasta cerrar Supabase Pro/backups, Vercel Pro, Storage backup, SMTP, Leaked Password Protection, MFA/controles administrativos, repositorio privado/protegido y prueba de recuperación.
