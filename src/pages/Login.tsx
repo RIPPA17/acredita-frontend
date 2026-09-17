@@ -107,6 +107,10 @@ export default function LoginPage() {
               </div>
               <p className="mt-2 text-[11px] leading-relaxed text-gray-500">Las cuentas del equipo Acredita se habilitan internamente.</p>
             </div>
+
+            <div className="mt-5 text-center text-[11.5px] text-gray-400">
+              ¿Tienes una solicitud sobre tus datos personales? <Link to="/privacidad" className="font-semibold text-brown hover:underline">Centro de privacidad</Link>
+            </div>
           </div>
         </main>
       </div>
