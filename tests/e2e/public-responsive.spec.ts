@@ -41,6 +41,24 @@ test.describe('superficie pública de lanzamiento', () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test('rutas públicas y privadas exponen metadatos de indexación correctos', async ({ page }) => {
+    await page.goto('/');
+    await expect(page).toHaveTitle('Acredita | Gestión de acreditación documental');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
+
+    await page.goto('/privacidad');
+    await expect(page).toHaveTitle('Privacidad y derechos de datos | Acredita');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
+
+    await page.goto('/login');
+    await expect(page).toHaveTitle('Iniciar sesión | Acredita');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+
+    await page.goto('/admin');
+    await expect(page).toHaveTitle('Administración | Acredita');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+  });
+
   test('login mantiene solicitudes de acceso para Mandante y Contratista', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('link', { name: 'Soy Mandante' })).toHaveAttribute('href', '/registro?rol=mandante');
