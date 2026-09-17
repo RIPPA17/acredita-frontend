@@ -17,8 +17,8 @@ jobs:
         with:
           ref: ux/final-visual-normalization
       - name: Apply targeted fixes
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           ui = Path('src/pages/contratista/DocumentRequirementsTab.tsx')
@@ -58,6 +58,7 @@ jobs:
           new_test = "  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();\n  await page.getByText('F30 SII (mes vigente)').first().click();\n  await expect(page.getByText('Documento ilegible').first()).toBeVisible();"
           assert old_test in text, 'rejection detail test target not found'
           test.write_text(text.replace(old_test, new_test, 1))
+          PY
       - name: Commit fixes
         run: |
           git config user.name "github-actions[bot]"
