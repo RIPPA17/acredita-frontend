@@ -598,7 +598,7 @@ export default function ContratistaPortal() {
                 <input 
                   type="text" 
                   value={newWorkerForm.nombre}
-                  onChange={(e) => setNewWorkerForm({...newWorkerForm, nombre: e.target.value})
+                  onChange={(e) => setNewWorkerForm({...newWorkerForm, nombre: e.target.value})}
                   className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm" 
                   placeholder="Ej. María González"
                   required 
@@ -610,7 +610,7 @@ export default function ContratistaPortal() {
                 <input 
                   type="text" 
                   value={newWorkerForm.rut}
-                  onChange={(e) => setNewWorkerForm({...newWorkerForm, rut: e.target.value})
+                  onChange={(e) => setNewWorkerForm({...newWorkerForm, rut: e.target.value})}
                   className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm" 
                   placeholder="12.345.678-9" 
                   required 
