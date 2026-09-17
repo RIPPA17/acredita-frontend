@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -19,6 +19,29 @@ const PrivacidadPage = lazy(() => import('./pages/Privacidad'));
 const NotFoundPage = lazy(() => import('./pages/NotFound'));
 const MandanteRoute = lazy(() => import('./components/MandanteRoute'));
 
+function RouteMetadata() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const metaRobots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const indexable = pathname === '/' || pathname === '/privacidad';
+    metaRobots?.setAttribute('content', indexable ? 'index,follow' : 'noindex,nofollow');
+
+    if (pathname === '/') document.title = 'Acredita | Gestión de acreditación documental';
+    else if (pathname === '/privacidad') document.title = 'Privacidad y derechos de datos | Acredita';
+    else if (pathname === '/login') document.title = 'Iniciar sesión | Acredita';
+    else if (pathname === '/registro') document.title = 'Solicitar acceso | Acredita';
+    else if (pathname === '/invitacion') document.title = 'Activar invitación | Acredita';
+    else if (pathname === '/recuperar') document.title = 'Recuperar acceso | Acredita';
+    else if (pathname.startsWith('/admin')) document.title = 'Administración | Acredita';
+    else if (pathname.startsWith('/mandante')) document.title = 'Portal Mandante | Acredita';
+    else if (pathname.startsWith('/contratista')) document.title = 'Portal Contratista | Acredita';
+    else document.title = 'Acredita';
+  }, [pathname]);
+
+  return null;
+}
+
 export default function App() {
   document.documentElement.setAttribute('data-theme', 'palette');
   const authHashType = typeof window !== 'undefined'
@@ -29,6 +52,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RouteMetadata />
       {(import.meta as any).env.DEV && typeof navigator !== 'undefined' && !navigator.webdriver && (
         <div className="fixed bottom-4 right-4 z-[999] flex flex-col gap-2 p-3 bg-white/90 backdrop-blur-sm border border-cream3 rounded-xl shadow-xl shadow-navy/10 text-[15.4px] max-w-[220px]">
           <div className="text-[13.2px] font-semibold text-gray-500 mb-1 tracking-wider uppercase">Vistas del Sistema</div>
@@ -42,29 +66,29 @@ export default function App() {
       <ErrorBoundary>
         <Suspense fallback={<div className="min-h-screen grid place-items-center bg-cream2 text-navy" role="status">Cargando Acredita…</div>}>
           <Routes>
-          <Route path="/" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LandingPage />} />
-          <Route path="/login" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LoginPage />} />
-          <Route path="/registro" element={<RegistroPage />} />
-          <Route path="/invitacion" element={<InvitacionPage />} />
-          <Route path="/recuperar" element={<RecuperarPasswordPage />} />
-          <Route path="/privacidad" element={<PrivacidadPage />} />
+            <Route path="/" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LandingPage />} />
+            <Route path="/login" element={passwordSetupLink ? <Navigate to={passwordSetupTarget} replace /> : <LoginPage />} />
+            <Route path="/registro" element={<RegistroPage />} />
+            <Route path="/invitacion" element={<InvitacionPage />} />
+            <Route path="/recuperar" element={<RecuperarPasswordPage />} />
+            <Route path="/privacidad" element={<PrivacidadPage />} />
 
-          <Route path="/admin/*" element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminPortal />
-            </ProtectedRoute>
-          } />
-          <Route path="/mandante/*" element={
-            <ProtectedRoute allowedRoles={['mandante']}>
-              <MandanteRoute />
-            </ProtectedRoute>
-          } />
-          <Route path="/contratista/*" element={
-            <ProtectedRoute allowedRoles={['contratista']}>
-              <ContratistaPortal />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={<NotFoundPage />} />
+            <Route path="/admin/*" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="/mandante/*" element={
+              <ProtectedRoute allowedRoles={['mandante']}>
+                <MandanteRoute />
+              </ProtectedRoute>
+            } />
+            <Route path="/contratista/*" element={
+              <ProtectedRoute allowedRoles={['contratista']}>
+                <ContratistaPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>
