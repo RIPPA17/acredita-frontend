@@ -39,6 +39,7 @@ const PORTAL_CONFIG: Record<PortalName, PortalConfig> = {
       proyectos: 'proyectos',
       subir: 'documentos',
       trabajadores: 'trabajadores',
+      operacion: 'operacion',
       config: 'configuracion',
     },
   },
