@@ -1,0 +1,46 @@
+name: Patch final UX branch
+
+on:
+  push:
+    branches:
+      - ux/final-ux-close2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ux/final-ux-close
+      - name: Fix Contratista JSX handlers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/pages/Contratista.tsx')
+          text = path.read_text()
+          text = text.replace(
+              "onChange={(e) => setNewWorkerForm({...newWorkerForm, nombre: e.target.value})",
+              "onChange={(e) => setNewWorkerForm({...newWorkerForm, nombre: e.target.value})}",
+              1,
+          )
+          text = text.replace(
+              "onChange={(e) => setNewWorkerForm({...newWorkerForm, rut: e.target.value})",
+              "onChange={(e) => setNewWorkerForm({...newWorkerForm, rut: e.target.value})}",
+              1,
+          )
+          path.write_text(text)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Contratista.tsx
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "fix: cerrar handlers del formulario de trabajadores"
+          git push origin HEAD:ux/final-ux-close
