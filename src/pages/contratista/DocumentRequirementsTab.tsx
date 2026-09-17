@@ -48,7 +48,7 @@ interface Row extends RequisitoConDoc {
 }
 
 function accionDoc(item: Row): { label: string; cls: string } {
-  if (!item.doc) return { label: 'Subir', cls: 'doc-btn-primary' };
+  if (!item.doc || item.estado === 'Pendiente') return { label: 'Subir', cls: 'doc-btn-primary' };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
   if (item.estado === 'Por vencer') return { label: 'Renovar', cls: 'doc-btn-warning' };
   return { label: 'Ver', cls: 'doc-btn-ghost' };
