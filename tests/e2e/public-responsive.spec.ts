@@ -60,4 +60,18 @@ test.describe('superficie pública de lanzamiento', () => {
     await expect(page.getByRole('button', { name: 'Enviar enlace de recuperación' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
+
+  test('centro de privacidad es accesible y usable en móvil', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto('/privacidad');
+
+    await expect(page.getByRole('heading', { name: 'Tus datos, tus derechos y un canal directo para ejercerlos.' })).toBeVisible();
+    await expect(page.getByLabel('Nombre completo')).toBeVisible();
+    await expect(page.getByLabel('Correo de contacto')).toBeVisible();
+    await expect(page.getByLabel('Tipo de solicitud')).toBeVisible();
+    await expect(page.getByLabel('¿Qué datos o tratamiento quieres identificar?')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Registrar solicitud' })).toBeVisible();
+    await expect(page.getByText('dos días hábiles')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
 });
