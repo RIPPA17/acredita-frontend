@@ -214,6 +214,7 @@ test('Terrible de Pollo ve el motivo de rechazo y la acción Corregir', async ({
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
   await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();
+  await page.getByText('F30 SII (mes vigente)').first().click();
   await expect(page.getByText('Documento ilegible').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Corregir', exact: true }).first()).toBeVisible();
 });

@@ -764,7 +764,13 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
         if (!appliesByCategory || !appliesByService) continue;
         const obligationCandidates = frontendObligations.filter(item => item.asignacionId === workerAssignment?.id && item.requisitoId === req.id);
         const obligation = latestDueObligation(obligationCandidates);
-        const matchingDocument = obligation ? docs.find(item => item.obligacionId === obligation.id) : undefined;
+        const matchingDocument = obligation
+? docs.find(item => item.obligacionId === obligation.id)
+: docs.find(item =>
+    item.proyectoId === projectKey
+    && normalize(item.nombre) === normalize(req.nombre)
+    && !item.obligacionId
+  );
         docs = docs.filter(item => item.proyectoId !== projectKey || normalize(item.nombre) !== normalize(req.nombre));
         if (matchingDocument) {
           docs.push(matchingDocument);
@@ -811,7 +817,13 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
       for (const req of companyReqs) {
         const obligationCandidates = frontendObligations.filter(item => item.contratistaId === contractor.id && item.proyectoId === projectKey && !item.asignacionId && item.requisitoId === req.id);
         const obligation = latestDueObligation(obligationCandidates);
-        const matchingDocument = obligation ? companyDocs.find(item => item.obligacionId === obligation.id) : undefined;
+        const matchingDocument = obligation
+? companyDocs.find(item => item.obligacionId === obligation.id)
+: companyDocs.find(item =>
+    item.proyectoId === projectKey
+    && normalize(item.nombre) === normalize(req.nombre)
+    && !item.obligacionId
+  );
         companyDocs.splice(0, companyDocs.length, ...companyDocs.filter(item => item.proyectoId !== projectKey || normalize(item.nombre) !== normalize(req.nombre)));
         if (matchingDocument) {
           companyDocs.push(matchingDocument);
