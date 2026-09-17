@@ -16,7 +16,7 @@ Proyecto demo interno existente:
 - 4 requisitos activos.
 - 0 documentos cargados al momento de esta revisión.
 
-Este entorno es adecuado para ensayar el flujo sin usar información real.
+La auditoría directa de Supabase confirmó 1 proyecto, 1 Mandante, 1 Contratista, 1 acreditación activa, 5 trabajadores activos asignados, 4 requisitos activos y 0 documentos. Proyecto, Contratista y trabajadores están clasificados como `demo` y no se detectaron relaciones huérfanas en asignaciones, acreditaciones, requisitos, documentos o versiones.
 
 ## Separación de datos
 
@@ -36,33 +36,45 @@ No cargar documentos sensibles reales hasta cumplir todos estos puntos:
 - [ ] Custom SMTP configurado y probado con dominios externos reales.
 - [ ] Leaked Password Protection habilitado o control compensatorio formalmente aceptado.
 - [ ] MFA habilitado para administradores de Supabase, GitHub y Vercel.
-- [ ] Repositorio y accesos administrativos revisados.
-- [ ] Responsable operativo del piloto definido.
+- [ ] Repositorio privado y accesos administrativos revisados.
+- [ ] `main` protegida con PR + CI verde.
+- [ ] Responsable operativo del piloto real definido.
 - [ ] Procedimiento de incidente y contacto de privacidad disponible.
 
-## Ensayo funcional previo
+## Ensayo funcional automatizado — completado
 
-Usar exclusivamente el proyecto `PILOTO INTERNO - Acredita`.
+El flujo previo al upgrade ya está cubierto por tests de dominio y E2E permanentes:
 
-1. Confirmar 5/5 trabajadores asignados.
-2. Cargar documentos ficticios de empresa y trabajador.
-3. Revisar desde Admin/Acredita.
-4. Rechazar al menos un documento con motivo y solución.
-5. Corregir desde Contratista.
-6. Aprobar la nueva versión.
-7. Confirmar cambio de estado del trabajador y de la acreditación global.
-8. Confirmar bloqueo por vencimiento/rechazo obligatorio.
-9. Confirmar que Mandante solo ve sus proyectos y Contratista solo sus recursos.
-10. Confirmar auditoría de vista/descarga/revisión.
+- [x] 5/5 trabajadores del entorno piloto verificados en Supabase.
+- [x] Carga de documento ficticio desde el requisito exacto.
+- [x] Revisión desde Admin/Acredita.
+- [x] Rechazo con motivo, explicación y solución.
+- [x] Visualización del rechazo por Contratista.
+- [x] Acción `Corregir` abre selector de archivo y carga un PDF corregido.
+- [x] La corrección genera versión 2 en estado de revisión.
+- [x] Aprobación de la versión corregida con checklist mínimo.
+- [x] La empresa solo queda `Aprobado` cuando empresa y 100% de trabajadores cumplen.
+- [x] Un segundo trabajador pendiente mantiene la acreditación global `En proceso`.
+- [x] Un requisito `bloquea_pago` vencido bloquea el pago sin bloquear el acceso si los controles de acceso siguen vigentes.
+- [x] Un documento obligatorio del trabajador vencido inhabilita al trabajador y deja la acreditación global `Vencido/Bloqueado`.
+- [x] Separación de roles y navegación Mandante/Contratista cubierta por E2E.
+- [x] Admin, Mandante y Contratista cubiertos en 1366×768 y 390×844 sin desborde horizontal global.
+- [x] Recuperación de contraseña, activación/invitación y solicitudes públicas forman parte de la suite E2E.
+
+Estos ensayos utilizan datos y archivos ficticios controlados. No requieren cargar documentación sensible real en el proyecto productivo.
+
+## Ensayo manual opcional antes del primer cliente
+
+Cuando las cuentas administrativas estén listas, puede repetirse el mismo guion en `PILOTO INTERNO - Acredita` usando exclusivamente PDFs ficticios. Esta repetición manual sirve como aceptación operativa, no como sustituto de los gates de infraestructura.
 
 ## Ensayo de onboarding
 
-Antes de invitar un cliente real:
+La lógica de invitación, activación y recuperación está cubierta por pruebas automatizadas. Antes de invitar un cliente real todavía debe comprobarse la entrega externa con el correo transaccional definitivo:
 - probar invitación Mandante con un correo controlado;
 - probar invitación Contratista con un correo controlado;
 - validar link de activación, contraseña fuerte y recuperación;
 - comprobar que los enlaces redirigen a `https://acredita-frontend.vercel.app`;
-- comprobar entrega real y spam con custom SMTP.
+- comprobar entrega real y spam con Custom SMTP.
 
 ## Backups y recuperación
 
@@ -76,8 +88,8 @@ Los backups de PostgreSQL no restauran por sí solos archivos borrados de Supaba
 
 ## Funciones de prueba
 
-Las utilidades Edge de E2E/debug desplegadas durante desarrollo deben permanecer neutralizadas en producción (respuesta 410 y JWT cuando corresponda). Las únicas funciones operativas que deben seguir activas son las necesarias para onboarding/invitaciones y otros flujos productivos versionados.
+Las utilidades Edge de E2E/debug desplegadas durante desarrollo deben permanecer neutralizadas en producción. Las funciones productivas de invitación/onboarding permanecen separadas de esas utilidades y deben conservar sus controles de autenticación o token.
 
 ## Criterio de aprobación del piloto
 
-El piloto puede comenzar con datos reales limitados solo cuando los gates de infraestructura estén cerrados. El paso a producción comercial requiere además una ejecución completa del ensayo funcional, cero fallas críticas abiertas, revisión de permisos y una prueba de recuperación documentada.
+El desarrollo y el ensayo automatizado previo al upgrade están cerrados. El paso a un piloto con datos reales limitados requiere cerrar los gates de infraestructura y cuenta indicados arriba. El go-live comercial exige además prueba de recuperación, correo transaccional real, repositorio privado/protegido y cero fallas críticas abiertas.
