@@ -2,7 +2,7 @@
 
 Última revisión técnica: 2026-09-17 (Chile).
 
-## Estado verificado
+## Estado técnico verificado
 
 - Supabase productivo: `Backend de Acredita` (`jwlscxbmttpicwljozwf`), región `sa-east-1`, estado `ACTIVE_HEALTHY`.
 - RLS habilitado en todas las tablas de aplicación expuestas en `public` y en Storage.
@@ -10,76 +10,80 @@
 - Los buckets restringen tamaño y MIME.
 - No existen privilegios directos de tablas `public` para `anon`.
 - La única RPC de `public` ejecutable por `anon` es `get_contractor_invitation_preview(text)`, necesaria para mostrar una invitación válida antes del inicio de sesión.
-- `audit_logs` no tiene privilegios directos para `anon` ni `authenticated`; la lectura autorizada se controla por RLS y las escrituras de auditoría se realizan desde funciones/triggers controlados.
-- `production_security_and_audit_hardening_v1` aplicado en producción y versionado en `supabase/migrations/20260917021643_production_security_and_audit_hardening_v1.sql`.
+- `audit_logs` no tiene privilegios directos para `anon` ni `authenticated`; la lectura autorizada se controla por RLS y las escrituras se realizan desde funciones/triggers controlados.
 - RPC de sincronización y pago no admiten ejecución anónima.
-- Política de `asset-documents` corregida para autorizar usando el UUID del activo presente en la ruta real del objeto.
-- Auditoría ampliada para pagos, aprobaciones, evaluaciones, planes de acción, tickets y mensajes de soporte. El log guarda metadatos operacionales y evita copiar textos libres como descripción, mensaje, evidencia o comentario.
-- Política de Storage de `operation-files` endurecida en `tighten_operation_file_storage_access`: ya no basta con que exista un registro de adjunto; el usuario debe tener acceso al pago, ticket o plan de acción relacionado.
+- Política de `asset-documents` corregida para autorizar usando el UUID real del activo.
+- Política de Storage de `operation-files` exige acceso al pago, ticket o plan de acción relacionado.
+- Auditoría operacional ampliada para pagos, aprobaciones, evaluaciones, planes de acción, soporte y acceso documental.
 - Centro de Privacidad operativo en Admin con solicitudes de titulares, incidentes, retención, legal holds y exportación estructurada.
-- Dataset existente separado mediante `data_environment`; todos los registros actuales quedaron marcados como `demo` y los nuevos registros nacen como `production` por defecto.
-- Utilidades Edge de E2E/debug y la función temporal de contraseñas demo quedaron neutralizadas en producción con respuesta 410/JWT. Se mantienen activas las funciones productivas de invitación/onboarding.
+- Dataset existente separado mediante `data_environment`: los fixtures actuales son `demo` y los registros nuevos nacen como `production`.
+- Utilidades Edge E2E/debug y la función temporal de contraseñas demo están neutralizadas en producción. Las funciones productivas de invitación/onboarding permanecen activas.
 
-## Advertencias de Security Advisor
+## Hardening final de base de datos
 
-### Pendiente de plataforma
+### RPC de auditoría documental
 
-- **Leaked Password Protection** está desactivado en Supabase Auth. La organización `ACREDITA` está en plan Free y esta protección requiere Pro o superior.
-
-### Advertencias revisadas y aceptadas provisionalmente
-
-Supabase marca tres RPC de auditoría porque usan `SECURITY DEFINER` y pueden ser ejecutadas por `authenticated`:
+Las tres RPC públicas de auditoría dejaron de ejecutar con privilegios de definidor:
 
 - `register_document_access(uuid,text)`
 - `register_asset_document_access(uuid,text)`
 - `register_storage_access(text,text,text)`
 
-Se mantienen por ahora porque:
+La implementación privilegiada vive ahora en `private` con `SECURITY DEFINER`, `search_path=''`, validación de `auth.uid()`, validación de acción y comprobación explícita de acceso al recurso. Los wrappers de `public` son `SECURITY INVOKER`, no son ejecutables por `anon` ni `PUBLIC`, y conservan `authenticated`/`service_role` como únicos consumidores previstos.
 
-- requieren `auth.uid()`;
-- rechazan acciones distintas de `view`/`download`;
-- vuelven a comprobar autorización al recurso mediante helpers privados;
-- no son ejecutables por `anon` ni `PUBLIC`;
-- su finalidad es registrar trazabilidad sin devolver datos sensibles.
+Migración productiva: `20260917175307_refactor_access_audit_rpc_security_v1`.
 
-Antes de una auditoría externa conviene evaluar mover la implementación privilegiada a `private` y conservar wrappers públicos mínimos.
+Después del cambio, Security Advisor ya no informa las tres advertencias `authenticated_security_definer_function_executable`.
 
-## Bloqueos antes de cargar documentación sensible real
+### Índices y rendimiento
 
-1. **Backups y continuidad.** La organización `ACREDITA` está en plan Free. Supabase recomienda exportaciones periódicas en Free; Pro/Team/Enterprise cuentan con backups automáticos diarios. El backup de base de datos no restaura objetos eliminados de Storage, por lo que los documentos requieren una estrategia separada.
-2. **Auth: contraseñas filtradas.** Leaked Password Protection requiere plan Pro o superior. Como control compensatorio actual, Acredita exige 12 caracteres, mayúscula, minúscula, número y símbolo en activación/recuperación.
-3. **Correo transaccional.** El SMTP por defecto de Supabase no es adecuado para producción: está limitado y solo entrega a direcciones autorizadas del equipo. Configurar SMTP propio antes de invitar clientes externos.
-4. **Recuperación.** Definir RPO/RTO y ejecutar al menos una prueba controlada de restauración antes del piloto real.
-5. **Acceso administrativo.** Exigir MFA en las cuentas que administran Supabase, GitHub y Vercel y limitar permisos destructivos.
-6. **Repositorio.** Revisar la visibilidad y los colaboradores del repositorio antes de operar comercialmente; no almacenar secretos ni respaldos de datos personales en GitHub.
+Se agregaron índices de cobertura para las 11 claves foráneas que Performance Advisor marcaba sin índice en las tablas de privacidad, incidentes, retención y legal holds.
+
+Migración productiva: `20260917175445_index_privacy_foreign_keys_v1`.
+
+Después del cambio desapareció el hallazgo `unindexed_foreign_keys`. Permanecen avisos `unused_index` de nivel INFO; no se eliminan índices mientras la aplicación tenga poco tráfico, porque las estadísticas de uso todavía no son representativas.
+
+## Revisión de secretos y repositorio
+
+- `.env` y variantes locales están ignoradas por Git; solo `.env.example` se versiona.
+- `.env.example` contiene placeholders y advierte explícitamente que no se agregue `SUPABASE_SERVICE_ROLE_KEY` al frontend.
+- Búsquedas sobre la rama principal no encontraron `SUPABASE_SERVICE_ROLE_KEY`, `service_role`, `sb_secret_`, `DATABASE_URL` ni cadenas `postgresql://`.
+- La publishable key del frontend no es una credencial privada; la seguridad continúa dependiendo de RLS y de la sesión autenticada.
+- El repositorio sigue reportándose como **público** por GitHub/Vercel. Antes de operación comercial debe cambiarse a privado y revisarse colaboradores.
+- GitHub reporta cero repository rulesets. Antes del go-live debe protegerse `main` para exigir PR/CI y evitar saltarse los controles mediante push directo.
+
+## CI
+
+El pipeline valida instalación reproducible (`npm ci`), auditoría de dependencias con bloqueo de vulnerabilidades `high`/`critical`, TypeScript, tests de dominio, build y flujos E2E críticos.
+
+## Security Advisor
+
+La única advertencia de seguridad pendiente es **Leaked Password Protection Disabled**. Supabase documenta esta protección como disponible en plan Pro o superior. Acredita ya exige como control compensatorio 12 caracteres, mayúscula, minúscula, número y símbolo para activación/recuperación.
+
+## Bloqueos externos antes de documentación sensible real
+
+1. **Supabase Pro / continuidad.** La organización `ACREDITA` sigue en Free. Para producción comercial se recomienda Pro o superior para backups automáticos y para evitar pausas por inactividad. En Free, Supabase recomienda dumps externos periódicos.
+2. **Vercel Pro.** El workspace actual está en Hobby. Los términos vigentes de Vercel reservan Hobby para uso personal/no comercial; Acredita debe pasar a Pro antes de operar como servicio comercial.
+3. **Storage backup.** Los backups de Postgres no restauran los archivos de Storage; debe existir un respaldo separado de los objetos documentales y una prueba de recuperación.
+4. **Leaked Password Protection.** Activarla después de subir Supabase a Pro.
+5. **Correo transaccional.** Configurar Custom SMTP antes de invitar clientes externos. El SMTP incorporado de Supabase es para desarrollo y restringe destinatarios.
+6. **MFA administrativo.** Proteger las cuentas administradoras de Supabase, GitHub y Vercel; con Pro también puede exigirse MFA a nivel de organización Supabase.
+7. **Repositorio GitHub.** Cambiar a privado, revisar accesos y proteger `main` con ruleset/branch protection que exija CI antes del merge.
+8. **Recuperación.** Ejecutar una restauración controlada y documentar RPO/RTO antes del go-live.
+9. **Configuración de plataforma.** Revisar/activar SSL Enforcement y Network Restrictions cuando se definan los orígenes administrativos permitidos. No aplicar Network Restrictions sin una lista de IPs válida, porque podría bloquear acceso legítimo.
 
 ## Piloto interno disponible
 
-Existe un proyecto `PILOTO INTERNO - Acredita` con:
-
-- Mandante demo: `Constructora Andina SA`;
-- Contratista demo: `Servicios Norte`;
-- 5 trabajadores asignados;
-- 4 requisitos activos;
-- 0 documentos cargados al momento de la revisión.
-
-Debe usarse para el ensayo funcional completo con documentos ficticios antes de cargar información real. El procedimiento está documentado en `docs/PILOT_RUNBOOK.md`.
+Existe `PILOTO INTERNO - Acredita` con Mandante demo `Constructora Andina SA`, Contratista demo `Servicios Norte`, 5 trabajadores asignados, 4 requisitos activos y sin documentos iniciales. Debe ejecutarse con archivos ficticios siguiendo `docs/PILOT_RUNBOOK.md` antes de cargar información real.
 
 ## Protección de datos — Ley 21.719
 
-La Ley 21.719 entra en vigencia general el **1 de diciembre de 2026**. Antes de esa fecha Acredita debe cerrar, como mínimo:
+Acredita ya dispone de inventario técnico, privacidad por diseño, solicitudes de titulares, incidentes, retención configurable, legal holds y portabilidad estructurada. La activación de borrado/anominización automática permanece deliberadamente bloqueada hasta validar jurídicamente los plazos aplicables por categoría documental.
 
-- inventario de datos personales tratados y finalidad/base de tratamiento;
-- definición contractual de roles y responsabilidades en cada relación Mandante–Acredita–Contratista;
-- política de retención y eliminación por tipo documental;
-- procedimiento para acceso, rectificación, supresión, oposición, portabilidad y bloqueo cuando corresponda;
-- procedimiento de incidentes y trazabilidad de accesos/cambios;
-- revisión de transferencias internacionales y proveedores que procesan datos;
-- privacidad desde el diseño y minimización;
-- controles reforzados para datos sensibles cuando un requisito documental pueda contenerlos.
+La Ley 21.719 entra en vigencia general el 1 de diciembre de 2026. La revisión legal final debe cerrar roles Mandante–Acredita–Contratista, bases/finalidades, textos contractuales y de privacidad, plazos de retención, transferencias/proveedores y protocolo formal de incidentes.
 
-Referencia oficial: Biblioteca del Congreso Nacional, Ley 21.719.
+## Criterio de 100%
 
-## Criterio de go-live
+**Desarrollo, flujos, backend, RLS, privacidad y hardening técnico:** listo para cierre mediante CI y piloto interno.
 
-No considerar el entorno listo para documentación sensible real mientras sigan abiertos **backups/recuperación**, **SMTP propio** y la decisión sobre **Leaked Password Protection/plan Supabase**. El frontend, RLS, privacidad y flujos completos pueden seguir probándose con el entorno demo/piloto interno.
+**Go-live comercial con documentos sensibles:** no se declara 100% hasta cerrar Supabase Pro/backups, Vercel Pro, Storage backup, SMTP, Leaked Password Protection, MFA/controles administrativos, repositorio privado/protegido y prueba de recuperación.

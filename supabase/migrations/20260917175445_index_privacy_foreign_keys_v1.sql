@@ -1,0 +1,11 @@
+create index if not exists legal_holds_created_by_idx on public.legal_holds(created_by);
+create index if not exists legal_holds_released_by_idx on public.legal_holds(released_by);
+create index if not exists privacy_incidents_created_by_idx on public.privacy_incidents(created_by);
+create index if not exists privacy_processing_activities_retention_rule_id_idx on public.privacy_processing_activities(retention_rule_id);
+create index if not exists privacy_request_events_actor_profile_id_idx on public.privacy_request_events(actor_profile_id);
+create index if not exists privacy_requests_assigned_to_idx on public.privacy_requests(assigned_to);
+create index if not exists privacy_retention_rules_approved_by_idx on public.privacy_retention_rules(approved_by);
+create index if not exists retention_policies_created_by_idx on public.retention_policies(created_by);
+create index if not exists retention_policies_updated_by_idx on public.retention_policies(updated_by);
+create index if not exists security_incidents_created_by_idx on public.security_incidents(created_by);
+create index if not exists security_incidents_owner_profile_id_idx on public.security_incidents(owner_profile_id);
