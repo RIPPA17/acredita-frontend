@@ -26,8 +26,8 @@ export default function ConfigTab({ mandante, misProyectos, onDirtyChange }: Pro
   return (
     <div className="mandante-config fade-in">
       <header className="mandante-config-head">
-        <h2>Configuración</h2>
-        <p>Información de tu organización conectada a Acredita.</p>
+        <h2>Mi organización</h2>
+        <p>Información de tu empresa, proyectos visibles y alcance de acceso dentro de Acredita.</p>
       </header>
       <div className="mandante-config-content" style={{ maxWidth: 820 }}>
         <section className="mandante-config-card">

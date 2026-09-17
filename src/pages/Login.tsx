@@ -3,32 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Clock, ShieldCheck } from 'lucide-react';
 import { loginWithSupabase } from '../data/supabaseAuth';
 
-type LoginRole = 'mandante' | 'contratista' | 'admin';
-
-const ROLE_OPTIONS: Array<{ id: LoginRole; label: string }> = [
-  { id: 'mandante', label: 'Mandante' },
-  { id: 'contratista', label: 'Contratista' },
-  { id: 'admin', label: 'Acredita' },
-];
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(window.location.search);
-  const [rol, setRol] = useState<LoginRole>(() => {
-    const value = searchParams.get('rol');
-    return value === 'admin' || value === 'contratista' || value === 'mandante' ? value : 'mandante';
-  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const selectRole = (nextRole: LoginRole) => {
-    setRol(nextRole);
-    const params = new URLSearchParams(window.location.search);
-    params.set('rol', nextRole);
-    window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-  };
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -42,7 +23,7 @@ export default function LoginPage() {
       navigate(nextIsAllowed && requestedNext ? requestedNext : home, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No fue posible iniciar sesión';
-      setErrorMsg(message === 'Invalid login credentials' ? 'Email o contraseña incorrectos' : message);
+      setErrorMsg(message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos' : message);
     } finally {
       setLoading(false);
     }
@@ -73,30 +54,14 @@ export default function LoginPage() {
               <div className="text-[28px] font-medium tracking-[2px] text-navy">Acre<b className="font-normal text-brown">dita</b></div>
             </div>
 
-            <div className="mb-6 text-center">
+            <div className="mb-7 text-center">
               <h2 className="mb-2 text-[28px] font-semibold text-navy">Iniciar sesión</h2>
-              <p className="text-[14px] text-gray-500">Ingresa con tu cuenta Acredita. Tu perfil y permisos se detectan automáticamente.</p>
-            </div>
-
-            <div className="mb-6 flex border-b border-cream3" aria-label="Tipo de portal">
-              {ROLE_OPTIONS.map(option => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => selectRole(option.id)}
-                  aria-pressed={rol === option.id}
-                  className={`flex-1 border-b-2 pb-2.5 text-center text-[13px] font-semibold transition-colors ${
-                    rol === option.id ? 'border-brown text-brown' : 'border-transparent text-gray-400 hover:text-navy'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+              <p className="text-[14px] leading-relaxed text-gray-500">Ingresa con tu cuenta. Acredita detectará automáticamente tu organización, perfil y permisos.</p>
             </div>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <label className="block" htmlFor="login-email">
-                <span className="mb-1.5 block text-[13px] font-medium text-gray-700">Email</span>
+                <span className="mb-1.5 block text-[13px] font-medium text-gray-700">Correo electrónico</span>
                 <input
                   id="login-email"
                   type="email"
@@ -126,22 +91,22 @@ export default function LoginPage() {
                 />
               </div>
 
-              {errorMsg && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-center text-[13px] font-medium text-[#c03030]">{errorMsg}</div>}
+              {errorMsg && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-center text-[13px] font-medium text-[#c03030]">{errorMsg}</div>}
 
               <button type="submit" disabled={loading} className="btn btn-primary w-full justify-center py-2.5 text-[15px] disabled:cursor-not-allowed disabled:opacity-60">
                 {loading ? 'Verificando…' : 'Ingresar'}
               </button>
             </form>
 
-            {rol === 'admin' ? (
-              <div className="mt-6 rounded-lg border border-cream3 bg-cream2/60 px-3 py-2.5 text-center text-[12px] leading-relaxed text-gray-600">
-                El acceso del equipo Acredita se habilita internamente. No existe registro público para este perfil.
+            <div className="mt-6 rounded-xl border border-cream3 bg-cream2/55 px-4 py-3.5 text-center">
+              <div className="text-[12px] font-semibold text-navy">¿Necesitas acceso?</div>
+              <div className="mt-2 flex items-center justify-center gap-3 text-[12px]">
+                <Link to="/registro?rol=mandante" className="font-semibold text-brown hover:underline">Soy Mandante</Link>
+                <span className="text-gray-300">•</span>
+                <Link to="/registro?rol=contratista" className="font-semibold text-brown hover:underline">Soy Contratista</Link>
               </div>
-            ) : (
-              <div className="mt-6 text-center text-[13px] text-gray-500">
-                ¿No tienes una cuenta? <Link to={`/registro?rol=${rol}`} className="font-medium text-brown hover:underline">Solicita acceso</Link>
-              </div>
-            )}
+              <p className="mt-2 text-[11px] leading-relaxed text-gray-500">Las cuentas del equipo Acredita se habilitan internamente.</p>
+            </div>
           </div>
         </main>
       </div>

@@ -21,6 +21,7 @@ import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
 import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
+import OperationsTab from './contratista/OperationsTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
@@ -71,9 +72,10 @@ export default function ContratistaPortal() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
-    { id: 'proyectos', label: 'Mis proyectos', icon: Folder },
+    { id: 'proyectos', label: 'Proyectos', icon: Folder },
     { id: 'subir', label: 'Documentos', icon: Upload },
     { id: 'trabajadores', label: 'Trabajadores', icon: Users },
+    { id: 'operacion', label: 'Operación', icon: Briefcase },
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
@@ -185,6 +187,24 @@ export default function ContratistaPortal() {
     }
   }, [selectedProyectoId, dataRevision, contratistaLogueado.id, dataSyncRevision]);
 
+  const categoriasDisponibles = Array.from(new Set(
+    getRequisitos()
+      .filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false)
+      .flatMap(r => r.categoriasAplicables || [])
+      .map(categoria => categoria.trim())
+      .filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b, 'es'));
+
+  const categoriasSeleccionadas = new Set(
+    newWorkerForm.categorias.split(',').map(item => item.trim()).filter(Boolean),
+  );
+
+  const toggleCategoria = (categoria: string) => {
+    const next = new Set(categoriasSeleccionadas);
+    if (next.has(categoria)) next.delete(categoria);
+    else next.add(categoria);
+    setNewWorkerForm(actual => ({ ...actual, categorias: Array.from(next).join(', ') }));
+  };
 
   const handleAddWorkerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -297,12 +317,12 @@ export default function ContratistaPortal() {
             
             {showNotif && <ContratistaNotificaciones contratistaNombre={contratistaLogueado.nombre} notificaciones={notificaciones} leidas={notificacionesLeidas} onMarcarLeida={id => marcarLeidas([id])} onMarcarTodas={() => marcarLeidas(notificaciones.map(item => item.id))} onAbrir={navegarNotificacion} />}
           </div>
-          <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
+          <button type="button" onClick={() => setActiveTab('config')} className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition" aria-label="Abrir configuración de cuenta" title="Configuración de cuenta">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
               {contratistaLogueado.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
             </div>
             <span className="text-[14.3px] text-cream hidden md:block">{contratistaLogueado.nombre}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -478,6 +498,25 @@ export default function ContratistaPortal() {
             />
           )}
 
+          {activeTab === 'operacion' && (
+            <div className="cfg-page">
+              <section className="cfg-hero">
+                <div className="cfg-eyebrow">Portal contratista</div>
+                <h1>Operación</h1>
+                <p>Consulta evaluaciones, responde planes de acción, revisa estados de pago y conversa con soporte en un espacio dedicado.</p>
+              </section>
+              <section className="cfg-floating">
+                <OperationsTab
+                  contratista={contratistaLogueado}
+                  proyectos={misProyectos}
+                  selectedProyectoId={selectedProyectoId}
+                  setSelectedProyectoId={setSelectedProyectoId}
+                  showToast={showToast}
+                />
+              </section>
+            </div>
+          )}
+
           {activeTab === 'config' && (
             <ConfigTab
               contratistaLogueado={contratistaLogueado}
@@ -493,12 +532,12 @@ export default function ContratistaPortal() {
 
           {/* MOBILE NAVBAR */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-50">
-            {menuItems.map(item => (
+            {menuItems.filter(item => item.id !== 'config').map(item => (
               <button key={item.id} onClick={() => setActiveTab(item.id)}
-                className={`flex-1 flex flex-col items-center py-3 text-[11px] gap-1
+                className={`flex-1 min-w-0 flex flex-col items-center py-3 text-[10px] gap-1
                   ${activeTab === item.id ? 'text-brown font-semibold' : 'text-gray-400'}`}>
-                <item.icon size={20} />
-                {item.label}
+                <item.icon size={19} />
+                <span className="max-w-full truncate px-0.5">{item.label}</span>
               </button>
             ))}
           </nav>
@@ -539,7 +578,7 @@ export default function ContratistaPortal() {
 
       {showAddWorkerModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddWorkerModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[440px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-semibold text-navy text-[17.6px] flex items-center gap-2">
                 <UserPlus size={18} className="text-brown" /> Agregar trabajador al proyecto
@@ -547,6 +586,7 @@ export default function ContratistaPortal() {
               <button 
                 onClick={() => setShowAddWorkerModal(false)}
                 className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded"
+                aria-label="Cerrar"
               >
                 <X size={20} />
               </button>
@@ -597,9 +637,38 @@ export default function ContratistaPortal() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de ingreso</label><input type="date" value={newWorkerForm.fechaIngreso} onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaIngreso: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" /></div>
-                <div><label className="block text-[13px] font-medium text-gray-700 mb-1.5">Categorías</label><input value={newWorkerForm.categorias} onChange={(e) => setNewWorkerForm({...newWorkerForm, categorias: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" placeholder="Conductor, Altura" /></div>
+              <div>
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de ingreso</label>
+                <input type="date" value={newWorkerForm.fechaIngreso} onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaIngreso: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label className="block text-[13px] font-medium text-gray-700">Categorías del trabajador</label>
+                  <span className="text-[11px] text-gray-400">Definidas por los requisitos del proyecto</span>
+                </div>
+                {categoriasDisponibles.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 rounded-lg border border-cream3 bg-cream2/40 p-3">
+                    {categoriasDisponibles.map(categoria => {
+                      const selected = categoriasSeleccionadas.has(categoria);
+                      return (
+                        <button
+                          key={categoria}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => toggleCategoria(categoria)}
+                          className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${selected ? 'border-brown bg-brown text-white' : 'border-cream3 bg-white text-gray-600 hover:border-brown hover:text-brown'}`}
+                        >
+                          {selected ? '✓ ' : ''}{categoria}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-cream3 bg-cream2/50 p-3 text-[11.5px] leading-relaxed text-gray-500">
+                    Este proyecto todavía no tiene categorías aplicables configuradas. El trabajador quedará con asignación general.
+                  </div>
+                )}
               </div>
 
               <div className="text-[11px] leading-relaxed bg-cream2 p-3 rounded-lg text-gray-600">

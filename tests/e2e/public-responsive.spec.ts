@@ -28,23 +28,23 @@ test.describe('superficie pública de lanzamiento', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('perfil Acredita no ofrece registro público', async ({ page }) => {
+  test('login es único y detecta el portal sin selector manual', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await page.goto('/login?rol=admin');
 
     await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Acredita' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('El acceso del equipo Acredita se habilita internamente.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Solicita acceso' })).toHaveCount(0);
+    await expect(page.getByText('Acredita detectará automáticamente tu organización, perfil y permisos.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mandante' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Contratista' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Acredita' })).toHaveCount(0);
+    await expect(page.getByText('Las cuentas del equipo Acredita se habilitan internamente.')).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
-  test('Mandante y Contratista mantienen su solicitud de acceso', async ({ page }) => {
-    await page.goto('/login?rol=mandante');
-    await expect(page.getByRole('link', { name: 'Solicita acceso' })).toHaveAttribute('href', '/registro?rol=mandante');
-
-    await page.getByRole('button', { name: 'Contratista' }).click();
-    await expect(page.getByRole('link', { name: 'Solicita acceso' })).toHaveAttribute('href', '/registro?rol=contratista');
+  test('login mantiene solicitudes de acceso para Mandante y Contratista', async ({ page }) => {
+    await page.goto('/login');
+    await expect(page.getByRole('link', { name: 'Soy Mandante' })).toHaveAttribute('href', '/registro?rol=mandante');
+    await expect(page.getByRole('link', { name: 'Soy Contratista' })).toHaveAttribute('href', '/registro?rol=contratista');
   });
 
   test('registro y recuperación siguen utilizables en móvil', async ({ page }) => {

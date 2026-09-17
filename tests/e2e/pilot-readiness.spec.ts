@@ -70,7 +70,7 @@ async function mockAdmin(page: Page) {
 
 test('17 login permite iniciar recuperación de contraseña', async ({ page }) => {
   await page.goto('/login');
-  await page.getByLabel('Email').fill('usuario@empresa.cl');
+  await page.getByLabel('Correo electrónico').fill('usuario@empresa.cl');
   await page.getByRole('link', { name: '¿Olvidaste tu contraseña?' }).click();
   await expect(page).toHaveURL(/\/recuperar\?email=usuario%40empresa\.cl/);
   await expect(page.getByRole('heading', { name: 'Recuperar acceso' })).toBeVisible();

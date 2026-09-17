@@ -118,12 +118,12 @@ test('01 landing pública responde y muestra Acredita', async ({ page }) => {
   await expect(page.locator('body')).toContainText('Acredita');
 });
 
-test('02 login expone los tres perfiles de acceso', async ({ page }) => {
+test('02 login único detecta el portal y mantiene solicitudes de acceso', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Mandante' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Contratista' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Acredita' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Soy Mandante' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Soy Contratista' })).toBeVisible();
+  await expect(page.getByText(/detectará automáticamente tu organización, perfil y permisos/i)).toBeVisible();
 });
 
 test('03 Mandante hidrata proyecto desde Supabase', async ({ page }) => {
@@ -182,10 +182,10 @@ test('09 Contratista hidrata su empresa y proyecto', async ({ page }) => {
   await expect(page.locator('body')).toContainText('Proyecto Piloto QA');
 });
 
-test('10 Contratista puede abrir Mis proyectos', async ({ page }) => {
+test('10 Contratista puede abrir Proyectos', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
-  await page.getByText('Mis proyectos', { exact: true }).first().click();
+  await page.getByText('Proyectos', { exact: true }).first().click();
   await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
 });
 
