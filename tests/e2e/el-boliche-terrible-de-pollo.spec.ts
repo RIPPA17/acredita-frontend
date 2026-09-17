@@ -145,7 +145,13 @@ async function mount(page: Page, role: Role, stage: Stage) {
         return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify([row]) });
       }
       if (!['GET', 'HEAD'].includes(request.method())) return route.fulfill({ status: 204, body: '' });
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data[table] || []) });
+      let rows = [...(data[table] || [])];
+      if (table === 'document_versions' && url.searchParams.get('order') === 'version_number.desc') {
+        rows = rows.sort((a, b) => Number(b.version_number || 0) - Number(a.version_number || 0));
+      }
+      const limit = Number(url.searchParams.get('limit') || 0);
+      if (limit > 0) rows = rows.slice(0, limit);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
     }
     if (path.startsWith('/storage/v1/object/')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     return route.fulfill({ status: 404, body: '{}' });
