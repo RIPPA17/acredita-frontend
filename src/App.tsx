@@ -15,6 +15,7 @@ const LoginPage = lazy(() => import('./pages/Login'));
 const RegistroPage = lazy(() => import('./pages/Registro'));
 const InvitacionPage = lazy(() => import('./pages/Invitacion'));
 const RecuperarPasswordPage = lazy(() => import('./pages/RecuperarPassword'));
+const PrivacidadPage = lazy(() => import('./pages/Privacidad'));
 const NotFoundPage = lazy(() => import('./pages/NotFound'));
 const MandanteRoute = lazy(() => import('./components/MandanteRoute'));
 
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/invitacion" element={<InvitacionPage />} />
           <Route path="/recuperar" element={<RecuperarPasswordPage />} />
+          <Route path="/privacidad" element={<PrivacidadPage />} />
 
           <Route path="/admin/*" element={
             <ProtectedRoute allowedRoles={['admin']}>
