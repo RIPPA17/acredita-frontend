@@ -1,29 +1,28 @@
-name: Build Boliche flow fix
+name: Apply Boliche flow fixes
 
 on:
   push:
     branches:
       - ux/final-visual-normalization
 
+permissions:
+  contents: write
+
 jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply targeted fixes
+        with:
+          ref: ux/final-visual-normalization
+      - name: Apply pending fixes
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          ui = Path('src/pages/contratista/DocumentRequirementsTab.tsx')
-          text = ui.read_text()
-          old = "  if (!item.doc) return { label: 'Subir', cls: 'doc-btn-primary' };"
-          new = "  if (!item.doc || item.estado === 'Pendiente') return { label: 'Subir', cls: 'doc-btn-primary' };"
-          assert old in text, 'accionDoc target not found'
-          ui.write_text(text.replace(old, new, 1))
-
           sync = Path('src/data/supabaseOperationalData.ts')
           text = sync.read_text()
+
           old_worker = "        const matchingDocument = obligation ? docs.find(item => item.obligacionId === obligation.id) : undefined;"
           new_worker = """        const matchingDocument = obligation
           ? docs.find(item => item.obligacionId === obligation.id)
@@ -32,8 +31,8 @@ jobs:
               && normalize(item.nombre) === normalize(req.nombre)
               && !item.obligacionId
             );"""
-          assert old_worker in text, 'worker matching target not found'
-          text = text.replace(old_worker, new_worker, 1)
+          if old_worker in text:
+              text = text.replace(old_worker, new_worker, 1)
 
           old_company = "        const matchingDocument = obligation ? companyDocs.find(item => item.obligacionId === obligation.id) : undefined;"
           new_company = """        const matchingDocument = obligation
@@ -43,20 +42,27 @@ jobs:
               && normalize(item.nombre) === normalize(req.nombre)
               && !item.obligacionId
             );"""
-          assert old_company in text, 'company matching target not found'
-          sync.write_text(text.replace(old_company, new_company, 1))
+          if old_company in text:
+              text = text.replace(old_company, new_company, 1)
+          sync.write_text(text)
 
           test = Path('tests/e2e/el-boliche-terrible-de-pollo.spec.ts')
           text = test.read_text()
           old_test = "  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();\n  await expect(page.getByText('Documento ilegible').first()).toBeVisible();"
           new_test = "  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();\n  await page.getByText('F30 SII (mes vigente)').first().click();\n  await expect(page.getByText('Documento ilegible').first()).toBeVisible();"
-          assert old_test in text, 'rejection detail test target not found'
-          test.write_text(text.replace(old_test, new_test, 1))
+          if old_test in text:
+              text = text.replace(old_test, new_test, 1)
+          test.write_text(text)
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: boliche-flow-fix
-          path: |
-            src/pages/contratista/DocumentRequirementsTab.tsx
-            src/data/supabaseOperationalData.ts
-            tests/e2e/el-boliche-terrible-de-pollo.spec.ts
+
+      - name: Commit fixes when needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/supabaseOperationalData.ts tests/e2e/el-boliche-terrible-de-pollo.spec.ts
+          if git diff --cached --quiet; then
+            echo "No pending fixes"
+            exit 0
+          fi
+          git commit -m "fix: conservar documentos sin obligación materializada"
+          git push origin HEAD:ux/final-visual-normalization
