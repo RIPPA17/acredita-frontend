@@ -1,21 +1,15 @@
-name: Apply Boliche flow fix
+name: Build Boliche flow fix
 
 on:
   push:
     branches:
       - ux/final-visual-normalization
 
-permissions:
-  contents: write
-
 jobs:
   patch:
-    if: github.event.head_commit.message != 'fix: preservar documentos reales durante hidratacion'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ux/final-visual-normalization
       - name: Apply targeted fixes
         run: |
           python - <<'PY'
@@ -59,10 +53,10 @@ jobs:
           assert old_test in text, 'rejection detail test target not found'
           test.write_text(text.replace(old_test, new_test, 1))
           PY
-      - name: Commit fixes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/pages/contratista/DocumentRequirementsTab.tsx src/data/supabaseOperationalData.ts tests/e2e/el-boliche-terrible-de-pollo.spec.ts
-          git commit -m "fix: preservar documentos reales durante hidratacion"
-          git push origin HEAD:ux/final-visual-normalization
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boliche-flow-fix
+          path: |
+            src/pages/contratista/DocumentRequirementsTab.tsx
+            src/data/supabaseOperationalData.ts
+            tests/e2e/el-boliche-terrible-de-pollo.spec.ts
