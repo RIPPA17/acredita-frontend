@@ -10,6 +10,10 @@
       "source": "/(.*)",
       "headers": [
         {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://jwlscxbmttpicwljozwf.supabase.co; font-src 'self' data:; connect-src 'self' https://jwlscxbmttpicwljozwf.supabase.co wss://jwlscxbmttpicwljozwf.supabase.co; worker-src 'self' blob:; frame-src 'self' blob: https://jwlscxbmttpicwljozwf.supabase.co; media-src 'self' blob: https://jwlscxbmttpicwljozwf.supabase.co; manifest-src 'self'; upgrade-insecure-requests"
+        },
+        {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
         },
@@ -28,6 +32,10 @@
         {
           "key": "Cross-Origin-Opener-Policy",
           "value": "same-origin"
+        },
+        {
+          "key": "X-Permitted-Cross-Domain-Policies",
+          "value": "none"
         }
       ]
     }
