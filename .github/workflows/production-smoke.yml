@@ -1,0 +1,35 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch production
+        run: |
+          curl --fail --silent --show-error \
+            --retry 3 --retry-all-errors --max-time 20 \
+            --dump-header /tmp/headers.txt \
+            --output /tmp/body.html \
+            https://acredita-frontend.vercel.app/
+
+      - name: Verify application shell
+        run: |
+          grep -qi '<title>Acredita | Gestión de acreditación documental</title>' /tmp/body.html
+          grep -qi '<div id="root"></div>' /tmp/body.html
+
+      - name: Verify security headers
+        run: |
+          grep -qi '^content-security-policy:' /tmp/headers.txt
+          grep -qi '^strict-transport-security:' /tmp/headers.txt
+          grep -qi '^x-content-type-options: nosniff' /tmp/headers.txt
+          grep -qi '^x-frame-options: DENY' /tmp/headers.txt
+          grep -qi '^referrer-policy: strict-origin-when-cross-origin' /tmp/headers.txt
