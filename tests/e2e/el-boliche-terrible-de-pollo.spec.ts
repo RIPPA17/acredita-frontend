@@ -223,9 +223,10 @@ test('Acredita aprueba la versión corregida después del chequeo mínimo', asyn
   const { calls } = await mount(page, 'admin', 'corrected');
   await openAdminQueue(page);
   await page.getByRole('button', { name: 'Tomar revisión' }).click();
-  await page.getByLabel('Documento legible').check();
-  await page.getByLabel('Datos coinciden').check();
-  await page.getByLabel('Vigencia correcta').check();
+  await expect(page.getByText(/Tomada por Acredita QA/)).toBeVisible();
+  await page.locator('label').filter({ hasText: 'Documento legible' }).locator('input[type="checkbox"]').check();
+  await page.locator('label').filter({ hasText: 'Datos coinciden' }).locator('input[type="checkbox"]').check();
+  await page.locator('label').filter({ hasText: 'Vigencia correcta' }).locator('input[type="checkbox"]').check();
   await page.getByRole('button', { name: 'Aprobar' }).click();
 
   await expect.poll(() => calls.some(call => call.path === '/rest/v1/rpc/review_document_version' && (call.body || '').includes('approve'))).toBeTruthy();
