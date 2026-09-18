@@ -215,7 +215,7 @@ export default function ContratistaPortal() {
       .filter(Boolean),
   )).sort((a, b) => a.localeCompare(b, 'es'));
 
-  const categoriasSeleccionadas = new Set(
+  const categoriasSeleccionadas = new Set<string>(
     newWorkerForm.categorias.split(',').map(item => item.trim()).filter(Boolean),
   );
   const requisitosTrabajadorProyecto = getRequisitos().filter(
