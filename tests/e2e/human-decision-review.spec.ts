@@ -250,6 +250,10 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   }, contractorSession());
 
   await page.goto('/contratista');
+  await page.getByText('Documentos', { exact: true }).first().click();
+  await expect(page.getByText('F30-1 DT — Cumplimiento laboral y previsional (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
+  await page.getByText('Inicio', { exact: true }).first().click();
   await expect(page.getByText('Retenido', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Revisión humana de un bloqueo', { exact: true })).toBeVisible();
 
@@ -290,10 +294,10 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
 
   await setSession(page, contractorSession());
   await page.goto('/contratista');
-  await expect(page.getByText('Habilitado', { exact: true }).last()).toBeVisible();
-  await expect(page.locator('body')).toContainText('Excepción humana vigente');
-
   await page.getByText('Documentos', { exact: true }).first().click();
   await expect(page.getByText('F30-1 DT — Cumplimiento laboral y previsional (mes vigente)').first()).toBeVisible();
   await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
+  await page.getByText('Inicio', { exact: true }).first().click();
+  await expect(page.getByText('Habilitado', { exact: true }).last()).toBeVisible();
+  await expect(page.locator('body')).toContainText('Excepción humana vigente');
 });
