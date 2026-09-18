@@ -6,6 +6,8 @@ export type IncidentSeverity = 'S1' | 'S2' | 'S3' | 'S4';
 export type IncidentStatus = 'detected' | 'investigating' | 'contained' | 'resolved' | 'closed';
 export type RetentionAction = 'delete' | 'anonymize' | 'review_hold';
 export type LegalReviewStatus = 'draft' | 'approved' | 'rejected';
+export type ProcessingRoleAssessment = 'controller' | 'processor' | 'joint_or_mixed' | 'tbd';
+export type ImpactAssessmentStatus = 'screening' | 'draft' | 'review' | 'approved' | 'not_required';
 
 export interface PrivacyRequestRow {
   id: string;
@@ -84,11 +86,61 @@ export interface LegalHoldRow {
   updated_at: string;
 }
 
+export interface PrivacyProcessingActivityRow {
+  id: string;
+  activity_key: string;
+  name: string;
+  subject_categories: string[];
+  data_categories: string[];
+  sensitive_data_possible: boolean;
+  purpose: string;
+  legal_basis: string;
+  data_source: string;
+  recipients: string[];
+  international_transfer: boolean;
+  destination_countries: string[];
+  role_assessment: ProcessingRoleAssessment;
+  retention_rule_id: string | null;
+  status: 'draft' | 'approved' | 'retired';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PrivacyImpactAssessmentRow {
+  id: string;
+  activity_id: string;
+  assessment_key: string;
+  status: ImpactAssessmentStatus;
+  required_by_internal_decision: boolean;
+  systematic_evaluation: boolean;
+  large_scale: boolean;
+  public_area_monitoring: boolean;
+  sensitive_data_exception: boolean;
+  significant_automated_decision: boolean;
+  other_high_risk: boolean;
+  screening_reason: string | null;
+  processing_description: string | null;
+  necessity_proportionality: string | null;
+  risks: string[];
+  mitigations: string[];
+  residual_risk: string | null;
+  agency_consultation_recommended: boolean;
+  decision_notes: string | null;
+  created_by: string | null;
+  reviewed_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PrivacyAdminSnapshot {
   requests: PrivacyRequestRow[];
   incidents: SecurityIncidentRow[];
   retentionPolicies: RetentionPolicyRow[];
   legalHolds: LegalHoldRow[];
+  processingActivities: PrivacyProcessingActivityRow[];
+  impactAssessments: PrivacyImpactAssessmentRow[];
 }
 
 function authHeaders(token: string, prefer?: string): HeadersInit {
@@ -146,13 +198,31 @@ async function patchRow<T>(table: string, id: string, body: Record<string, unkno
 
 export async function loadPrivacyAdminSnapshot(): Promise<PrivacyAdminSnapshot> {
   const { token } = await tokenAndProfile();
-  const [requests, incidents, retentionPolicies, legalHolds] = await Promise.all([
+  const [requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments] = await Promise.all([
     readRows<PrivacyRequestRow>('privacy_requests', token, 'received_at.desc'),
     readRows<SecurityIncidentRow>('security_incidents', token, 'detected_at.desc'),
     readRows<RetentionPolicyRow>('retention_policies', token, 'updated_at.desc'),
     readRows<LegalHoldRow>('legal_holds', token, 'created_at.desc'),
+    readRows<PrivacyProcessingActivityRow>('privacy_processing_activities', token, 'name.asc'),
+    readRows<PrivacyImpactAssessmentRow>('privacy_impact_assessments', token, 'updated_at.desc'),
   ]);
-  return { requests, incidents, retentionPolicies, legalHolds };
+  return { requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments };
+}
+
+export function updatePrivacyProcessingActivity(id: string, patch: Partial<Pick<PrivacyProcessingActivityRow,
+  'role_assessment' | 'status' | 'legal_basis' | 'notes'
+>>) {
+  return patchRow<PrivacyProcessingActivityRow>('privacy_processing_activities', id, patch as Record<string, unknown>);
+}
+
+export function updatePrivacyImpactAssessment(id: string, patch: Partial<Pick<PrivacyImpactAssessmentRow,
+  'status' | 'required_by_internal_decision' | 'systematic_evaluation' | 'large_scale' |
+  'public_area_monitoring' | 'sensitive_data_exception' | 'significant_automated_decision' |
+  'other_high_risk' | 'screening_reason' | 'processing_description' | 'necessity_proportionality' |
+  'risks' | 'mitigations' | 'residual_risk' | 'agency_consultation_recommended' | 'decision_notes' |
+  'reviewed_by' | 'approved_at'
+>>) {
+  return patchRow<PrivacyImpactAssessmentRow>('privacy_impact_assessments', id, patch as Record<string, unknown>);
 }
 
 export function updatePrivacyRequest(id: string, patch: Partial<Pick<PrivacyRequestRow,
