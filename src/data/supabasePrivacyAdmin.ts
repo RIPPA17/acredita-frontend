@@ -8,6 +8,8 @@ export type RetentionAction = 'delete' | 'anonymize' | 'review_hold';
 export type LegalReviewStatus = 'draft' | 'approved' | 'rejected';
 export type ProcessingRoleAssessment = 'controller' | 'processor' | 'joint_or_mixed' | 'tbd';
 export type ImpactAssessmentStatus = 'screening' | 'draft' | 'review' | 'approved' | 'not_required';
+export type RequirementPrivacyStatus = 'draft' | 'review' | 'approved' | 'rejected';
+export type MinimizationStrategy = 'pending' | 'full_document_justified' | 'extract_fields' | 'verification_only' | 'no_collection';
 
 export interface PrivacyRequestRow {
   id: string;
@@ -134,6 +136,41 @@ export interface PrivacyImpactAssessmentRow {
   updated_at: string;
 }
 
+export interface RequirementSummaryRow {
+  id: string;
+  project_id: string;
+  name: string;
+  category: string | null;
+  target: string;
+  criticality: string;
+  is_required: boolean;
+  is_active: boolean;
+}
+
+export interface RequirementPrivacyAssessmentRow {
+  id: string;
+  requirement_id: string;
+  status: RequirementPrivacyStatus;
+  purpose: string;
+  legal_basis: string;
+  necessity_assessment: string;
+  minimization_strategy: MinimizationStrategy;
+  minimization_notes: string | null;
+  sensitive_data_possible: boolean | null;
+  special_category_notes: string | null;
+  recipients: string[];
+  decision_effects: string[];
+  human_review_required: boolean;
+  human_override_available: boolean;
+  retention_rule_id: string | null;
+  mandante_instruction_reference: string | null;
+  reviewer_notes: string | null;
+  reviewed_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PrivacyAdminSnapshot {
   requests: PrivacyRequestRow[];
   incidents: SecurityIncidentRow[];
@@ -141,6 +178,8 @@ export interface PrivacyAdminSnapshot {
   legalHolds: LegalHoldRow[];
   processingActivities: PrivacyProcessingActivityRow[];
   impactAssessments: PrivacyImpactAssessmentRow[];
+  requirements: RequirementSummaryRow[];
+  requirementAssessments: RequirementPrivacyAssessmentRow[];
 }
 
 function authHeaders(token: string, prefer?: string): HeadersInit {
@@ -198,15 +237,26 @@ async function patchRow<T>(table: string, id: string, body: Record<string, unkno
 
 export async function loadPrivacyAdminSnapshot(): Promise<PrivacyAdminSnapshot> {
   const { token } = await tokenAndProfile();
-  const [requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments] = await Promise.all([
+  const [requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments] = await Promise.all([
     readRows<PrivacyRequestRow>('privacy_requests', token, 'received_at.desc'),
     readRows<SecurityIncidentRow>('security_incidents', token, 'detected_at.desc'),
     readRows<RetentionPolicyRow>('retention_policies', token, 'updated_at.desc'),
     readRows<LegalHoldRow>('legal_holds', token, 'created_at.desc'),
     readRows<PrivacyProcessingActivityRow>('privacy_processing_activities', token, 'name.asc'),
     readRows<PrivacyImpactAssessmentRow>('privacy_impact_assessments', token, 'updated_at.desc'),
+    readRows<RequirementSummaryRow>('requirements', token, 'name.asc'),
+    readRows<RequirementPrivacyAssessmentRow>('requirement_privacy_assessments', token, 'updated_at.desc'),
   ]);
-  return { requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments };
+  return { requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments };
+}
+
+export function updateRequirementPrivacyAssessment(id: string, patch: Partial<Pick<RequirementPrivacyAssessmentRow,
+  'status' | 'purpose' | 'legal_basis' | 'necessity_assessment' | 'minimization_strategy' |
+  'minimization_notes' | 'sensitive_data_possible' | 'special_category_notes' | 'recipients' |
+  'decision_effects' | 'human_review_required' | 'human_override_available' | 'retention_rule_id' |
+  'mandante_instruction_reference' | 'reviewer_notes' | 'reviewed_by' | 'approved_at'
+>>) {
+  return patchRow<RequirementPrivacyAssessmentRow>('requirement_privacy_assessments', id, patch as Record<string, unknown>);
 }
 
 export function updatePrivacyProcessingActivity(id: string, patch: Partial<Pick<PrivacyProcessingActivityRow,
