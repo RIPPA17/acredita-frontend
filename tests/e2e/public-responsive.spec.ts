@@ -25,7 +25,7 @@ test.describe('superficie pública de lanzamiento', () => {
 
     await expect(page.locator('nav').getByRole('link', { name: 'Cómo funciona' })).toBeVisible();
     await expect(page.locator('nav').getByRole('link', { name: 'Solicitar acceso' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Privacidad' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Privacidad', exact: true })).toBeVisible();
     await expect(page.getByText('Respuesta garantizada en')).toHaveCount(0);
     await expect(page.getByText('Gratis', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Iniciar sesión' }).click();
