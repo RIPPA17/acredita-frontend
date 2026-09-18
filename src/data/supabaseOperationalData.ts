@@ -41,6 +41,12 @@ type BackendWorker = {
   rut: string;
   full_name: string;
   job_title: string | null;
+  contract_type: Trabajador['tipoContrato'] | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  contract_work_or_task: string | null;
+  special_labor_regime: Trabajador['regimenEspecial'] | null;
+  special_labor_regime_detail: string | null;
   is_active: boolean;
 };
 type BackendAssignment = {
@@ -312,7 +318,7 @@ async function fetchRows(token: string): Promise<BackendRows> {
     selectRows<BackendContractor>('contratistas', token, 'id,integration_key'),
     selectRows<BackendAccreditation>('accreditations', token, 'id,project_id,contratista_id,is_active'),
     selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,alert_days,is_active'),
-    selectRows<BackendWorker>('workers', token, 'id,contratista_id,rut,full_name,job_title,is_active'),
+    selectRows<BackendWorker>('workers', token, 'id,contratista_id,rut,full_name,job_title,contract_type,contract_start_date,contract_end_date,contract_work_or_task,special_labor_regime,special_labor_regime_detail,is_active'),
     selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active,service_id,job_title,categories,assignment_status,access_status,assigned_at,unassigned_at'),
     selectRows<BackendDocument>('documents', token, 'id,accreditation_id,requirement_id,worker_id,obligation_id'),
     selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata'),
@@ -347,6 +353,12 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
         rut: worker.rut,
         full_name: worker.nombre,
         job_title: worker.cargo || null,
+        contract_type: worker.tipoContrato || null,
+        contract_start_date: worker.fechaInicioContrato || null,
+        contract_end_date: worker.fechaTerminoContrato || null,
+        contract_work_or_task: worker.obraFaenaContrato || null,
+        special_labor_regime: worker.regimenEspecial || null,
+        special_labor_regime_detail: worker.detalleRegimenEspecial || null,
         is_active: true,
         updated_at: new Date().toISOString(),
       });
@@ -802,6 +814,12 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
       rut: backendWorker.rut,
       cargo: backendWorker.job_title || undefined,
       faena: firstProject?.nombre,
+      tipoContrato: backendWorker.contract_type || undefined,
+      fechaInicioContrato: backendWorker.contract_start_date || undefined,
+      fechaTerminoContrato: backendWorker.contract_end_date || undefined,
+      obraFaenaContrato: backendWorker.contract_work_or_task || undefined,
+      regimenEspecial: backendWorker.special_labor_regime || undefined,
+      detalleRegimenEspecial: backendWorker.special_labor_regime_detail || undefined,
       documentos: docs,
       asignaciones: assignments,
     };
