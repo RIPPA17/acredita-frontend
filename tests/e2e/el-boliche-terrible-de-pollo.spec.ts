@@ -71,8 +71,8 @@ function dataFor(role: Role, stage: Stage) {
     contratistas: [{ id: CONTRACTOR, name: 'Terrible de Pollo SpA', rut: '77.123.456-9', legal_name: 'Terrible de Pollo SpA', integration_key: 'terrible_de_pollo', is_active: true, parent_contratista_id: null }],
     accreditations: [{ id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: true }],
     requirements: [
-      { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'f30_sii_mes_vigente', name: 'F30 SII (mes vigente)', category: 'Tributario', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento tributario mensual', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
-      { id: REQ_WORKER, project_id: PROJECT, integration_key: 'contrato_trabajo', name: 'Contrato de Trabajo', category: 'Laboral', target: 'trabajador', is_required: true, frequency: 'sin_vencimiento', validity_days: null, alert_days: 15, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'Contrato vigente del trabajador', review_checklist: [], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: null, due_days: 5 },
+      { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'f30_sii_mes_vigente', name: 'Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)', category: 'Tributario', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento tributario mensual', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
+      { id: REQ_WORKER, project_id: PROJECT, integration_key: 'contrato_trabajo', name: 'Contrato Individual de Trabajo', category: 'Laboral', target: 'trabajador', is_required: true, frequency: 'sin_vencimiento', validity_days: null, alert_days: 15, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'Contrato vigente del trabajador', review_checklist: [], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: null, due_days: 5 },
     ],
     workers: [{ id: WORKER, contratista_id: CONTRACTOR, rut: '21.406.583-5', full_name: 'sofia', job_title: 'abogada', is_active: true }],
     worker_assignments: [{ id: ASSIGNMENT, accreditation_id: ACCREDITATION, worker_id: WORKER, is_active: true, service_id: null, job_title: 'abogada', categories: ['general'], assignment_status: 'activa', access_status: 'pendiente', assigned_at: '2026-09-16', unassigned_at: null }],
@@ -174,15 +174,15 @@ async function openAdminQueue(page: Page) {
   if (await byTitle.count()) await byTitle.first().click();
   else await page.getByRole('button', { name: /Cola de revisión/ }).first().click();
   await expect(page.getByRole('heading', { name: 'Cola de revisión' })).toBeVisible();
-  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
 }
 
 test('El Boliche puede definir requisitos del proyecto para Terrible de Pollo', async ({ page }) => {
   await mount(page, 'mandante', 'pending');
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Requisitos', exact: true }).click();
-  await expect(page.getByText('F30 SII (mes vigente)')).toBeVisible();
-  await expect(page.getByText('Contrato de Trabajo')).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)')).toBeVisible();
+  await expect(page.getByText('Contrato Individual de Trabajo')).toBeVisible();
   await expect(page.getByRole('button', { name: /Agregar requisito/ })).toBeVisible();
 });
 
@@ -190,7 +190,7 @@ test('Terrible de Pollo carga F30 desde el requisito exacto y queda en revisión
   const { calls } = await mount(page, 'contratista', 'pending');
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
 
   const chooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Subir', exact: true }).first().click();
@@ -219,8 +219,8 @@ test('Terrible de Pollo ve el motivo de rechazo y la acción Corregir', async ({
   await mount(page, 'contratista', 'rejected');
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();
-  await page.getByText('F30 SII (mes vigente)').first().click();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
+  await page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first().click();
   await expect(page.getByText('Documento ilegible').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Corregir', exact: true }).first()).toBeVisible();
 });
