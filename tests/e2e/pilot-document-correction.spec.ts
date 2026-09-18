@@ -26,7 +26,7 @@ async function mountRejectedDocument(page: Page) {
       id: REQUIREMENT,
       project_id: PROJECT,
       integration_key: 'f30_sii_mes_vigente',
-      name: 'F30 SII (mes vigente)',
+      name: 'Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)',
       category: 'Tributario',
       target: 'empresa',
       is_required: true,
@@ -142,7 +142,7 @@ test('piloto: contratista corrige un F30 rechazado y genera la versión 2 en rev
 
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('F30 SII (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
   await expect(page.getByText('Rechazado').first()).toBeVisible();
 
   const chooserPromise = page.waitForEvent('filechooser');

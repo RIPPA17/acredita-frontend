@@ -5,6 +5,7 @@ export const CORE_RUNTIME_KEYS = [
   'acredita_proyectos',
   'acredita_contratistas',
   'acredita_requisitos',
+  'acredita_decision_overrides',
 ] as const;
 
 const LEGACY_BUSINESS_KEYS = [
