@@ -8,9 +8,9 @@ import { getAsignacionProyecto } from './operationalCore';
 import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';
 
 export const REGLAS_DEFAULT = [
-  { id: 1, documento: "F30-1 DT — Cumplimiento laboral y previsional", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
-  { id: 2, documento: "ODI", diasVigencia: null, alertaDias: 30, criticidad: "bloquea_acceso" },
-  { id: 3, documento: "Acreditación organismo administrador Ley 16.744", diasVigencia: 365, alertaDias: 30, criticidad: "bloquea_acceso" }
+  { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
+  { id: 2, documento: "Registro de Información de los Riesgos Laborales (ODI) — D.S. N° 44", diasVigencia: null, alertaDias: 30, criticidad: "bloquea_acceso" },
+  { id: 3, documento: "Certificado de adhesión o afiliación al organismo administrador de la Ley N° 16.744", diasVigencia: 365, alertaDias: 30, criticidad: "bloquea_acceso" }
 ];
 
 // Datos de negocio: memoria efímera hidratada desde Supabase.
