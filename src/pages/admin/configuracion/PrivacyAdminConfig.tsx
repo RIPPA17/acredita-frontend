@@ -21,6 +21,7 @@ import {
   releaseLegalHold,
   updatePrivacyImpactAssessment,
   updatePrivacyProcessingActivity,
+  updateRequirementPrivacyAssessment,
   updatePrivacyRequest,
   updateRetentionPolicy,
   updateSecurityIncident,
@@ -32,16 +33,19 @@ import {
   type PrivacyProcessingActivityRow,
   type PrivacyRequestRow,
   type ProcessingRoleAssessment,
+  type RequirementPrivacyAssessmentRow,
+  type RequirementSummaryRow,
+  type MinimizationStrategy,
   type RetentionAction,
   type RetentionPolicyRow,
   type SecurityIncidentRow,
 } from '../../../data/supabasePrivacyAdmin';
 
-type Section = 'resumen' | 'tratamientos' | 'impacto' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
+type Section = 'resumen' | 'tratamientos' | 'requisitos' | 'impacto' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
 
 type ToastFn = (msg: string, type?: 'success' | 'error' | 'warning') => void;
 
-const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [] };
+const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [], requirements: [], requirementAssessments: [] };
 
 const requestLabels: Record<PrivacyRequestRow['request_type'], string> = {
   access: 'Acceso',
@@ -83,6 +87,14 @@ const impactStatusLabels: Record<PrivacyImpactAssessmentRow['status'], string> =
   review: 'En revisión',
   approved: 'Aprobada',
   not_required: 'No requerida',
+};
+
+const minimizationLabels: Record<MinimizationStrategy, string> = {
+  pending: 'Por definir',
+  full_document_justified: 'Documento completo justificado',
+  extract_fields: 'Extraer solo campos necesarios',
+  verification_only: 'Verificar sin conservar documento',
+  no_collection: 'No recopilar',
 };
 
 function fmt(value: string | null | undefined) {
@@ -143,6 +155,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
   const tabs: Array<{ id: Section; label: string }> = [
     { id: 'resumen', label: 'Resumen' },
     { id: 'tratamientos', label: `Tratamientos (${data.processingActivities.length})` },
+    { id: 'requisitos', label: `Requisitos (${data.requirementAssessments.length})` },
     { id: 'impacto', label: `EIPD (${data.impactAssessments.length})` },
     { id: 'solicitudes', label: `Solicitudes${openRequests.length ? ` (${openRequests.length})` : ''}` },
     { id: 'incidentes', label: `Incidentes${openIncidents.length ? ` (${openIncidents.length})` : ''}` },
@@ -179,8 +192,9 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
 
       {section === 'resumen' && (
         <div className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
             <Card title="Tratamientos" value={data.processingActivities.length} subtitle={`${data.processingActivities.filter(item => item.status === 'draft').length} pendientes de cierre jurídico`} icon={<Database size={18} />} />
+            <Card title="Requisitos" value={data.requirementAssessments.length} subtitle={`${data.requirementAssessments.filter(item => item.status !== 'approved').length} sin aprobación de privacidad`} icon={<FileLock2 size={18} />} />
             <Card title="EIPD" value={data.impactAssessments.length} subtitle={`${data.impactAssessments.filter(item => item.required_by_internal_decision).length} requeridas internamente`} icon={<ShieldAlert size={18} />} />
             <Card title="Solicitudes abiertas" value={openRequests.length} subtitle={`${overdueRequests.length} fuera de plazo configurado`} icon={<UserRoundCheck size={18} />} />
             <Card title="Incidentes abiertos" value={openIncidents.length} subtitle="Detectados, investigando o contenidos" icon={<ShieldAlert size={18} />} />
@@ -210,6 +224,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
       )}
 
       {section === 'tratamientos' && <ProcessingActivitiesPanel rows={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
+      {section === 'requisitos' && <RequirementPrivacyPanel assessments={data.requirementAssessments} requirements={data.requirements} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'impacto' && <ImpactAssessmentsPanel rows={data.impactAssessments} activities={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'solicitudes' && <RequestsPanel rows={data.requests} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'incidentes' && <IncidentsPanel rows={data.incidents} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
@@ -267,6 +282,86 @@ function ProcessingActivitiesPanel({ rows, busy, setBusy, refresh, showToast }: 
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+function RequirementPrivacyPanel({ assessments, requirements, busy, setBusy, refresh, showToast }: { assessments: RequirementPrivacyAssessmentRow[]; requirements: RequirementSummaryRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [filter, setFilter] = useState<'pending' | 'effects' | 'special' | 'all'>('pending');
+  const requirementById = useMemo(() => new Map(requirements.map(item => [item.id, item])), [requirements]);
+  const visible = assessments.filter(item => {
+    if (filter === 'pending') return item.status !== 'approved';
+    if (filter === 'effects') return item.decision_effects.length > 0;
+    if (filter === 'special') return Boolean(item.special_category_notes) || item.sensitive_data_possible === true;
+    return true;
+  });
+  const patch = async (row: RequirementPrivacyAssessmentRow, value: Partial<RequirementPrivacyAssessmentRow>, success: string) => {
+    setBusy(true);
+    try {
+      await updateRequirementPrivacyAssessment(row.id, value);
+      showToast(success);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar la evaluación del requisito.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        <strong>Matriz por requisito.</strong> No se presume que un documento sea lícito o necesario solo porque el Mandante lo solicite. Antes de aprobarlo para producción debe quedar documentada su base, necesidad, minimización, destinatarios, retención y revisión humana.
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {([['pending','Pendientes'],['effects','Con efecto'],['special','Revisión reforzada'],['all','Todos']] as const).map(([value,label]) => (
+          <button type="button" key={value} onClick={() => setFilter(value)} className={`rounded-lg px-3 py-2 text-[12px] ${filter === value ? 'bg-navy text-white' : 'bg-white text-gray-500 border border-cream3'}`}>{label}</button>
+        ))}
+      </div>
+      {visible.map(row => {
+        const req = requirementById.get(row.requirement_id);
+        return (
+          <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-[13.5px] text-navy">{req?.name || 'Requisito'}</strong>
+                  <Badge tone={row.status === 'approved' ? 'good' : row.status === 'review' ? 'info' : 'warn'}>{row.status === 'approved' ? 'Privacidad aprobada' : row.status === 'review' ? 'En revisión' : 'Borrador'}</Badge>
+                  {req?.target && <Badge>{req.target}</Badge>}
+                  {row.decision_effects.map(effect => <Badge key={effect} tone="bad">Puede afectar {effect}</Badge>)}
+                  {row.special_category_notes && <Badge tone="warn">Revisión reforzada</Badge>}
+                </div>
+                <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Finalidad:</strong> {row.purpose}</p>
+                <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Base:</strong> {row.legal_basis}</p>
+                <p className="mt-2 text-[12px] leading-5 text-gray-500"><strong>Necesidad:</strong> {row.necessity_assessment}</p>
+                {row.special_category_notes && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[11.5px] leading-5 text-amber-900">{row.special_category_notes}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11.5px] text-gray-500">
+                  <span>Minimización: <strong className="text-navy">{minimizationLabels[row.minimization_strategy]}</strong></span>
+                  <span>·</span>
+                  <span>Datos sensibles: <strong className="text-navy">{row.sensitive_data_possible === null ? 'por evaluar' : row.sensitive_data_possible ? 'posibles' : 'no esperados'}</strong></span>
+                  <span>·</span>
+                  <span>Revisión humana: <strong className="text-navy">{row.human_review_required ? 'sí' : 'no'}</strong></span>
+                  <span>·</span>
+                  <span>Override: <strong className="text-navy">{row.human_override_available ? 'documentado' : 'pendiente'}</strong></span>
+                </div>
+              </div>
+              <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:w-[360px]">
+                <label className="text-[11px] font-semibold text-gray-500">Minimización
+                  <select disabled={busy} value={row.minimization_strategy} onChange={e => void patch(row, { minimization_strategy: e.target.value as MinimizationStrategy }, 'Estrategia de minimización actualizada.')} className="form-input mt-1 w-full rounded-lg border border-cream3 px-2 py-2 text-[12px] font-normal text-navy">
+                    {Object.entries(minimizationLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className="text-[11px] font-semibold text-gray-500">Datos sensibles
+                  <select disabled={busy} value={row.sensitive_data_possible === null ? 'unknown' : row.sensitive_data_possible ? 'yes' : 'no'} onChange={e => void patch(row, { sensitive_data_possible: e.target.value === 'unknown' ? null : e.target.value === 'yes' }, 'Evaluación de datos sensibles actualizada.')} className="form-input mt-1 w-full rounded-lg border border-cream3 px-2 py-2 text-[12px] font-normal text-navy">
+                    <option value="unknown">Por evaluar</option><option value="yes">Puede contenerlos</option><option value="no">No esperados</option>
+                  </select>
+                </label>
+                {row.status === 'draft' && <button disabled={busy} type="button" className="btn btn-ghost sm:col-span-2" onClick={() => void patch(row, { status: 'review' }, 'Requisito enviado a revisión de privacidad.')}>Pasar a revisión</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
