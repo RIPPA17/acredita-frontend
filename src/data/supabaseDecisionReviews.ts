@@ -1,7 +1,35 @@
 import { restoreSupabaseSession, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './supabaseAuth';
+import { getRuntimeArray } from './runtimeDataStore';
 
 export type DecisionReviewType = 'accreditation' | 'access' | 'payment' | 'work' | 'assignment';
 export type DecisionReviewStatus = 'requested' | 'in_review' | 'upheld' | 'overridden' | 'closed';
+
+export interface RuntimeDecisionOverride {
+  accreditationId: string;
+  contractorKey: string;
+  projectKey: string;
+  workerRut?: string;
+  decisionType: DecisionReviewType;
+  overrideValue: string;
+  overrideReason: string;
+  overrideUntil: string;
+  reviewedAt?: string | null;
+}
+
+export function getActiveProjectDecisionOverride(
+  contractorKey: string,
+  projectKey: string,
+  decisionType: DecisionReviewType,
+): RuntimeDecisionOverride | undefined {
+  const now = Date.now();
+  return getRuntimeArray<RuntimeDecisionOverride>('acredita_decision_overrides', []).find(item =>
+    item.contractorKey === contractorKey
+    && item.projectKey === projectKey
+    && item.decisionType === decisionType
+    && !item.workerRut
+    && new Date(item.overrideUntil).getTime() > now
+  );
+}
 
 export interface DecisionReviewRow {
   id: string;
