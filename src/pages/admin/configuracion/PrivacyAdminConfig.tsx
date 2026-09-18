@@ -19,6 +19,8 @@ import {
   downloadJsonFile,
   loadPrivacyAdminSnapshot,
   releaseLegalHold,
+  updatePrivacyImpactAssessment,
+  updatePrivacyProcessingActivity,
   updatePrivacyRequest,
   updateRetentionPolicy,
   updateSecurityIncident,
@@ -26,17 +28,20 @@ import {
   type IncidentStatus,
   type LegalHoldRow,
   type PrivacyAdminSnapshot,
+  type PrivacyImpactAssessmentRow,
+  type PrivacyProcessingActivityRow,
   type PrivacyRequestRow,
+  type ProcessingRoleAssessment,
   type RetentionAction,
   type RetentionPolicyRow,
   type SecurityIncidentRow,
 } from '../../../data/supabasePrivacyAdmin';
 
-type Section = 'resumen' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
+type Section = 'resumen' | 'tratamientos' | 'impacto' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
 
 type ToastFn = (msg: string, type?: 'success' | 'error' | 'warning') => void;
 
-const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [] };
+const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [] };
 
 const requestLabels: Record<PrivacyRequestRow['request_type'], string> = {
   access: 'Acceso',
@@ -63,6 +68,21 @@ const incidentStatusLabels: Record<IncidentStatus, string> = {
   contained: 'Contenido',
   resolved: 'Resuelto',
   closed: 'Cerrado',
+};
+
+const roleLabels: Record<ProcessingRoleAssessment, string> = {
+  controller: 'Responsable',
+  processor: 'Encargado',
+  joint_or_mixed: 'Rol mixto',
+  tbd: 'Por definir',
+};
+
+const impactStatusLabels: Record<PrivacyImpactAssessmentRow['status'], string> = {
+  screening: 'Screening',
+  draft: 'EIPD en borrador',
+  review: 'En revisión',
+  approved: 'Aprobada',
+  not_required: 'No requerida',
 };
 
 function fmt(value: string | null | undefined) {
@@ -122,6 +142,8 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
 
   const tabs: Array<{ id: Section; label: string }> = [
     { id: 'resumen', label: 'Resumen' },
+    { id: 'tratamientos', label: `Tratamientos (${data.processingActivities.length})` },
+    { id: 'impacto', label: `EIPD (${data.impactAssessments.length})` },
     { id: 'solicitudes', label: `Solicitudes${openRequests.length ? ` (${openRequests.length})` : ''}` },
     { id: 'incidentes', label: `Incidentes${openIncidents.length ? ` (${openIncidents.length})` : ''}` },
     { id: 'retencion', label: 'Retención' },
@@ -144,7 +166,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
         <div>
           <div className="flex items-center gap-2 text-brown"><FileLock2 size={18} /><span className="text-[11px] font-semibold uppercase tracking-[1.5px]">Privacidad por diseño</span></div>
           <h3 className="mt-1 text-xl font-semibold text-navy">Centro de privacidad</h3>
-          <p className="mt-1 max-w-[760px] text-[12.5px] leading-5 text-gray-500">Gestión operativa de derechos de titulares, incidentes, retención y bloqueos de conservación. Las eliminaciones automáticas permanecen desactivadas hasta aprobar las políticas de retención.</p>
+          <p className="mt-1 max-w-[820px] text-[12.5px] leading-5 text-gray-500">Gobierno de privacidad para Ley 21.719: registro de tratamientos (ROPA), evaluación de impacto, derechos de titulares, incidentes, retención y bloqueos de conservación. Las bases jurídicas y periodos definitivos permanecen sujetos a revisión antes del go-live.</p>
         </div>
         <button type="button" disabled={busy} className="btn btn-ghost shrink-0" onClick={() => void refresh()}><RefreshCw size={15} /> Actualizar</button>
       </div>
@@ -157,7 +179,9 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
 
       {section === 'resumen' && (
         <div className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <Card title="Tratamientos" value={data.processingActivities.length} subtitle={`${data.processingActivities.filter(item => item.status === 'draft').length} pendientes de cierre jurídico`} icon={<Database size={18} />} />
+            <Card title="EIPD" value={data.impactAssessments.length} subtitle={`${data.impactAssessments.filter(item => item.required_by_internal_decision).length} requeridas internamente`} icon={<ShieldAlert size={18} />} />
             <Card title="Solicitudes abiertas" value={openRequests.length} subtitle={`${overdueRequests.length} fuera de plazo configurado`} icon={<UserRoundCheck size={18} />} />
             <Card title="Incidentes abiertos" value={openIncidents.length} subtitle="Detectados, investigando o contenidos" icon={<ShieldAlert size={18} />} />
             <Card title="Políticas" value={data.retentionPolicies.length} subtitle={`${data.retentionPolicies.filter(item => item.active).length} activas`} icon={<Database size={18} />} />
@@ -185,11 +209,113 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
         </div>
       )}
 
+      {section === 'tratamientos' && <ProcessingActivitiesPanel rows={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
+      {section === 'impacto' && <ImpactAssessmentsPanel rows={data.impactAssessments} activities={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'solicitudes' && <RequestsPanel rows={data.requests} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'incidentes' && <IncidentsPanel rows={data.incidents} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'retencion' && <RetentionPanel rows={data.retentionPolicies} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'holds' && <HoldsPanel rows={data.legalHolds} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'exportar' && <ExportPanel busy={busy} setBusy={setBusy} showToast={showToast} />}
+    </div>
+  );
+}
+
+
+function ProcessingActivitiesPanel({ rows, busy, setBusy, refresh, showToast }: { rows: PrivacyProcessingActivityRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const setRole = async (row: PrivacyProcessingActivityRow, role: ProcessingRoleAssessment) => {
+    setBusy(true);
+    try {
+      await updatePrivacyProcessingActivity(row.id, { role_assessment: role });
+      showToast('Rol preliminar del tratamiento actualizado.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar el tratamiento.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        <strong>ROPA de preparación.</strong> Las bases de legitimidad y roles que aparecen aquí son evaluaciones preliminares para revisión jurídica/contractual. No deben marcarse como aprobadas hasta cerrar contratos, requisitos y política pública.
+      </div>
+      {rows.map(row => (
+        <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-[13.5px] text-navy">{row.name}</strong>
+                <Badge tone={row.status === 'approved' ? 'good' : 'warn'}>{row.status === 'approved' ? 'Aprobado' : 'Borrador'}</Badge>
+                {row.sensitive_data_possible && <Badge tone="warn">Puede incluir datos sensibles</Badge>}
+                {row.international_transfer && <Badge tone="info">Transferencia internacional</Badge>}
+              </div>
+              <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Finalidad:</strong> {row.purpose}</p>
+              <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Base preliminar:</strong> {row.legal_basis}</p>
+              <p className="mt-2 text-[12px] leading-5 text-gray-500"><strong>Titulares:</strong> {row.subject_categories.join(', ')}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Datos:</strong> {row.data_categories.join(', ')}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Destinatarios:</strong> {row.recipients.join(', ') || '—'}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Fuente:</strong> {row.data_source}</p>
+              {row.international_transfer && <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Destinos registrados:</strong> {row.destination_countries.join(', ') || 'Por confirmar'}</p>}
+              {row.notes && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600">{row.notes}</p>}
+            </div>
+            <label className="shrink-0 text-[11px] font-semibold uppercase tracking-[.8px] text-gray-400">
+              Rol preliminar
+              <select disabled={busy} value={row.role_assessment} onChange={e => void setRole(row, e.target.value as ProcessingRoleAssessment)} className="form-input mt-1 block rounded-lg border border-cream3 px-3 py-2 text-[12px] normal-case tracking-normal text-navy">
+                {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ImpactAssessmentsPanel({ rows, activities, busy, setBusy, refresh, showToast }: { rows: PrivacyImpactAssessmentRow[]; activities: PrivacyProcessingActivityRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const activityName = (id: string) => activities.find(item => item.id === id)?.name || 'Tratamiento';
+  const sendToReview = async (row: PrivacyImpactAssessmentRow) => {
+    setBusy(true);
+    try {
+      await updatePrivacyImpactAssessment(row.id, { status: 'review' });
+      showToast('EIPD enviada a revisión.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar la EIPD.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        La acreditación de trabajadores se mantiene como EIPD requerida por decisión interna conservadora antes del go-live. La aprobación final debe documentar necesidad, proporcionalidad, riesgos, mitigaciones y riesgo residual.
+      </div>
+      {rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay evaluaciones de impacto.</div> : rows.map(row => (
+        <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-[13.5px] text-navy">{activityName(row.activity_id)}</strong>
+                <Badge tone={row.status === 'approved' ? 'good' : row.required_by_internal_decision ? 'warn' : 'neutral'}>{impactStatusLabels[row.status]}</Badge>
+                {row.required_by_internal_decision && <Badge tone="bad">EIPD requerida internamente</Badge>}
+              </div>
+              {row.screening_reason && <p className="mt-2 text-[12px] leading-5 text-gray-600">{row.screening_reason}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {row.significant_automated_decision && <Badge tone="warn">Decisión automatizada significativa: evaluar</Badge>}
+                {row.systematic_evaluation && <Badge tone="warn">Evaluación sistemática</Badge>}
+                {row.large_scale && <Badge tone="warn">Gran escala</Badge>}
+                {row.sensitive_data_exception && <Badge tone="warn">Datos sensibles</Badge>}
+                {row.other_high_risk && <Badge tone="warn">Otro alto riesgo</Badge>}
+              </div>
+              {row.processing_description && <p className="mt-3 text-[12px] leading-5 text-gray-500"><strong>Tratamiento:</strong> {row.processing_description}</p>}
+              {row.risks.length > 0 && <div className="mt-3"><strong className="text-[12px] text-navy">Riesgos</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-[11.5px] leading-5 text-gray-500">{row.risks.map(risk => <li key={risk}>{risk}</li>)}</ul></div>}
+              {row.mitigations.length > 0 && <div className="mt-3"><strong className="text-[12px] text-navy">Mitigaciones existentes</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-[11.5px] leading-5 text-gray-500">{row.mitigations.map(item => <li key={item}>{item}</li>)}</ul></div>}
+              {row.decision_notes && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600">{row.decision_notes}</p>}
+            </div>
+            {row.status === 'draft' && <button disabled={busy} type="button" className="btn btn-ghost shrink-0" onClick={() => void sendToReview(row)}>Pasar a revisión</button>}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
