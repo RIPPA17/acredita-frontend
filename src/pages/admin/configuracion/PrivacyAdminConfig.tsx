@@ -328,7 +328,7 @@ function RequirementPrivacyPanel({ assessments, requirements, busy, setBusy, ref
                   <strong className="text-[13.5px] text-navy">{req?.name || 'Requisito'}</strong>
                   <Badge tone={row.status === 'approved' ? 'good' : row.status === 'review' ? 'info' : 'warn'}>{row.status === 'approved' ? 'Privacidad aprobada' : row.status === 'review' ? 'En revisión' : 'Borrador'}</Badge>
                   {req?.target && <Badge>{req.target}</Badge>}
-                  {row.decision_effects.map(effect => <Badge key={effect} tone="bad">Puede afectar {effect}</Badge>)}
+                  {row.decision_effects.map(effect => <Badge key={effect} tone="bad">{`Puede afectar ${effect}`}</Badge>)}
                   {row.special_category_notes && <Badge tone="warn">Revisión reforzada</Badge>}
                 </div>
                 <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Finalidad:</strong> {row.purpose}</p>
