@@ -221,7 +221,15 @@ export default function DashboardTab({
             <section className="inicio2-card" style={{ marginBottom: 16 }}>
               <header>
                 <div><h3>Revisión humana de un bloqueo</h3><p>Si crees que un bloqueo automático no refleja la documentación o el contexto real, puedes pedir que una persona revise la decisión.</p></div>
-                <button type="button" onClick={() => { setReviewOpen(value => !value); setReviewMessage(null); }}>{reviewOpen ? 'Cerrar' : 'Solicitar revisión'}</button>
+                <button type="button" onClick={() => {
+                  if (reviewOpen) {
+                    setReviewOpen(false);
+                  } else {
+                    setReviewType(acceso.estado === 'bloqueado' ? 'access' : 'payment');
+                    setReviewOpen(true);
+                  }
+                  setReviewMessage(null);
+                }}>{reviewOpen ? 'Cerrar' : 'Solicitar revisión'}</button>
               </header>
               {reviewOpen && <div className="inicio2-card-body">
                 <div style={{ display: 'grid', gap: 10 }}>
