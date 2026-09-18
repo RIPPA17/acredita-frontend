@@ -126,7 +126,7 @@ test('alta por obra o faena exige y guarda la obra específica', async ({ page }
   await page.getByRole('button', { name: /Agregar trabajador/ }).click();
 
   await page.getByPlaceholder('Ej. María González').fill('María Faena QA');
-  await page.getByPlaceholder('12.345.678-9').fill('11.111.111-1');
+  await page.getByPlaceholder('12.345.678-9').fill('21.406.583-5');
   await page.getByPlaceholder('Ej. Operador').fill('Montajista');
   await page.getByLabel('Tipo de contrato').selectOption('obra_faena');
   await page.getByLabel('Fecha de inicio del contrato').fill('2026-09-18');
@@ -141,7 +141,7 @@ test('alta por obra o faena exige y guarda la obra específica', async ({ page }
     const parsed = JSON.parse(call.body);
     const rows = Array.isArray(parsed) ? parsed : [parsed];
     return rows.some(row =>
-      row.rut === '11.111.111-1'
+      row.rut === '21.406.583-5'
       && row.contract_type === 'obra_faena'
       && row.contract_work_or_task === 'Montaje de estructura metálica sector norte'
       && row.contract_end_date === null
