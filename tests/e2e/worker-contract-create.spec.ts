@@ -148,3 +148,54 @@ test('alta por obra o faena exige y guarda la obra específica', async ({ page }
     );
   })).toBeTruthy();
 });
+
+
+test('trabajador sin matriz documental queda en proceso y no habilitado', async ({ page }) => {
+  await mockContractor(page);
+
+  await page.goto('/contratista');
+  await page.getByText('Trabajadores', { exact: true }).first().click();
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+
+  await page.getByPlaceholder('Ej. María González').fill('Pedro Sin Matriz QA');
+  await page.getByPlaceholder('12.345.678-9').fill('18.390.436-7');
+  await page.getByPlaceholder('Ej. Operador').fill('Operador');
+
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Matriz documental pendiente')).toBeVisible();
+  await expect(page.getByText('No habilitado')).toBeVisible();
+});
+
+test('permite editar la asignación y retirar al trabajador conservando la baja', async ({ page }) => {
+  const calls = await mockContractor(page);
+
+  await page.goto('/contratista');
+  await page.getByText('Trabajadores', { exact: true }).first().click();
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+
+  await page.getByPlaceholder('Ej. María González').fill('Ana Ciclo QA');
+  await page.getByPlaceholder('12.345.678-9').fill('15.763.748-2');
+  await page.getByPlaceholder('Ej. Operador').fill('Operadora');
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await page.getByRole('button', { name: 'Editar' }).click();
+  await page.getByPlaceholder('Ej. Operador').fill('Supervisora');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByText('Trabajador actualizado con éxito')).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Retirar' }).click();
+  await expect(page.getByText('Trabajador retirado del proyecto. Su historial fue conservado.')).toBeVisible();
+
+  await expect.poll(() => calls.some(call => {
+    if (call.method !== 'POST' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
+    const parsed = JSON.parse(call.body);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.some(row => row.job_title === 'Supervisora');
+  })).toBeTruthy();
+});
