@@ -25,6 +25,14 @@ test.describe('superficie pública de lanzamiento', () => {
 
     await expect(page.locator('nav').getByRole('link', { name: 'Cómo funciona' })).toBeVisible();
     await expect(page.locator('nav').getByRole('link', { name: 'Solicitar acceso' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Privacidad', exact: true })).toBeVisible();
+    await expect(page.getByText('Respuesta garantizada en')).toHaveCount(0);
+    await expect(page.getByText('Gratis', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+    await expect(page.getByRole('dialog', { name: '¿Cómo quieres ingresar?' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cerrar selector de acceso' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -71,6 +79,7 @@ test.describe('superficie pública de lanzamiento', () => {
     await page.goto('/registro?rol=mandante');
     await expect(page.getByRole('heading', { name: 'Solicitar acceso' })).toBeVisible();
     await expect(page.getByLabel('Empresa o razón social')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Centro de privacidad' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.goto('/recuperar');

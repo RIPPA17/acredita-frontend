@@ -35,7 +35,7 @@ export default function LoginPage() {
         <aside className="hidden flex-col justify-between bg-brown p-10 text-cream md:flex lg:p-12">
           <div>
             <div className="mb-12 text-[24px] tracking-[2px]">Acre<b className="font-normal text-navy">dita</b></div>
-            <h1 className="mb-6 text-[36px] font-medium leading-[1.2] lg:text-[42px]">Simplifica tu<br />cumplimiento laboral</h1>
+            <h1 className="mb-6 text-[36px] font-medium leading-[1.2] lg:text-[42px]">Simplifica tu<br />cumplimiento documental</h1>
             <p className="mb-12 max-w-[420px] text-[16px] leading-relaxed text-white/80 lg:text-[17px]">
               Centraliza la acreditación documental entre mandantes, contratistas y trabajadores.
             </p>

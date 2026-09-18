@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { 
   ShieldCheck, Settings, Upload, CheckCircle, Eye, Bell, Banknote, 
   FileText, Sparkles, Archive, AlertTriangle, Users, Check, Plus, 
@@ -16,11 +16,20 @@ export default function LandingPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  useEffect(() => {
+    if (!showLoginModal) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowLoginModal(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [showLoginModal]);
+
   const [demoForm, setDemoForm] = useState({ nombre: '', empresa: '', industria: '', correo: '', tamano: '', mensaje: '' });
 const [demoEnviado, setDemoEnviado] = useState(false);
 const [demoEnviando, setDemoEnviando] = useState(false);
 
-const handleSubmitDemo = async (e: React.FormEvent) => {
+const handleSubmitDemo = async (e: FormEvent) => {
   e.preventDefault();
   if (!demoForm.nombre.trim() || !demoForm.empresa.trim() || !demoForm.correo.trim() || demoEnviando) return;
 
@@ -44,7 +53,6 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
         phone: null,
         company_size: demoForm.tamano || null,
         message: demoForm.mensaje.trim() || null,
-        status: 'pending',
       }),
     });
 
@@ -65,7 +73,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
   return (
     <div className="bg-white min-h-screen text-navy">
       {/* NAV */}
-      <nav className="sticky top-0 z-[100] bg-navy flex items-center justify-between px-12 h-14">
+      <nav className="sticky top-0 z-[100] bg-navy flex items-center justify-between px-4 md:px-12 h-14">
         <div className="text-[24.2px] text-cream tracking-[2px]">Acre<b className="text-brown font-normal">dita</b></div>
         <div className="hidden md:flex gap-8 items-center">
           <a href="#como-funciona" className="text-[#9aabb8] text-[15.4px] hover:text-cream cursor-pointer transition-colors">Cómo funciona</a>
@@ -79,11 +87,11 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </nav>
 
       {/* HERO */}
-      <div className="bg-navy pt-20 px-12 text-center overflow-hidden">
+      <div className="bg-navy pt-14 md:pt-20 px-5 md:px-12 text-center overflow-hidden">
         <div className="inline-flex items-center gap-1.5 bg-brown/20 text-brown border border-brown/30 px-3.5 py-1 rounded-full text-[14.3px] mb-6">
           <ShieldCheck size={16} /> Cumplimiento documental especializado
         </div>
-        <h1 className="text-[52.8px] text-cream leading-[1.1] tracking-tight mb-5 max-w-[700px] mx-auto font-medium">
+        <h1 className="text-[39px] md:text-[52.8px] text-cream leading-[1.1] tracking-tight mb-5 max-w-[700px] mx-auto font-medium">
           Deja de perseguir<br/>documentos.<br/><span className="text-brown">Acredita lo hace por ti.</span>
         </h1>
         <p className="text-[#9aabb8] text-[18.7px] max-w-[520px] mx-auto mb-8 leading-relaxed">
@@ -105,7 +113,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
               <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
             </div>
             <div className="text-[12.1px] font-medium text-white/50 bg-white/5 px-2 py-0.5 rounded-lg flex items-center justify-center min-w-[200px]">
-              app.acredita.cl
+              Vista demostrativa
             </div>
             <div className="w-[38px]"></div> {/* spacer for center alignment */}
           </div>
@@ -237,7 +245,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </div>
 
       {/* BENEFICIOS */}
-      <div id="beneficios" className="bg-navy py-20 px-12">
+      <div id="beneficios" className="bg-navy py-16 px-5 md:py-20 md:px-12">
         <div className="text-center max-w-[700px] mx-auto">
           <div className="inline-block bg-[#EBEBDD]/10 text-brown text-[12.7px] font-semibold tracking-[1.5px] uppercase py-1 px-3 rounded-md mb-4">Beneficios por rol</div>
           <div className="text-[33px] text-cream font-medium leading-[1.2]">Diseñado para ambos lados<br/>de la relación</div>
@@ -266,7 +274,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
           </div>
           <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
             <h3 className="text-[19.8px] text-cream mb-6 flex items-center gap-2.5 font-medium">
-              Para el Contratista <span className="bg-brown text-[var(--brown-text,white)] text-[12.1px] py-[3px] px-2.5 rounded-lg font-normal">Gratis</span>
+              Para el Contratista
             </h3>
             <div className="flex items-start gap-2.5 mb-4">
               <Sparkles className="text-brown mt-[2px] shrink-0" size={20} />
@@ -278,7 +286,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
             </div>
             <div className="flex items-start gap-2.5 mb-4">
               <AlertTriangle className="text-brown mt-[2px] shrink-0" size={20} />
-              <div className="text-[15.4px] text-[#9aabb8] leading-relaxed"><strong className="block text-cream mb-0.5">Nunca más un vencimiento sorpresa</strong>Alertas 30, 15 y 7 días antes de que expire cualquier documento.</div>
+              <div className="text-[15.4px] text-[#9aabb8] leading-relaxed"><strong className="block text-cream mb-0.5">Nunca más un vencimiento sorpresa</strong>Alertas configurables para anticipar documentos próximos a vencer y evitar bloqueos operativos.</div>
             </div>
             <div className="flex items-start gap-2.5 mb-4">
               <Users className="text-brown mt-[2px] shrink-0" size={20} />
@@ -289,7 +297,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </div>
 
       {/* CAPACIDADES DEL PRODUCTO */}
-      <div className="bg-white py-20 px-12">
+      <div className="bg-white py-16 px-5 md:py-20 md:px-12">
         <div className="text-center max-w-[700px] mx-auto">
           <div className="inline-block bg-cream text-brown text-[12.7px] font-semibold tracking-[1.5px] uppercase py-1 px-3 rounded-md mb-4">Qué permite Acredita</div>
           <div className="text-[33px] font-medium leading-[1.2]">Capacidades reales del producto</div>
@@ -317,11 +325,11 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </div>
 
       {/* CONTACTO */}
-      <div id="contacto" className="bg-navy py-20 px-12">
+      <div id="contacto" className="bg-navy py-16 px-5 md:py-20 md:px-12">
         <div className="text-center max-w-[700px] mx-auto">
           <h2 className="text-[44px] md:text-[52.8px] font-semibold text-brown tracking-tight mb-4 mt-8">Contacto</h2>
           <div className="text-[24px] md:text-[28px] text-cream font-medium leading-[1.2] mb-4">¿Trabajas con contratistas?<br/>Hablemos.</div>
-          <div className="text-[17.6px] text-[#9aabb8] leading-[1.7]">Ideal para cualquier negocio. Agenda una demo con nuestro equipo para descubrir cómo podemos optimizar tu gestión de contratistas.</div>
+          <div className="text-[17.6px] text-[#9aabb8] leading-[1.7]">Diseñado para organizaciones que gestionan contratistas, trabajadores y requisitos documentales por proyecto. Solicita una demo y revisamos tu caso.</div>
         </div>
         <div className="grid md:grid-cols-2 gap-12 max-w-[900px] mx-auto mt-12 items-start">
           <div className="bg-white/5 p-8 rounded-2xl border border-white/10 text-cream">
@@ -421,6 +429,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                   ></textarea>
                 </div>
                 <button type="submit" disabled={demoEnviando} className="btn btn-primary w-full justify-center text-[16.5px] py-3 disabled:opacity-60 disabled:cursor-not-allowed">{demoEnviando ? 'Enviando…' : 'Solicitar demo'}</button>
+                <p className="mt-3 text-[11.5px] leading-5 text-white/50">Al enviar este formulario, utilizaremos tus datos para gestionar la solicitud y contactarte. Revisa nuestro <Link to="/privacidad" className="font-medium text-brown hover:underline">Centro de privacidad</Link>.</p>
               </form>
             )}
           </div>
@@ -430,8 +439,8 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                 <Mail className="text-brown" size={24} />
               </div>
               <div className="pt-1">
-                <div className="text-[15.4px] font-medium mb-1">Correo</div>
-                <div className="text-[14.9px] text-[#9aabb8]">contacto@acredita.cl</div>
+                <div className="text-[15.4px] font-medium mb-1">Canal actual</div>
+                <div className="text-[14.9px] text-[#9aabb8]">Formulario web de esta página</div>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -439,8 +448,8 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                 <Phone className="text-brown" size={24} />
               </div>
               <div className="pt-1">
-                <div className="text-[15.4px] font-medium mb-1">Teléfono</div>
-                <div className="text-[14.9px] text-[#9aabb8]">+569 7365 4860</div>
+                <div className="text-[15.4px] font-medium mb-1">Seguimiento</div>
+                <div className="text-[14.9px] text-[#9aabb8]">Cada solicitud queda registrada para revisión</div>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -448,21 +457,21 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                 <MapPin className="text-brown" size={24} />
               </div>
               <div className="pt-1">
-                <div className="text-[15.4px] font-medium mb-1">Ubicación</div>
-                <div className="text-[14.9px] text-[#9aabb8]">Avenida Providencia, Santiago, Chile</div>
+                <div className="text-[15.4px] font-medium mb-1">Cobertura inicial</div>
+                <div className="text-[14.9px] text-[#9aabb8]">Chile</div>
               </div>
             </div>
             <div className="bg-white/5 rounded-xl p-6 border border-white/10 mt-2">
-              <div className="text-[15.4px] font-medium mb-2">Respuesta garantizada en</div>
-              <div className="text-[35.2px] font-semibold text-brown leading-none">24 hrs</div>
-              <div className="text-[14.3px] text-[#9aabb8] mt-2">Días hábiles · Lun a Vie</div>
+              <div className="text-[15.4px] font-medium mb-2">Proceso de contacto</div>
+              <div className="text-[28px] font-semibold text-brown leading-none">Revisión humana</div>
+              <div className="text-[14.3px] text-[#9aabb8] mt-2">Validamos cada solicitud antes de habilitar una cuenta o coordinar una demo.</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* CTA FINAL */}
-      <div className="bg-white py-24 px-12 text-center">
+      <div className="bg-white py-20 px-5 md:py-24 md:px-12 text-center">
         <h2 className="text-[41.8px] text-navy leading-[1.2] mb-4 font-medium">¿Listo para dejar de<br/>perseguir <span className="text-brown">documentos</span>?</h2>
         <p className="text-[#6b7e8f] text-[17.6px] max-w-[480px] mx-auto mb-10 leading-[1.7]">Solicita acceso para tu organización. Nuestro equipo revisará la solicitud y te contactará para habilitar la cuenta correspondiente.</p>
         <div className="flex gap-3 justify-center">
@@ -472,7 +481,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </div>
 
       {/* FOOTER */}
-      <footer className="bg-brown py-10 px-12 text-cream">
+      <footer className="bg-brown py-10 px-5 md:px-12 text-cream">
         <div className="grid md:grid-cols-3 gap-8 max-w-[1200px] mx-auto mb-8">
           <div>
             <div className="text-[22px] tracking-[2px] mb-4 text-cream">Acre<b className="text-navy font-normal">dita</b></div>
@@ -492,6 +501,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
               <Link to="/login" className="hover:text-cream transition-colors">Iniciar sesión</Link>
               <Link to="/registro?rol=mandante" className="hover:text-cream transition-colors">Solicitar acceso</Link>
               <a href="#contacto" className="hover:text-cream transition-colors">Contacto</a>
+              <Link to="/privacidad" className="hover:text-cream transition-colors">Privacidad</Link>
             </div>
           </div>
         </div>
@@ -501,16 +511,17 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
       </footer>
       {/* LOGIN MODAL */}
       {showLoginModal && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4 fade-in">
+        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4 fade-in" role="dialog" aria-modal="true" aria-labelledby="login-options-title" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowLoginModal(false); }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
             <button 
               onClick={() => setShowLoginModal(false)}
+              aria-label="Cerrar selector de acceso"
               className="absolute top-4 right-4 text-gray-400 hover:text-navy transition-colors"
             >
               <X size={20} />
             </button>
             
-            <h3 className="section-title text-center text-[22px] mb-6">¿Cómo quieres ingresar?</h3>
+            <h3 id="login-options-title" className="section-title text-center text-[22px] mb-6">¿Cómo quieres ingresar?</h3>
             
             <div className="flex flex-col gap-4">
               <Link 
@@ -522,7 +533,7 @@ const handleSubmitDemo = async (e: React.FormEvent) => {
                 </div>
                 <div>
                   <div className="font-semibold text-navy text-[16px]">Soy Mandante</div>
-                  <div className="text-[13.2px] text-gray-500 mt-1">Gestiono contratistas y reviso documentos.</div>
+                  <div className="text-[13.2px] text-gray-500 mt-1">Gestiono contratistas y reviso su estado de cumplimiento.</div>
                 </div>
               </Link>
               

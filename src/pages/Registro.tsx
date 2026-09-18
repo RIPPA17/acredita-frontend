@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, ShieldCheck } from 'lucide-react';
 import { isValidRut } from '../utils/rut';
@@ -18,7 +18,7 @@ export default function RegistroPage() {
 
   const update = (field: keyof typeof form, value: string) => setForm(current => ({ ...current, [field]: value }));
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
     if (!isValidRut(form.rut)) {
@@ -43,7 +43,6 @@ export default function RegistroPage() {
           industry: form.industria || null,
           email: form.correo.trim().toLowerCase(),
           phone: form.telefono.trim() || null,
-          status: 'pending',
         }),
       });
       if (!response.ok) {
@@ -90,7 +89,7 @@ export default function RegistroPage() {
         </div>
 
         {enviado ? (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center" role="status" aria-live="polite">
             <CheckCircle size={54} className="mx-auto mb-4 text-emerald-600" />
             <h2 className="mb-2 text-xl font-semibold text-navy">Solicitud recibida</h2>
             <p className="mb-6 text-[13px] leading-relaxed text-gray-500">Guardamos tu solicitud para <b>{isContratista ? 'Contratista' : 'Mandante'}</b>. Acredita podrá revisarla y contactarte para habilitar el acceso correspondiente.</p>
@@ -114,6 +113,7 @@ export default function RegistroPage() {
             <Field label="Teléfono"><input type="tel" value={form.telefono} onChange={event => update('telefono', event.target.value)} className="form-input w-full" placeholder="+56 9 XXXX XXXX" /></Field>
             {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-700">{error}</div>}
             <button type="submit" disabled={loading} className="btn btn-primary w-full justify-center py-2.5 disabled:opacity-60">{loading ? 'Enviando…' : 'Enviar solicitud'}</button>
+            <p className="text-center text-[11.5px] leading-5 text-gray-400">Al enviar esta solicitud, tus datos se usarán para gestionar el acceso y contacto asociado. Consulta nuestro <Link to="/privacidad" className="font-medium text-brown hover:underline">Centro de privacidad</Link>.</p>
             <div className="text-center text-[12px] text-gray-500">¿Ya tienes una cuenta? <Link to="/login" className="font-semibold text-brown hover:underline">Inicia sesión</Link></div>
           </form>
         )}
@@ -122,6 +122,6 @@ export default function RegistroPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block"><span className="mb-1.5 block text-[12.5px] font-medium text-gray-700">{label}</span>{children}</label>;
 }

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -70,7 +70,7 @@ function fmt(value: string | null | undefined) {
   return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' }) {
+function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' }) {
   const tones = {
     neutral: 'bg-gray-100 text-gray-600',
     good: 'bg-green-100 text-green-700',
@@ -81,7 +81,7 @@ function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
 }
 
-function Card({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle: string; icon: React.ReactNode }) {
+function Card({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle: string; icon: ReactNode }) {
   return (
     <div className="rounded-xl border border-cream3 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
