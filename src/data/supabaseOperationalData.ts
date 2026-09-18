@@ -408,14 +408,33 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
   refreshed = await fetchRows(token);
   const scopedContractorUuids = new Set(scoped.map(c => contractorUuidByKey.get(c.id)).filter(Boolean) as string[]);
   const scopedWorkerIds = new Set(refreshed.workers.filter(w => scopedContractorUuids.has(w.contratista_id)).map(w => w.id));
-  const activeAccreditationIds = new Set(refreshed.accreditations.filter(a => a.is_active && scopedContractorUuids.has(a.contratista_id)).map(a => a.id));
+  const activeAccreditations = refreshed.accreditations.filter(a => a.is_active && scopedContractorUuids.has(a.contratista_id));
+  const activeAccreditationIds = new Set(activeAccreditations.map(a => a.id));
+  const accreditationById = new Map(activeAccreditations.map(a => [a.id, a]));
+  const projectKeyByUuidAfterRefresh = new Map(refreshed.projects.filter(p => p.integration_key).map(p => [p.id, p.integration_key as string]));
 
   for (const assignment of refreshed.assignments) {
     if (!assignment.is_active || !scopedWorkerIds.has(assignment.worker_id) || !activeAccreditationIds.has(assignment.accreditation_id)) continue;
     if (!desiredAssignments.has(`${assignment.accreditation_id}:${assignment.worker_id}`)) {
+      const backendWorker = refreshed.workers.find(item => item.id === assignment.worker_id);
+      const accreditation = accreditationById.get(assignment.accreditation_id);
+      const contractorKey = backendWorker
+        ? refreshed.contractors.find(item => item.id === backendWorker.contratista_id)?.integration_key
+        : undefined;
+      const projectKey = accreditation ? projectKeyByUuidAfterRefresh.get(accreditation.project_id) : undefined;
+      const localWorker = contractorKey && backendWorker
+        ? scoped.find(item => item.id === contractorKey)?.trabajadores?.find(item => normalizeRut(item.rut) === normalizeRut(backendWorker.rut))
+        : undefined;
+      const localInactiveAssignment = projectKey
+        ? localWorker?.asignaciones?.find(item => item.proyectoId === projectKey && item.estado !== 'activa')
+        : undefined;
       await patchRows('worker_assignments', token, { id: `eq.${assignment.id}` }, {
         is_active: false,
-        unassigned_at: new Date().toISOString(),
+        assignment_status: localInactiveAssignment?.estado || 'inactiva',
+        access_status: localInactiveAssignment?.estadoAcceso || 'bloqueado',
+        unassigned_at: localInactiveAssignment?.fechaSalida
+          ? dateToTimestamp(localInactiveAssignment.fechaSalida)
+          : new Date().toISOString(),
       });
     }
   }
@@ -733,7 +752,8 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
   }
 
   const assignmentsByWorker = new Map<string, AsignacionTrabajador[]>();
-  for (const assignment of rows.assignments.filter(a => a.is_active)) {
+  // Conservamos también las asignaciones inactivas/baja para mantener el historial local.
+  for (const assignment of rows.assignments) {
     const accreditation = accreditationById.get(assignment.accreditation_id);
     if (!accreditation) continue;
     const projectKey = projectKeyByUuid.get(accreditation.project_id);

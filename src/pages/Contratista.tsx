@@ -26,7 +26,7 @@ import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
-import { getServiciosProyecto } from '../data/operationalCore';
+import { getAsignacionProyecto, getServiciosProyecto } from '../data/operationalCore';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -46,6 +46,7 @@ export default function ContratistaPortal() {
   const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [editingWorkerRut, setEditingWorkerRut] = useState<string | null>(null);
   const [savingWorker, setSavingWorker] = useState(false);
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<Trabajador | null>(null);
@@ -214,9 +215,85 @@ export default function ContratistaPortal() {
       .filter(Boolean),
   )).sort((a, b) => a.localeCompare(b, 'es'));
 
-  const categoriasSeleccionadas = new Set(
+  const categoriasSeleccionadas = new Set<string>(
     newWorkerForm.categorias.split(',').map(item => item.trim()).filter(Boolean),
   );
+  const requisitosTrabajadorProyecto = getRequisitos().filter(
+    r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false,
+  );
+  const serviciosDisponibles = getServiciosProyecto(selectedProyectoId, contratistaLogueado.id);
+  const servicioObligatorio = serviciosDisponibles.length > 0 || requisitosTrabajadorProyecto.some(r => Boolean(r.servicioId));
+  const categoriasObligatorias = categoriasDisponibles.length > 0;
+
+  const resetWorkerForm = () => setNewWorkerForm({
+    nombre: '',
+    rut: '',
+    cargo: '',
+    servicioId: '',
+    categorias: '',
+    fechaIngreso: new Date().toISOString().slice(0, 10),
+    tipoContrato: 'indefinido',
+    fechaInicioContrato: new Date().toISOString().slice(0, 10),
+    fechaTerminoContrato: '',
+    obraFaenaContrato: '',
+    regimenEspecial: '',
+    detalleRegimenEspecial: '',
+  });
+
+  const openAddWorkerModal = () => {
+    setEditingWorkerRut(null);
+    resetWorkerForm();
+    setShowAddWorkerModal(true);
+  };
+
+  const openEditWorkerModal = (worker: Trabajador) => {
+    const assignment = getAsignacionProyecto(worker, selectedProyectoId);
+    if (!assignment) {
+      showToast('No encontramos una asignación activa para editar.', 'warning');
+      return;
+    }
+    setEditingWorkerRut(worker.rut);
+    setNewWorkerForm({
+      nombre: worker.nombre,
+      rut: worker.rut,
+      cargo: assignment.cargo || worker.cargo || '',
+      servicioId: assignment.servicioId || '',
+      categorias: (assignment.categorias || []).filter(item => item.toLocaleLowerCase('es') !== 'general').join(', '),
+      fechaIngreso: assignment.fechaIngreso || new Date().toISOString().slice(0, 10),
+      tipoContrato: worker.tipoContrato || 'indefinido',
+      fechaInicioContrato: worker.fechaInicioContrato || new Date().toISOString().slice(0, 10),
+      fechaTerminoContrato: worker.fechaTerminoContrato || '',
+      obraFaenaContrato: worker.obraFaenaContrato || '',
+      regimenEspecial: worker.regimenEspecial || '',
+      detalleRegimenEspecial: worker.detalleRegimenEspecial || '',
+    });
+    setShowAddWorkerModal(true);
+  };
+
+  const handleRetireWorker = async (worker: Trabajador) => {
+    const list = getContratistas();
+    const contractor = list.find(item => item.id === contratistaLogueado.id);
+    const target = contractor?.trabajadores?.find(item => item.rut === worker.rut);
+    const assignment = target?.asignaciones?.find(item => item.proyectoId === selectedProyectoId && item.estado === 'activa');
+    if (!contractor || !target || !assignment) {
+      showToast('No encontramos una asignación activa para retirar.', 'warning');
+      return;
+    }
+    assignment.estado = 'baja';
+    assignment.estadoAcceso = 'bloqueado';
+    assignment.fechaSalida = new Date().toISOString().slice(0, 10);
+    target.estado = 'pendiente';
+    try {
+      saveContratistas(list);
+      await confirmBusinessPersistence('all');
+      setSelectedWorkerForDocs(null);
+      setDataRevision(value => value + 1);
+      showToast('Trabajador retirado del proyecto. Su historial fue conservado.');
+    } catch (error) {
+      console.error('No fue posible retirar al trabajador.', error);
+      showToast('No fue posible retirar al trabajador. Intenta nuevamente.', 'error');
+    }
+  };
 
   const toggleCategoria = (categoria: string) => {
     const next = new Set(categoriasSeleccionadas);
@@ -255,8 +332,20 @@ export default function ContratistaPortal() {
       showToast('Especifica el régimen laboral especial.', 'error');
       return;
     }
+    if (servicioObligatorio && serviciosDisponibles.length === 0) {
+      showToast('El proyecto tiene requisitos asociados a servicios, pero no hay servicios activos configurados. Solicita configurar el servicio antes de continuar.', 'error');
+      return;
+    }
+    if (servicioObligatorio && !newWorkerForm.servicioId) {
+      showToast('Debes seleccionar el servicio o contrato del trabajador.', 'error');
+      return;
+    }
+    if (categoriasObligatorias && categoriasSeleccionadas.size === 0) {
+      showToast('Debes seleccionar al menos una categoría del trabajador.', 'error');
+      return;
+    }
 
-    const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
+    const projectReqs = requisitosTrabajadorProyecto;
     const list = getContratistas();
     const currentIdx = list.findIndex(c => c.id === contratistaLogueado.id);
     if (currentIdx === -1) {
@@ -266,19 +355,32 @@ export default function ContratistaPortal() {
 
     const contratista = list[currentIdx];
     contratista.trabajadores ||= [];
+    const editingWorker = editingWorkerRut
+      ? contratista.trabajadores.find(w => w.rut === editingWorkerRut)
+      : undefined;
     const existingWorker = contratista.trabajadores.find(w => w.rut === newWorkerForm.rut);
-    if (existingWorker && esTrabajadorAsignado(existingWorker, selectedProyectoId, misProyectos)) {
+    if (!editingWorker && existingWorker && esTrabajadorAsignado(existingWorker, selectedProyectoId, misProyectos)) {
       showToast('Este trabajador ya está asignado a este proyecto.', 'warning');
       return;
     }
 
-    const workerDocs = crearDocumentosPendientesProyecto(projectReqs, contratista.id, selectedProyectoId, newWorkerForm.rut);
+    const assignmentCategories = categoriasObligatorias
+      ? Array.from(categoriasSeleccionadas)
+      : ['General'];
+    const applicableReqs = projectReqs.filter(req => {
+      if (req.servicioId && req.servicioId !== (newWorkerForm.servicioId || undefined)) return false;
+      const requiredCategories = (req.categoriasAplicables || []).map(item => item.trim().toLocaleLowerCase('es')).filter(Boolean);
+      if (requiredCategories.length === 0 || requiredCategories.includes('general')) return true;
+      const selectedCategories = assignmentCategories.map(item => item.toLocaleLowerCase('es'));
+      return requiredCategories.some(category => selectedCategories.includes(category));
+    });
+    const workerDocs = crearDocumentosPendientesProyecto(applicableReqs, contratista.id, selectedProyectoId, newWorkerForm.rut);
     const assignment = {
       id: `asignacion_${crypto.randomUUID()}`,
       proyectoId: selectedProyectoId,
       servicioId: newWorkerForm.servicioId || undefined,
       cargo: newWorkerForm.cargo || undefined,
-      categorias: newWorkerForm.categorias.split(',').map(item => item.trim()).filter(Boolean),
+      categorias: assignmentCategories,
       fechaIngreso: newWorkerForm.fechaIngreso || undefined,
       estado: 'activa' as const,
       estadoAcceso: 'pendiente' as const,
@@ -286,7 +388,31 @@ export default function ContratistaPortal() {
 
     setSavingWorker(true);
     try {
-      if (existingWorker) {
+      if (editingWorker) {
+        const currentAssignment = getAsignacionProyecto(editingWorker, selectedProyectoId);
+        if (!currentAssignment) throw new Error('No existe una asignación activa para editar');
+        editingWorker.nombre = newWorkerForm.nombre.trim();
+        editingWorker.cargo = newWorkerForm.cargo || undefined;
+        editingWorker.tipoContrato = newWorkerForm.tipoContrato;
+        editingWorker.fechaInicioContrato = newWorkerForm.fechaInicioContrato;
+        editingWorker.fechaTerminoContrato = newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined;
+        editingWorker.obraFaenaContrato = newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined;
+        editingWorker.regimenEspecial = newWorkerForm.regimenEspecial || undefined;
+        editingWorker.detalleRegimenEspecial = newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined;
+        currentAssignment.servicioId = newWorkerForm.servicioId || undefined;
+        currentAssignment.cargo = newWorkerForm.cargo || undefined;
+        currentAssignment.categorias = assignmentCategories;
+        currentAssignment.fechaIngreso = newWorkerForm.fechaIngreso || undefined;
+        currentAssignment.estadoAcceso = 'pendiente';
+
+        const existingDocKeys = new Set(
+          (editingWorker.documentos || []).map(doc => `${doc.proyectoId || ''}:${doc.nombre.trim().toLocaleLowerCase('es')}`),
+        );
+        const missingDocs = workerDocs.filter(doc => !existingDocKeys.has(`${doc.proyectoId || ''}:${doc.nombre.trim().toLocaleLowerCase('es')}`));
+        editingWorker.documentos = [...(editingWorker.documentos || []), ...missingDocs];
+        editingWorker.estado = calcularEstadoTrabajador(editingWorker, selectedProyectoId);
+        setSelectedWorkerForDocs(editingWorker);
+      } else if (existingWorker) {
         existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
         existingWorker.asignaciones = [...(existingWorker.asignaciones || []), assignment];
         existingWorker.tipoContrato ||= newWorkerForm.tipoContrato;
@@ -317,22 +443,10 @@ export default function ContratistaPortal() {
       saveContratistas(list);
       await confirmBusinessPersistence('all');
       setDataRevision(value => value + 1);
-      setNewWorkerForm({
-        nombre: '',
-        rut: '',
-        cargo: '',
-        servicioId: '',
-        categorias: '',
-        fechaIngreso: new Date().toISOString().slice(0, 10),
-        tipoContrato: 'indefinido',
-        fechaInicioContrato: new Date().toISOString().slice(0, 10),
-        fechaTerminoContrato: '',
-        obraFaenaContrato: '',
-        regimenEspecial: '',
-        detalleRegimenEspecial: '',
-      });
+      resetWorkerForm();
+      setEditingWorkerRut(null);
       setShowAddWorkerModal(false);
-      showToast('Trabajador agregado con éxito');
+      showToast(editingWorker ? 'Trabajador actualizado con éxito' : 'Trabajador agregado con éxito');
     } catch (error) {
       setDataRevision(value => value + 1);
       console.error('No fue posible agregar el trabajador.', error);
@@ -520,7 +634,7 @@ export default function ContratistaPortal() {
               setActiveTab={setActiveTab}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
-              setShowAddWorkerModal={setShowAddWorkerModal}
+              setShowAddWorkerModal={(value) => value ? openAddWorkerModal() : setShowAddWorkerModal(false)}
             />
           )}
 
@@ -559,7 +673,9 @@ export default function ContratistaPortal() {
               setSelectedProyectoId={setSelectedProyectoId}
               misProyectos={misProyectos}
               allMandantes={allMandantes}
-              setShowAddWorkerModal={setShowAddWorkerModal}
+              setShowAddWorkerModal={(value) => value ? openAddWorkerModal() : setShowAddWorkerModal(false)}
+              onEditWorker={openEditWorkerModal}
+              onRetireWorker={handleRetireWorker}
               onDataChanged={() => setDataRevision(value => value + 1)}
               showToast={showToast}
             />
@@ -648,7 +764,7 @@ export default function ContratistaPortal() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] max-h-[calc(100vh-24px)] overflow-y-auto font-sans" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-cream">
               <h3 className="font-semibold text-navy text-[17.6px] flex items-center gap-2">
-                <UserPlus size={18} className="text-brown" /> Agregar trabajador al proyecto
+                <UserPlus size={18} className="text-brown" /> {editingWorkerRut ? 'Editar trabajador y asignación' : 'Agregar trabajador al proyecto'}
               </h3>
               <button 
                 onClick={() => setShowAddWorkerModal(false)}
@@ -680,7 +796,8 @@ export default function ContratistaPortal() {
                   onChange={(e) => setNewWorkerForm({...newWorkerForm, rut: e.target.value})}
                   className="form-input w-full p-2.5 border border-cream3 rounded-lg focus:border-brown focus:ring-1 focus:ring-brown outline-none transition-all text-sm" 
                   placeholder="12.345.678-9" 
-                  required 
+                  required
+                  disabled={Boolean(editingWorkerRut)}
                 />
               </div>
 
@@ -811,10 +928,10 @@ export default function ContratistaPortal() {
               </div>
 
               <div>
-                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Servicio o contrato</label>
-                <select value={newWorkerForm.servicioId} onChange={(e) => setNewWorkerForm({...newWorkerForm, servicioId: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm">
-                  <option value="">Asignación general al proyecto</option>
-                  {getServiciosProyecto(selectedProyectoId, contratistaLogueado.id).map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Servicio o contrato{servicioObligatorio ? ' *' : ''}</label>
+                <select required={servicioObligatorio} value={newWorkerForm.servicioId} onChange={(e) => setNewWorkerForm({...newWorkerForm, servicioId: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm">
+                  <option value="">{servicioObligatorio ? 'Selecciona un servicio o contrato' : 'Asignación general al proyecto'}</option>
+                  {serviciosDisponibles.map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}
                 </select>
               </div>
 
@@ -825,7 +942,7 @@ export default function ContratistaPortal() {
 
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <label className="block text-[13px] font-medium text-gray-700">Categorías del trabajador</label>
+                  <label className="block text-[13px] font-medium text-gray-700">Categorías del trabajador{categoriasObligatorias ? ' *' : ''}</label>
                   <span className="text-[11px] text-gray-400">Definidas por los requisitos del proyecto</span>
                 </div>
                 {categoriasDisponibles.length > 0 ? (
@@ -847,7 +964,7 @@ export default function ContratistaPortal() {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-cream3 bg-cream2/50 p-3 text-[11.5px] leading-relaxed text-gray-500">
-                    Este proyecto todavía no tiene categorías aplicables configuradas. El trabajador quedará con asignación general.
+                    Este proyecto no tiene categorías especiales configuradas. Se guardará explícitamente la categoría <strong>General</strong>.
                   </div>
                 )}
               </div>
@@ -869,7 +986,7 @@ export default function ContratistaPortal() {
                   disabled={savingWorker}
                   className="flex-1 btn btn-primary py-2.5 font-medium rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {savingWorker ? 'Guardando…' : 'Agregar trabajador'}
+                  {savingWorker ? 'Guardando…' : editingWorkerRut ? 'Guardar cambios' : 'Agregar trabajador'}
                 </button>
               </div>
             </form>

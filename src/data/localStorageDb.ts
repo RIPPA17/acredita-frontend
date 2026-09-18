@@ -207,16 +207,26 @@ export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito):
 }
 
 export function requisitoAplicaATrabajador(req: Requisito, trabajador: Trabajador, proyectoId: string): boolean {
+  const assignment = getAsignacionProyecto(trabajador, proyectoId);
+  if (req.servicioId && req.servicioId !== assignment?.servicioId) return false;
+
   const requiredCategories = (req.categoriasAplicables || []).map(item => item.trim().toLocaleLowerCase('es')).filter(Boolean);
   if (requiredCategories.length === 0 || requiredCategories.includes('general')) return true;
-  const assignment = getAsignacionProyecto(trabajador, proyectoId);
   const workerCategories = (assignment?.categorias || []).map(item => item.trim().toLocaleLowerCase('es'));
   return requiredCategories.some(category => workerCategories.includes(category));
 }
 
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
+  const configuredWorkerReqs = getRequisitos().filter(
+    r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
+  );
+  // Un proyecto sin matriz documental de trabajadores nunca acredita por omisión.
+  if (configuredWorkerReqs.length === 0) return 'pendiente';
+
   const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
   if (backendState) {
+    // Defensa adicional: una vista derivada con 0 requisitos no puede habilitar al trabajador.
+    if (backendState.requiredCount === 0) return 'pendiente';
     if (backendState.status === 'aprobado') return backendState.nearExpiryCount > 0 ? 'por_vencer' : 'aprobado';
     if (backendState.status === 'vencido_bloqueado') return 'rechazado';
     return 'pendiente';
@@ -288,12 +298,18 @@ export function esTrabajadorAcreditado(w: Trabajador, proyectoId: string): boole
 }
 
 export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
+  const proyectos = getProyectos();
+  const projectWorkers = (c.trabajadores || []).filter(w => esTrabajadorAsignado(w, proyectoId, proyectos));
+  const workerReqsConfigured = getRequisitos().filter(
+    r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
+  );
+  if (projectWorkers.length > 0 && workerReqsConfigured.length === 0) return 'En proceso';
+
   const backendState = getBackendAccreditationState(c.id, proyectoId);
   if (backendState) return backendAccreditationLabel(backendState);
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
-  const proyectos = getProyectos();
 
   const tieneTrabajadorRechazado = trabajadores.some(w => 
     esTrabajadorAsignado(w, proyectoId, proyectos) && 
@@ -331,12 +347,12 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 
     return 'Vencido/Bloqueado';
   }
 
-  const projectWorkers = trabajadores.filter(w => 
+  const assignedWorkers = trabajadores.filter(w => 
     esTrabajadorAsignado(w, proyectoId, proyectos)
   );
 
   // Prioridad 2: toda aprobación obligatoria faltante o pendiente está En proceso.
-  if (projectWorkers.length === 0) {
+  if (assignedWorkers.length === 0) {
     return 'En proceso';
   }
 
@@ -354,7 +370,7 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 
     return 'En proceso';
   }
 
-  const tieneTrabajadorPendiente = projectWorkers.some(w => calcularEstadoTrabajador(w, proyectoId) === 'pendiente');
+  const tieneTrabajadorPendiente = assignedWorkers.some(w => calcularEstadoTrabajador(w, proyectoId) === 'pendiente');
 
   if (hasRePendiente || tieneTrabajadorPendiente) {
     return 'En proceso';

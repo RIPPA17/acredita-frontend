@@ -9,6 +9,10 @@ const ACCREDITATION = '65000000-0000-4000-8000-000000000001';
 
 async function mockContractor(page: Page) {
   const calls: Array<{ method: string; path: string; body: string | null }> = [];
+  const workers: Array<Record<string, any>> = [];
+  const assignments: Array<Record<string, any>> = [];
+  let workerSeq = 1;
+  let assignmentSeq = 1;
 
   await page.addInitScript(({ profile, contractor }) => {
     window.localStorage.setItem('acredita_session', JSON.stringify({
@@ -67,6 +71,48 @@ async function mockContractor(page: Page) {
     }
     if (path === '/rest/v1/business_sync_control') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ revision: 4 }]) });
+    }
+    if (path === '/rest/v1/workers') {
+      if (request.method() === 'GET') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(workers) });
+      }
+      if (request.method() === 'POST') {
+        const payload = JSON.parse(request.postData() || '[]');
+        const rows = Array.isArray(payload) ? payload : [payload];
+        for (const row of rows) {
+          const existing = workers.find(item => item.contratista_id === row.contratista_id && item.rut === row.rut);
+          if (existing) Object.assign(existing, row);
+          else workers.push({
+            id: `66000000-0000-4000-8000-${String(workerSeq++).padStart(12, '0')}`,
+            ...row,
+          });
+        }
+        return route.fulfill({ status: 204, body: '' });
+      }
+    }
+    if (path === '/rest/v1/worker_assignments') {
+      if (request.method() === 'GET') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assignments) });
+      }
+      if (request.method() === 'POST') {
+        const payload = JSON.parse(request.postData() || '[]');
+        const rows = Array.isArray(payload) ? payload : [payload];
+        for (const row of rows) {
+          const existing = assignments.find(item => item.accreditation_id === row.accreditation_id && item.worker_id === row.worker_id);
+          if (existing) Object.assign(existing, row);
+          else assignments.push({
+            id: `67000000-0000-4000-8000-${String(assignmentSeq++).padStart(12, '0')}`,
+            ...row,
+          });
+        }
+        return route.fulfill({ status: 204, body: '' });
+      }
+      if (request.method() === 'PATCH') {
+        const idFilter = url.searchParams.get('id')?.replace(/^eq\./, '');
+        const row = assignments.find(item => item.id === idFilter);
+        if (row) Object.assign(row, JSON.parse(request.postData() || '{}'));
+        return route.fulfill({ status: 204, body: '' });
+      }
     }
     if (path.startsWith('/rest/v1/rpc/')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
@@ -146,5 +192,56 @@ test('alta por obra o faena exige y guarda la obra específica', async ({ page }
       && row.contract_work_or_task === 'Montaje de estructura metálica sector norte'
       && row.contract_end_date === null
     );
+  })).toBeTruthy();
+});
+
+
+test('trabajador sin matriz documental queda en proceso y no habilitado', async ({ page }) => {
+  await mockContractor(page);
+
+  await page.goto('/contratista');
+  await page.getByText('Trabajadores', { exact: true }).first().click();
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+
+  await page.getByPlaceholder('Ej. María González').fill('Pedro Sin Matriz QA');
+  await page.getByPlaceholder('12.345.678-9').fill('18.390.436-1');
+  await page.getByPlaceholder('Ej. Operador').fill('Operador');
+
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Matriz documental pendiente')).toBeVisible();
+  await expect(page.getByText('No habilitado')).toBeVisible();
+});
+
+test('permite editar la asignación y retirar al trabajador conservando la baja', async ({ page }) => {
+  const calls = await mockContractor(page);
+
+  await page.goto('/contratista');
+  await page.getByText('Trabajadores', { exact: true }).first().click();
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+
+  await page.getByPlaceholder('Ej. María González').fill('Ana Ciclo QA');
+  await page.getByPlaceholder('12.345.678-9').fill('15.763.748-7');
+  await page.getByPlaceholder('Ej. Operador').fill('Operadora');
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await page.getByRole('button', { name: 'Editar' }).click();
+  await page.getByPlaceholder('Ej. Operador').fill('Supervisora');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByText('Trabajador actualizado con éxito')).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Retirar' }).click();
+  await expect(page.getByText('Trabajador retirado del proyecto. Su historial fue conservado.')).toBeVisible();
+
+  await expect.poll(() => calls.some(call => {
+    if (call.method !== 'POST' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
+    const parsed = JSON.parse(call.body);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.some(row => row.job_title === 'Supervisora');
   })).toBeTruthy();
 });

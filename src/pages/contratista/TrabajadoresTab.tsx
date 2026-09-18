@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Search, UserPlus } from 'lucide-react';
+import { ArrowLeft, Pencil, Search, UserMinus, UserPlus } from 'lucide-react';
 import {
   calcularEstadoTrabajador,
   esTrabajadorAsignado,
@@ -100,7 +100,7 @@ function buildResumen(trabajador: Trabajador, proyectoId: string, requisitos: Re
     checklist,
     vigentes,
     totalObligatorios,
-    porcentaje: totalObligatorios === 0 ? 100 : Math.round((vigentes / totalObligatorios) * 100),
+    porcentaje: checklist.length === 0 ? 0 : totalObligatorios === 0 ? 100 : Math.round((vigentes / totalObligatorios) * 100),
   };
 }
 
@@ -124,6 +124,8 @@ export default function TrabajadoresTab({
   misProyectos,
   allMandantes,
   setShowAddWorkerModal,
+  onEditWorker,
+  onRetireWorker,
   onDataChanged,
   showToast,
 }: {
@@ -135,6 +137,8 @@ export default function TrabajadoresTab({
   misProyectos: Proyecto[];
   allMandantes: Mandante[];
   setShowAddWorkerModal: (value: boolean) => void;
+  onEditWorker: (worker: Trabajador) => void;
+  onRetireWorker: (worker: Trabajador) => Promise<void>;
   onDataChanged: () => void;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
@@ -249,6 +253,16 @@ export default function TrabajadoresTab({
             </div>
           </div>
           <div className="tw-detail-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => onEditWorker(selected.trabajador)}><Pencil size={14} /> Editar</button>
+            <button
+              type="button"
+              className="btn btn-ghost border border-red-200 text-red-700"
+              onClick={() => {
+                if (window.confirm(`¿Retirar a ${selected.trabajador.nombre} de este proyecto? Se conservarán su ficha, documentos e historial.`)) {
+                  void onRetireWorker(selected.trabajador);
+                }
+              }}
+            ><UserMinus size={14} /> Retirar</button>
             <span className={`tw-badge ${ESTADO_UI[selected.estado].badge}`}>{ESTADO_UI[selected.estado].label}</span>
           </div>
         </header>
@@ -265,6 +279,12 @@ export default function TrabajadoresTab({
           <div className="tw-min-0">
             <h3 className="tw-section-title">Checklist de requisitos</h3>
             <div className="tw-checklist">
+              {selected.checklist.length === 0 && (
+                <div className="tw-info tw-info-yellow">
+                  <strong>Matriz documental pendiente</strong>
+                  <p>Este proyecto todavía no tiene requisitos documentales aplicables al trabajador. El trabajador permanece en proceso y no puede habilitarse hasta que la matriz sea configurada.</p>
+                </div>
+              )}
               {selected.checklist.map(item => {
                 const action = accionDocumento(item);
                 const estado = DOC_UI[item.estado];
@@ -296,7 +316,7 @@ export default function TrabajadoresTab({
               </>
             )}
             {selected.estado === 'por_vencer' && <div className="tw-info tw-info-yellow"><strong>Acceso aún habilitado</strong><p>Puede seguir ingresando mientras el documento esté vigente. Renueva antes de su vencimiento.</p></div>}
-            {selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.</p></div>}
+            {selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{selected.checklist.length === 0 ? 'La matriz documental del trabajador debe configurarse antes de habilitar su ingreso.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
             {selected.estado === 'aprobado' && <div className="tw-info"><strong>Trabajador habilitado</strong><p>Todos los requisitos obligatorios están vigentes para este proyecto.</p></div>}
           </aside>
         </div>
