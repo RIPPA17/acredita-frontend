@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Contratista, Documento, Trabajador } from '../types';
+import { Contratista, Documento, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
@@ -50,13 +50,32 @@ export default function ContratistaPortal() {
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<Trabajador | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
-  const [newWorkerForm, setNewWorkerForm] = useState({
+  const [newWorkerForm, setNewWorkerForm] = useState<{
+    nombre: string;
+    rut: string;
+    cargo: string;
+    servicioId: string;
+    categorias: string;
+    fechaIngreso: string;
+    tipoContrato: TipoContratoLaboral;
+    fechaInicioContrato: string;
+    fechaTerminoContrato: string;
+    obraFaenaContrato: string;
+    regimenEspecial: '' | RegimenEspecialLaboral;
+    detalleRegimenEspecial: string;
+  }>({
     nombre: '',
     rut: '',
     cargo: '',
     servicioId: '',
     categorias: '',
     fechaIngreso: new Date().toISOString().slice(0, 10),
+    tipoContrato: 'indefinido',
+    fechaInicioContrato: new Date().toISOString().slice(0, 10),
+    fechaTerminoContrato: '',
+    obraFaenaContrato: '',
+    regimenEspecial: '',
+    detalleRegimenEspecial: '',
   });
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
@@ -213,6 +232,29 @@ export default function ContratistaPortal() {
       showToast('RUT inválido, revisa el formato y dígito verificador', 'error');
       return;
     }
+    if (!newWorkerForm.fechaInicioContrato) {
+      showToast('Debes indicar la fecha de inicio del contrato.', 'error');
+      return;
+    }
+    if (newWorkerForm.tipoContrato === 'plazo_fijo' && !newWorkerForm.fechaTerminoContrato) {
+      showToast('El contrato a plazo fijo requiere fecha de término.', 'error');
+      return;
+    }
+    if (
+      newWorkerForm.fechaTerminoContrato &&
+      newWorkerForm.fechaTerminoContrato < newWorkerForm.fechaInicioContrato
+    ) {
+      showToast('La fecha de término no puede ser anterior a la fecha de inicio.', 'error');
+      return;
+    }
+    if (newWorkerForm.tipoContrato === 'obra_faena' && !newWorkerForm.obraFaenaContrato.trim()) {
+      showToast('Describe la obra o faena determinada asociada al contrato.', 'error');
+      return;
+    }
+    if (newWorkerForm.regimenEspecial === 'otro' && !newWorkerForm.detalleRegimenEspecial.trim()) {
+      showToast('Especifica el régimen laboral especial.', 'error');
+      return;
+    }
 
     const projectReqs = getRequisitos().filter(r => r.proyectoId === selectedProyectoId && r.destino === 'trabajador' && r.activo !== false);
     const list = getContratistas();
@@ -247,6 +289,12 @@ export default function ContratistaPortal() {
       if (existingWorker) {
         existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
         existingWorker.asignaciones = [...(existingWorker.asignaciones || []), assignment];
+        existingWorker.tipoContrato ||= newWorkerForm.tipoContrato;
+        existingWorker.fechaInicioContrato ||= newWorkerForm.fechaInicioContrato;
+        existingWorker.fechaTerminoContrato ||= newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined;
+        existingWorker.obraFaenaContrato ||= newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined;
+        existingWorker.regimenEspecial ||= newWorkerForm.regimenEspecial || undefined;
+        existingWorker.detalleRegimenEspecial ||= newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined;
         existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
       } else {
         contratista.trabajadores.push({
@@ -255,6 +303,12 @@ export default function ContratistaPortal() {
           estado: 'pendiente',
           cargo: newWorkerForm.cargo || undefined,
           faena: misProyectos.find(p => p.id === selectedProyectoId)?.nombre || selectedProyectoId,
+          tipoContrato: newWorkerForm.tipoContrato,
+          fechaInicioContrato: newWorkerForm.fechaInicioContrato,
+          fechaTerminoContrato: newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined,
+          obraFaenaContrato: newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined,
+          regimenEspecial: newWorkerForm.regimenEspecial || undefined,
+          detalleRegimenEspecial: newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined,
           cumplimiento: 0,
           documentos: workerDocs,
           asignaciones: [assignment],
@@ -263,7 +317,20 @@ export default function ContratistaPortal() {
       saveContratistas(list);
       await confirmBusinessPersistence('all');
       setDataRevision(value => value + 1);
-      setNewWorkerForm({ nombre: '', rut: '', cargo: '', servicioId: '', categorias: '', fechaIngreso: new Date().toISOString().slice(0, 10) });
+      setNewWorkerForm({
+        nombre: '',
+        rut: '',
+        cargo: '',
+        servicioId: '',
+        categorias: '',
+        fechaIngreso: new Date().toISOString().slice(0, 10),
+        tipoContrato: 'indefinido',
+        fechaInicioContrato: new Date().toISOString().slice(0, 10),
+        fechaTerminoContrato: '',
+        obraFaenaContrato: '',
+        regimenEspecial: '',
+        detalleRegimenEspecial: '',
+      });
       setShowAddWorkerModal(false);
       showToast('Trabajador agregado con éxito');
     } catch (error) {
@@ -627,6 +694,120 @@ export default function ContratistaPortal() {
                   placeholder="Ej. Operador"
                   required 
                 />
+              </div>
+
+              <div className="rounded-xl border border-cream3 bg-cream2/40 p-4">
+                <div className="mb-3">
+                  <h4 className="text-[13px] font-semibold text-navy">Relación laboral</h4>
+                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">El tipo de contrato se registra por su duración. Los regímenes especiales se informan por separado.</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Tipo de contrato *</label>
+                    <select
+                      aria-label="Tipo de contrato"
+                      value={newWorkerForm.tipoContrato}
+                      onChange={(e) => setNewWorkerForm({
+                        ...newWorkerForm,
+                        tipoContrato: e.target.value as TipoContratoLaboral,
+                        fechaTerminoContrato: e.target.value === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : '',
+                        obraFaenaContrato: e.target.value === 'obra_faena' ? newWorkerForm.obraFaenaContrato : '',
+                      })}
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                      required
+                    >
+                      <option value="indefinido">Contrato indefinido</option>
+                      <option value="plazo_fijo">Contrato a plazo fijo</option>
+                      <option value="obra_faena">Contrato por obra o faena determinada</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de inicio del contrato *</label>
+                    <input
+                      aria-label="Fecha de inicio del contrato"
+                      type="date"
+                      value={newWorkerForm.fechaInicioContrato}
+                      onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaInicioContrato: e.target.value})}
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                      required
+                    />
+                  </div>
+
+                  {newWorkerForm.tipoContrato === 'plazo_fijo' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de término del contrato *</label>
+                      <input
+                        aria-label="Fecha de término del contrato"
+                        type="date"
+                        min={newWorkerForm.fechaInicioContrato || undefined}
+                        value={newWorkerForm.fechaTerminoContrato}
+                        onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaTerminoContrato: e.target.value})}
+                        className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {newWorkerForm.tipoContrato === 'obra_faena' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Obra o faena determinada *</label>
+                      <input
+                        aria-label="Obra o faena determinada"
+                        type="text"
+                        value={newWorkerForm.obraFaenaContrato}
+                        onChange={(e) => setNewWorkerForm({...newWorkerForm, obraFaenaContrato: e.target.value})}
+                        className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                        placeholder="Ej. Montaje estructural sector norte"
+                        maxLength={240}
+                        required
+                      />
+                      <p className="mt-1 text-[10.5px] leading-relaxed text-gray-400">Debe ser una obra o servicio específico e identificable en su inicio y término.</p>
+                    </div>
+                  )}
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Régimen laboral especial <span className="font-normal text-gray-400">(opcional)</span></label>
+                    <select
+                      aria-label="Régimen laboral especial"
+                      value={newWorkerForm.regimenEspecial}
+                      onChange={(e) => setNewWorkerForm({
+                        ...newWorkerForm,
+                        regimenEspecial: e.target.value as '' | RegimenEspecialLaboral,
+                        detalleRegimenEspecial: e.target.value === 'otro' ? newWorkerForm.detalleRegimenEspecial : '',
+                      })}
+                      className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                    >
+                      <option value="">Régimen general / ninguno</option>
+                      <option value="servicios_transitorios">Servicios transitorios (EST)</option>
+                      <option value="aprendizaje">Contrato de aprendizaje</option>
+                      <option value="agricola_temporada">Trabajador agrícola de temporada</option>
+                      <option value="casa_particular">Trabajador de casa particular</option>
+                      <option value="gente_mar_portuario_buceo">Gente de mar / portuario / buceo y actividades conexas</option>
+                      <option value="artes_espectaculos">Trabajador de artes y espectáculos</option>
+                      <option value="deportista_profesional">Deportista profesional o actividad conexa</option>
+                      <option value="tripulacion_aerea">Tripulación de vuelo o cabina</option>
+                      <option value="plataforma_digital_dependiente">Trabajador dependiente de plataforma digital</option>
+                      <option value="otro">Otro régimen especial</option>
+                    </select>
+                  </div>
+
+                  {newWorkerForm.regimenEspecial === 'otro' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Especificar régimen especial *</label>
+                      <input
+                        aria-label="Especificar régimen especial"
+                        type="text"
+                        value={newWorkerForm.detalleRegimenEspecial}
+                        onChange={(e) => setNewWorkerForm({...newWorkerForm, detalleRegimenEspecial: e.target.value})}
+                        className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                        maxLength={160}
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

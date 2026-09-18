@@ -47,6 +47,20 @@ export interface AsignacionTrabajador {
   estadoAcceso: EstadoAcceso;
 }
 
+export type TipoContratoLaboral = 'indefinido' | 'plazo_fijo' | 'obra_faena';
+
+export type RegimenEspecialLaboral =
+  | 'servicios_transitorios'
+  | 'aprendizaje'
+  | 'agricola_temporada'
+  | 'casa_particular'
+  | 'gente_mar_portuario_buceo'
+  | 'artes_espectaculos'
+  | 'deportista_profesional'
+  | 'tripulacion_aerea'
+  | 'plataforma_digital_dependiente'
+  | 'otro';
+
 export interface Trabajador {
   id?: string;
   nombre: string;
@@ -54,6 +68,12 @@ export interface Trabajador {
   estado: 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente';
   cargo?: string;
   faena?: string;
+  tipoContrato?: TipoContratoLaboral;
+  fechaInicioContrato?: string;
+  fechaTerminoContrato?: string;
+  obraFaenaContrato?: string;
+  regimenEspecial?: RegimenEspecialLaboral;
+  detalleRegimenEspecial?: string;
   cumplimiento?: number;
   detalle?: string;
   documentos?: Documento[];
