@@ -71,7 +71,7 @@ async function installSharedBackend(page: Page) {
       id: REQUIREMENT,
       project_id: PROJECT,
       integration_key: 'f30_1_review_qa',
-      name: 'F30-1 DT — Cumplimiento laboral y previsional (mes vigente)',
+      name: 'Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)',
       category: 'Laboral',
       target: 'empresa',
       is_required: true,
@@ -251,7 +251,7 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
 
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('F30-1 DT — Cumplimiento laboral y previsional (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
   await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
   await page.getByText('Inicio', { exact: true }).first().click();
   await expect(page.getByText('Retenido', { exact: true }).first()).toBeVisible();
@@ -295,7 +295,7 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   await setSession(page, contractorSession());
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('F30-1 DT — Cumplimiento laboral y previsional (mes vigente)').first()).toBeVisible();
+  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
   await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
   await page.getByText('Inicio', { exact: true }).first().click();
   await expect(page.getByText('Habilitado', { exact: true }).last()).toBeVisible();
