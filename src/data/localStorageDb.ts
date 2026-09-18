@@ -7,10 +7,9 @@ import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSessio
 import { getAsignacionProyecto } from './operationalCore';
 
 export const REGLAS_DEFAULT = [
-  { id: 1, documento: "Liquidación de Sueldo", diasVigencia: 30, alertaDias: 5, criticidad: "bloquea_pago" },
-  { id: 2, documento: "F30 / F31 SII", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
-  { id: 3, documento: "Certificado ODI", diasVigencia: 365, alertaDias: 30, criticidad: "bloquea_acceso" },
-  { id: 4, documento: "Certificado Antecedentes", diasVigencia: 180, alertaDias: 15, criticidad: "advertencia" }
+  { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
+  { id: 2, documento: "Registro de Información de los Riesgos Laborales (ODI) — D.S. N° 44", diasVigencia: null, alertaDias: 30, criticidad: "bloquea_acceso" },
+  { id: 3, documento: "Certificado de adhesión o afiliación al organismo administrador de la Ley N° 16.744", diasVigencia: 365, alertaDias: 30, criticidad: "bloquea_acceso" }
 ];
 
 // Datos de negocio: memoria efímera hidratada desde Supabase.
