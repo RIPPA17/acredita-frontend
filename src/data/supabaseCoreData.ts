@@ -386,7 +386,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
       && Boolean(row.override_until)
       && new Date(row.override_until as string).getTime() > now
     )
-    .map(row => {
+    .map((row): RuntimeDecisionOverride | null => {
       const scope = accreditationScopeByUuid.get(row.accreditation_id);
       if (!scope?.contractorKey || !scope.projectKey) return null;
       return {
@@ -398,7 +398,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         overrideReason: row.override_reason as string,
         overrideUntil: row.override_until as string,
         reviewedAt: row.reviewed_at,
-      } satisfies RuntimeDecisionOverride;
+      };
     })
     .filter((row): row is RuntimeDecisionOverride => row !== null);
 
