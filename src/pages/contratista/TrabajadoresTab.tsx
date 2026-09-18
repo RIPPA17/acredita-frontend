@@ -54,6 +54,34 @@ const DOC_UI: Record<DocEstado, { label: string; badge: string }> = {
   Vencido: { label: 'Vencido', badge: 'tw-badge-red' },
 };
 
+
+function tipoContratoLabel(trabajador: Trabajador): string {
+  if (trabajador.tipoContrato === 'plazo_fijo') {
+    return trabajador.fechaTerminoContrato
+      ? `Plazo fijo · hasta ${trabajador.fechaTerminoContrato}`
+      : 'Plazo fijo';
+  }
+  if (trabajador.tipoContrato === 'obra_faena') return 'Obra o faena determinada';
+  if (trabajador.tipoContrato === 'indefinido') return 'Indefinido';
+  return 'No informado';
+}
+
+function regimenEspecialLabel(trabajador: Trabajador): string | undefined {
+  const labels: Record<string, string> = {
+    servicios_transitorios: 'Servicios transitorios',
+    aprendizaje: 'Aprendizaje',
+    agricola_temporada: 'Agrícola de temporada',
+    casa_particular: 'Casa particular',
+    gente_mar_portuario_buceo: 'Gente de mar / portuario / buceo',
+    artes_espectaculos: 'Artes y espectáculos',
+    deportista_profesional: 'Deportista profesional',
+    tripulacion_aerea: 'Tripulación aérea',
+    plataforma_digital_dependiente: 'Plataforma digital dependiente',
+    otro: trabajador.detalleRegimenEspecial || 'Otro régimen especial',
+  };
+  return trabajador.regimenEspecial ? labels[trabajador.regimenEspecial] : undefined;
+}
+
 function iniciales(nombre: string): string {
   return nombre.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -227,6 +255,7 @@ export default function TrabajadoresTab({
 
         <div className="tw-folder-summary">
           <div className="tw-folder-kpi"><span>Asignación</span><b>{asignacion?.estado === 'activa' ? 'Activa' : asignacion?.estado || 'Activa'}</b></div>
+          <div className="tw-folder-kpi"><span>Contrato</span><b>{tipoContratoLabel(selected.trabajador)}</b></div>
           <div className="tw-folder-kpi"><span>Acceso a faena</span><b className={accesoHabilitado ? 'tw-text-green' : 'tw-text-red'}>{accesoHabilitado ? 'Habilitado' : 'No habilitado'}</b></div>
           <div className="tw-folder-kpi"><span>Documentos vigentes</span><b>{selected.vigentes}/{selected.totalObligatorios} · {selected.porcentaje}%</b></div>
           <div className="tw-folder-kpi"><span>Próximo vencimiento</span><b>{proximo?.item.documento?.vencimiento || 'Sin alertas'}</b></div>
@@ -259,6 +288,7 @@ export default function TrabajadoresTab({
           </div>
 
           <aside className="tw-side">
+            <div className="tw-info"><strong>Relación laboral</strong><p>{tipoContratoLabel(selected.trabajador)}{selected.trabajador.fechaInicioContrato ? ` · inicio ${selected.trabajador.fechaInicioContrato}` : ''}{selected.trabajador.obraFaenaContrato ? ` · ${selected.trabajador.obraFaenaContrato}` : ''}</p>{regimenEspecialLabel(selected.trabajador) && <p>Régimen especial: {regimenEspecialLabel(selected.trabajador)}</p>}</div>
             {selected.estado === 'rechazado' && (
               <>
                 <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || `${bloqueo?.requisito.nombre || 'Un requisito obligatorio'} requiere corrección.`}</p></div>
