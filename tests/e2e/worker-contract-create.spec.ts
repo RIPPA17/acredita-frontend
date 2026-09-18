@@ -158,7 +158,7 @@ test('trabajador sin matriz documental queda en proceso y no habilitado', async 
   await page.getByRole('button', { name: /Agregar trabajador/ }).click();
 
   await page.getByPlaceholder('Ej. María González').fill('Pedro Sin Matriz QA');
-  await page.getByPlaceholder('12.345.678-9').fill('18.390.436-7');
+  await page.getByPlaceholder('12.345.678-9').fill('18.390.436-1');
   await page.getByPlaceholder('Ej. Operador').fill('Operador');
 
   await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
@@ -177,7 +177,7 @@ test('permite editar la asignación y retirar al trabajador conservando la baja'
   await page.getByRole('button', { name: /Agregar trabajador/ }).click();
 
   await page.getByPlaceholder('Ej. María González').fill('Ana Ciclo QA');
-  await page.getByPlaceholder('12.345.678-9').fill('15.763.748-2');
+  await page.getByPlaceholder('12.345.678-9').fill('15.763.748-7');
   await page.getByPlaceholder('Ej. Operador').fill('Operadora');
   await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
   await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
