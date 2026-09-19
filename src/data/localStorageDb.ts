@@ -4,7 +4,7 @@ import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditat
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
-import { getAsignacionProyecto } from './operationalCore';
+import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
@@ -216,7 +216,36 @@ export function requisitoAplicaATrabajador(req: Requisito, trabajador: Trabajado
   return requiredCategories.some(category => workerCategories.includes(category));
 }
 
+export function contratoTrabajadorVencido(w: Trabajador): boolean {
+  return Boolean(w.fechaTerminoContrato && esVencidoPorFecha(w.fechaTerminoContrato));
+}
+
+export function getProblemasFichaTrabajador(w: Trabajador, proyectoId: string, contratistaId?: string): string[] {
+  const problemas: string[] = [];
+  const assignment = getAsignacionProyecto(w, proyectoId);
+  const projectReqs = getRequisitos().filter(
+    r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
+  );
+
+  if (!w.tipoContrato) problemas.push('tipo de contrato');
+  if (!w.fechaInicioContrato) problemas.push('fecha de inicio del contrato');
+  if (w.tipoContrato === 'plazo_fijo' && !w.fechaTerminoContrato) problemas.push('fecha de término del contrato');
+  if (w.tipoContrato === 'obra_faena' && !w.obraFaenaContrato?.trim()) problemas.push('obra o faena determinada');
+  if (w.regimenEspecial === 'otro' && !w.detalleRegimenEspecial?.trim()) problemas.push('detalle del régimen especial');
+  if (!(assignment?.cargo || w.cargo || '').trim()) problemas.push('cargo');
+  if (!assignment || (assignment.categorias || []).length === 0) problemas.push('categoría');
+
+  const requiereServicio = projectReqs.some(r => Boolean(r.servicioId))
+    || Boolean(contratistaId && getServiciosProyecto(proyectoId, contratistaId).length > 0);
+  if (requiereServicio && !assignment?.servicioId) problemas.push('servicio o contrato');
+
+  return Array.from(new Set(problemas));
+}
+
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
+  if (contratoTrabajadorVencido(w)) return 'rechazado';
+  if (getProblemasFichaTrabajador(w, proyectoId).length > 0) return 'pendiente';
+
   const configuredWorkerReqs = getRequisitos().filter(
     r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
   );
@@ -234,7 +263,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const documentos = w.documentos || [];
 
-  if (reqs.length === 0) return 'aprobado';
+  if (reqs.length === 0) return 'pendiente';
 
   let hasRechazado = false;
   let hasPendiente = false;
@@ -820,6 +849,10 @@ export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
 }
 
 export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): string {
+  if (contratoTrabajadorVencido(w)) return `Contrato laboral vencido el ${w.fechaTerminoContrato}`;
+  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
+  if (problemasFicha.length > 0) return `Ficha laboral incompleta: ${problemasFicha.join(', ')}`;
+
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const docs = w.documentos || [];
   
