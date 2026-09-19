@@ -1071,3 +1071,91 @@
   .inicio2-block-map article:last-child { border-bottom: 0; }
   .inicio2-onboarding-steps { grid-template-columns: 1fr; }
 }
+
+
+/* Contractor pending-flow refinements */
+.inicio2-responsibility-strip {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+}
+.inicio2-responsibility-strip .preventive {
+  border-color: #efd89c;
+  background: #fffaf0;
+}
+.inicio2-responsibility-strip .preventive strong,
+.inicio2-responsibility-strip .preventive b {
+  color: #7a5800;
+}
+.inicio2-priority.preventive {
+  border-color: #efd89c;
+  background: linear-gradient(90deg,#fffaf0,#fff);
+}
+.inicio2-priority.preventive .inicio2-priority-copy > i {
+  color: #7a5800;
+  background: #fdf0d0;
+}
+.inicio2-waiting.preventive {
+  border-color: #efd89c;
+  background: #fffaf0;
+}
+.inicio2-waiting.preventive header > div,
+.inicio2-waiting.preventive header button {
+  color: #7a5800;
+}
+.inicio2-waiting.preventive header small {
+  color: #887247;
+}
+.inicio2-waiting.preventive .inicio2-wait-row {
+  border-top-color: #f2e2ba;
+}
+.inicio2-historical-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ccd3d9;
+  border-radius: 14px;
+  color: #47545f;
+  background: #f7f9fa;
+}
+.inicio2-historical-banner > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.inicio2-historical-banner strong {
+  display: block;
+  font-size: 11.5px;
+}
+.inicio2-historical-banner p {
+  margin: 3px 0 0;
+  color: #6b747b;
+  font-size: 10.2px;
+  line-height: 1.4;
+}
+.doc-historical-notice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid #ccd3d9;
+  border-radius: 12px;
+  color: #47545f;
+  background: #f7f9fa;
+}
+.doc-historical-notice strong {
+  font-size: 11.5px;
+}
+.doc-historical-notice span {
+  color: #6b747b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+@media (max-width: 900px) {
+  .inicio2-responsibility-strip { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  .inicio2-responsibility-strip { grid-template-columns: 1fr; }
+  .doc-historical-notice { align-items: flex-start; flex-direction: column; }
+}
