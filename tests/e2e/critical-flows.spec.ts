@@ -108,7 +108,7 @@ async function openMandanteProject(page: Page) {
   await expect(page.getByText('Mandante Piloto').first()).toBeVisible();
   const projectNav = page.getByText('Proyectos', { exact: true }).first();
   if (await projectNav.isVisible()) await projectNav.click();
-  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
+  await expect(page.locator('.mp-project-title').filter({ hasText: 'Proyecto Piloto QA' }).first()).toBeVisible();
   await page.getByText('Proyecto Piloto QA').first().click();
   await expect(page.getByRole('heading', { name: 'Proyecto Piloto QA' })).toBeVisible();
 }
