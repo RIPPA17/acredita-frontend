@@ -108,7 +108,7 @@ async function openMandanteProject(page: Page) {
   await expect(page.getByText('Mandante Piloto').first()).toBeVisible();
   const projectNav = page.getByText('Proyectos', { exact: true }).first();
   if (await projectNav.isVisible()) await projectNav.click();
-  await expect(page.locator('.mp-project-title').filter({ hasText: 'Proyecto Piloto QA' }).first()).toBeVisible();
+  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
   await page.getByText('Proyecto Piloto QA').first().click();
   await expect(page.getByRole('heading', { name: 'Proyecto Piloto QA' })).toBeVisible();
 }
@@ -191,7 +191,7 @@ test('09b Contratista nuevo recibe onboarding guiado de cinco pasos', async ({ p
   await page.goto('/contratista');
   await expect(page.getByText('Comienza la acreditación de Proyecto Piloto QA')).toBeVisible();
   for (const step of ['Revisar requisitos', 'Completar empresa', 'Cargar trabajadores', 'Completar trabajadores', 'Obtener acreditación']) {
-    await expect(page.getByText(step, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: new RegExp(step) })).toBeVisible();
   }
 });
 
@@ -199,7 +199,7 @@ test('10 Contratista puede abrir Proyectos', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
   await page.getByText('Proyectos', { exact: true }).first().click();
-  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
+  await expect(page.locator('.mp-project-title').filter({ hasText: 'Proyecto Piloto QA' }).first()).toBeVisible();
 });
 
 test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }) => {
