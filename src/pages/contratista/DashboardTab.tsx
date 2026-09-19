@@ -159,7 +159,7 @@ export default function DashboardTab({
   const bloqueosVisibles = [
     empresaRechazados > 0 ? { label: 'Empresa', detail: `${empresaRechazados} requisito${empresaRechazados === 1 ? '' : 's'} bloqueante${empresaRechazados === 1 ? '' : 's'}` } : null,
     trabajadoresBloqueados > 0 ? { label: 'Trabajadores', detail: `${trabajadoresBloqueados} bloqueado${trabajadoresBloqueados === 1 ? '' : 's'}` } : null,
-    acceso.estado === 'bloqueado' ? { label: 'Acceso', detail: acceso.motivo || 'Ingreso a faena bloqueado' } : null,
+    acceso.estado === 'bloqueado' ? { label: 'Acceso', detail: acceso.detalle || 'Ingreso a faena bloqueado' } : null,
     accesoPago.pagoEstado === 'bloqueado' ? { label: 'Pago', detail: accesoPago.motivoPago || 'Pago retenido' } : null,
   ].filter(Boolean) as Array<{ label: string; detail: string }>;
 
