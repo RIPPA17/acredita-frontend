@@ -214,10 +214,10 @@ select
   end as compliance_percent,
   case
     when contract_expired then 'vencido_bloqueado'::text
+    when blocked_count > 0 then 'vencido_bloqueado'::text
     when not profile_complete then 'en_proceso'::text
     when required_count = 0 then 'en_proceso'::text
     when submitted_count = 0 then 'no_acreditado'::text
-    when blocked_count > 0 then 'vencido_bloqueado'::text
     when satisfied_count = required_count then 'aprobado'::text
     else 'en_proceso'::text
   end as status,
