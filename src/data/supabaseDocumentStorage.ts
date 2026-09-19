@@ -343,6 +343,8 @@ export interface DocumentReviewDecision {
   reason?: string;
   explanation?: string;
   solution?: string;
+  issuedAt?: string;
+  expiresAt?: string;
 }
 
 export async function reviewLatestDocumentVersion(
@@ -379,6 +381,8 @@ export async function reviewLatestDocumentVersion(
   const reviewedAt = new Date().toISOString();
   const patch = {
     workflow_status: nextStatus,
+    issued_at: decision.action === 'approve' ? (decision.issuedAt || null) : undefined,
+    expires_at: decision.action === 'approve' ? (decision.expiresAt || null) : undefined,
     reviewed_by: session.profileId,
     reviewed_at: reviewedAt,
     rejection_reason: decision.action === 'reject' ? decision.reason?.trim() : null,
