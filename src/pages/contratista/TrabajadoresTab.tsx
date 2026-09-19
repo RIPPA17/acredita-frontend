@@ -405,12 +405,24 @@ export default function TrabajadoresTab({
             <div className="tw-info"><strong>Historial de asignaciones</strong>{historialAsignaciones.length === 0 ? <p>Sin períodos registrados.</p> : <div className="mt-2 space-y-2">{historialAsignaciones.map(item => <div key={item.id}><p>{item.fechaIngreso || 'Sin fecha'} → {item.fechaSalida || 'Actual'} · {item.estado === 'activa' ? 'Activa' : item.estado === 'baja' ? 'Baja' : 'Inactiva'}{item.cargo ? ` · ${item.cargo}` : ''}</p><p className="text-gray-400">{item.tipoContrato ? `${tipoContratoAsignacionLabel(item)}${item.fechaInicioContrato ? ` · contrato desde ${item.fechaInicioContrato}` : ''}${item.obraFaenaContrato ? ` · ${item.obraFaenaContrato}` : ''}` : 'Contrato del período no registrado (dato legado)'}</p></div>)}</div>}</div>
             {!modoConsulta && selected.estado === 'rechazado' && (
               <>
-                <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || `${bloqueo?.requisito.nombre || 'Un requisito obligatorio'} requiere corrección.`}</p></div>
-                <div className="tw-info"><strong>Qué debes hacer</strong><p>Corrige el requisito indicado. Cuando Acredita apruebe la nueva versión, el trabajador recuperará la habilitación para este proyecto.</p></div>
+                <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || 'Uno o más requisitos obligatorios requieren corrección.'}</p></div>
+                <div className="tw-info"><strong>Qué debes hacer</strong><p>Corrige {bloqueos.length === 1 ? 'el requisito indicado' : `los ${bloqueos.length} requisitos bloqueantes`}. Cuando Acredita apruebe las nuevas versiones, el trabajador recuperará la habilitación para este proyecto.</p></div>
               </>
             )}
+            {!modoConsulta && revisionesObligatorias.length > 0 && selected.estado === 'pendiente' && (
+              <div className="tw-info"><strong>Esperando a Acredita</strong><p>{revisionesObligatorias.length === 1 ? 'Hay 1 documento obligatorio en revisión.' : `Hay ${revisionesObligatorias.length} documentos obligatorios en revisión.`} No necesitas volver a cargarlo mientras siga en este estado.</p></div>
+            )}
+            {!modoConsulta && pendientesObligatorios.length > 0 && selected.estado === 'pendiente' && problemasFicha.length === 0 && (
+              <div className="tw-info tw-info-yellow"><strong>Acción requerida</strong><p>Falta cargar: {pendientesObligatorios.map(item => item.requisito.nombre).join(', ')}.</p></div>
+            )}
+            {!modoConsulta && renovacionesEnRevision.length > 0 && (
+              <div className="tw-info"><strong>Renovaciones en revisión</strong><p>{renovacionesEnRevision.map(item => item.requisito.nombre).join(', ')}. La versión aprobada anterior sigue siendo la referencia vigente hasta su vencimiento.</p></div>
+            )}
+            {!modoConsulta && renovacionesRechazadas.length > 0 && (
+              <div className="tw-info tw-info-yellow"><strong>Renovaciones que debes corregir</strong><p>{renovacionesRechazadas.map(item => item.requisito.nombre).join(', ')}. Puedes corregirlas sin perder la vigencia de una versión anterior que todavía esté aprobada.</p></div>
+            )}
             {!modoConsulta && selected.estado === 'por_vencer' && <div className="tw-info tw-info-yellow"><strong>Acceso aún habilitado</strong><p>Puede seguir ingresando mientras el documento esté vigente. Renueva antes de su vencimiento.</p></div>}
-            {!modoConsulta && selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
+            {!modoConsulta && selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : revisionesObligatorias.length > 0 && pendientesObligatorios.length === 0 ? 'La documentación obligatoria ya fue cargada y está esperando revisión de Acredita.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
             {!modoConsulta && selected.estado === 'aprobado' && <div className="tw-info"><strong>Trabajador habilitado</strong><p>Todos los requisitos obligatorios están vigentes para este proyecto.</p></div>}
             {modoConsulta && <div className="tw-info"><strong>Proyecto finalizado · modo consulta</strong><p>Este trabajador y sus períodos se conservan como historial. No se pueden editar, retirar ni cargar nuevos antecedentes desde este proyecto.</p></div>}
           </aside>
