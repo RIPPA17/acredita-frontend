@@ -73,7 +73,7 @@ export default function DocumentPreview({ item }: { item: any }) {
     setHasRealFile(true);
     setFile(null);
 
-    void loadDocumentFileObjectUrl(context)
+    void loadDocumentFileObjectUrl(context, item?.version)
       .then(result => {
         if (!active) {
           URL.revokeObjectURL(result.url);
@@ -105,7 +105,7 @@ export default function DocumentPreview({ item }: { item: any }) {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [context]);
+  }, [context, item?.version]);
 
   if (loading) {
     return (

@@ -1,5 +1,5 @@
 import { calcularPrioridadDocumento, getRequisitos, vigenciaRequeridaLabel, estadoVencimiento, parseVencimientoDate } from "../../data/localStorageDb";
-import { Contratista, Proyecto, Documento } from "../../types";
+import { Contratista, Proyecto, Documento, HistorialVersionDocumento } from "../../types";
 
 // Texto de "qué se está verificando" para cada documento — no siempre coincide
 // literalmente con el nombre del archivo (p. ej. "Registro Mutual ACHS" ->
@@ -34,7 +34,8 @@ function buildQueueItem(
   c: Contratista,
   proyectos: Proyecto[],
   qId: number,
-  worker?: { nombre: string; rut: string; cargo?: string }
+  worker?: { nombre: string; rut: string; cargo?: string },
+  versionOverride?: HistorialVersionDocumento,
 ) {
   // Nunca inventar un proyecto: usar el proyectoId real del documento, y solo
   // recurrir al único proyecto del contratista si de verdad no hay ambigüedad
@@ -54,7 +55,8 @@ function buildQueueItem(
     r.destino === destino &&
     (d.nombre.toLowerCase().includes(r.nombre.toLowerCase()) || r.nombre.toLowerCase().includes(d.nombre.toLowerCase()))
   ) : undefined;
-  const parsedSubido = d.subido ? parseVencimientoDate(d.subido) : null;
+  const versionFecha = versionOverride?.fecha || d.subido;
+  const parsedSubido = versionFecha ? parseVencimientoDate(versionFecha) : null;
 
   return {
     id: qId,
@@ -82,12 +84,18 @@ function buildQueueItem(
     periodoEtiqueta: d.periodoEtiqueta,
     obligacionId: d.obligacionId,
     vigenciaLabel: vigenciaRequeridaLabel(d.nombre, requisitoMatch?.frecuencia),
-    vencimiento: d.vencimiento,
-    vencEstado: estadoVencimiento(d.vencimiento),
-    version: d.version || 1,
+    validityDays: requisitoMatch?.diasVigencia,
+    issuedAt: versionOverride?.emitido || d.emitido,
+    expiresAt: versionOverride?.vencimientoIso || d.vencimientoIso,
+    vencimiento: versionOverride?.vencimientoIso || d.vencimiento,
+    vencEstado: estadoVencimiento(versionOverride?.vencimientoIso || d.vencimiento),
+    version: versionOverride?.version || d.version || 1,
+    isRenewal: Boolean(versionOverride && d.version && versionOverride.version > d.version),
+    activeVersion: d.version || 1,
+    activeUntil: d.vencimiento,
     prio: prioVal,
     tag: prioVal === 'Alta' ? 'urgente' : 'normal',
-    time: d.subido || 'Reciente',
+    time: versionFecha || 'Reciente',
     // Antigüedad real: se reutiliza el mismo parser que el resto del
     // frontend (parseVencimientoDate) para no dejar documentos "empatados"
     // en Date.now() cuando el formato de `subido` no se reconoce — esos
@@ -105,14 +113,18 @@ export function buildColaDocs(contratistas: Contratista[], proyectos: Proyecto[]
   let qId = 1;
   contratistas.forEach(c => {
     c.documentos.forEach(d => {
-      if (d.estado === 'revision') {
+      if (d.versionEnTramite?.estado === 'revision') {
+        list.push(buildQueueItem(d, 'Empresa', c, proyectos, qId++, undefined, d.versionEnTramite));
+      } else if (d.estado === 'revision') {
         list.push(buildQueueItem(d, 'Empresa', c, proyectos, qId++));
       }
     });
 
     c.trabajadores?.forEach(w => {
       w.documentos?.forEach(wd => {
-        if (wd.estado === 'revision') {
+        if (wd.versionEnTramite?.estado === 'revision') {
+          list.push(buildQueueItem(wd, 'Trabajador', c, proyectos, qId++, w, wd.versionEnTramite));
+        } else if (wd.estado === 'revision') {
           list.push(buildQueueItem(wd, 'Trabajador', c, proyectos, qId++, w));
         }
       });
@@ -128,38 +140,42 @@ export function buildCorrectionDocs(contratistas: Contratista[], proyectos: Proy
   let qId = 1;
   contratistas.forEach(c => {
     c.documentos.forEach(d => {
-      if (d.estado === 'rechazado') {
-        const item = buildQueueItem(d, 'Empresa', c, proyectos, qId++);
-        const rechazadoEl = d.fechaRevisado ? parseVencimientoDate(d.fechaRevisado) : null;
+      const rejectedVersion = d.versionEnTramite?.estado === 'rechazado' ? d.versionEnTramite : undefined;
+      if (rejectedVersion || d.estado === 'rechazado') {
+        const item = buildQueueItem(d, 'Empresa', c, proyectos, qId++, undefined, rejectedVersion);
+        const rechazoFecha = rejectedVersion?.fecha || d.fechaRevisado;
+        const rechazadoEl = rechazoFecha ? parseVencimientoDate(rechazoFecha) : null;
         list.push({
           ...item,
           prio: 'Alta',
           tag: 'urgente',
-          time: d.fechaRevisado || d.subido || 'Reciente',
+          time: rechazoFecha || d.subido || 'Reciente',
           timeSort: rechazadoEl ? rechazadoEl.getTime() : item.timeSort,
-          motivoRechazo: d.motivoRechazo || d.motivo || 'Rechazado',
-          explicacionRechazo: d.explicacionRechazo || d.observacion || '',
-          revisor: d.revisor,
-          fechaRevisado: d.fechaRevisado,
+          motivoRechazo: rejectedVersion?.motivoRechazo || d.motivoRechazo || d.motivo || 'Rechazado',
+          explicacionRechazo: rejectedVersion?.explicacionRechazo || d.explicacionRechazo || d.observacion || '',
+          revisor: rejectedVersion?.verificador || d.revisor,
+          fechaRevisado: rechazoFecha,
         });
       }
     });
 
     c.trabajadores?.forEach(w => {
       w.documentos?.forEach(wd => {
-        if (wd.estado === 'rechazado') {
-          const item = buildQueueItem(wd, 'Trabajador', c, proyectos, qId++, w);
-          const rechazadoEl = wd.fechaRevisado ? parseVencimientoDate(wd.fechaRevisado) : null;
+        const rejectedVersion = wd.versionEnTramite?.estado === 'rechazado' ? wd.versionEnTramite : undefined;
+        if (rejectedVersion || wd.estado === 'rechazado') {
+          const item = buildQueueItem(wd, 'Trabajador', c, proyectos, qId++, w, rejectedVersion);
+          const rechazoFecha = rejectedVersion?.fecha || wd.fechaRevisado;
+          const rechazadoEl = rechazoFecha ? parseVencimientoDate(rechazoFecha) : null;
           list.push({
             ...item,
             prio: 'Alta',
             tag: 'urgente',
-            time: wd.fechaRevisado || wd.subido || 'Reciente',
+            time: rechazoFecha || wd.subido || 'Reciente',
             timeSort: rechazadoEl ? rechazadoEl.getTime() : item.timeSort,
-            motivoRechazo: wd.motivoRechazo || wd.motivo || 'Rechazado',
-            explicacionRechazo: wd.explicacionRechazo || wd.observacion || '',
-            revisor: wd.revisor,
-            fechaRevisado: wd.fechaRevisado,
+            motivoRechazo: rejectedVersion?.motivoRechazo || wd.motivoRechazo || wd.motivo || 'Rechazado',
+            explicacionRechazo: rejectedVersion?.explicacionRechazo || wd.explicacionRechazo || wd.observacion || '',
+            revisor: rejectedVersion?.verificador || wd.revisor,
+            fechaRevisado: rechazoFecha,
           });
         }
       });

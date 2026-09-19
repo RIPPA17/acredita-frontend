@@ -26,7 +26,7 @@ interface Params {
   preferencias: PreferenciasNotificacionesContratista;
 }
 
-const versionId = (item: RequisitoConDoc) => `v${item.doc?.version || 1}`;
+const versionId = (item: RequisitoConDoc) => `v${item.doc?.versionEnTramite?.version || item.doc?.version || 1}`;
 const fechaItem = (item: RequisitoConDoc) => item.doc?.fechaRevisado || item.doc?.subido;
 const proyectoOperativo = (proyecto: Proyecto): boolean =>
   ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
@@ -42,24 +42,38 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
     const itemsTrabajadores = trabajadores.flatMap(worker => buildRequisitosTrabajador(worker, proyecto.id, requisitos));
 
     if (preferencias.documentoRechazado) {
-      empresa.filter(item => item.requisito.obligatorio && ['Rechazado', 'Vencido'].includes(item.estado)).forEach(item => result.push({
-        id: `${item.estado.toLowerCase()}:empresa:${proyecto.id}:${item.requisito.id}:${versionId(item)}`,
-        tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
-        titulo: `${item.requisito.nombre} ${item.estado === 'Vencido' ? 'está vencido' : 'fue rechazado'}`,
-        descripcion: item.estado === 'Rechazado' ? motivoRechazo(item.doc) : 'Debes renovar el documento obligatorio para recuperar sus habilitaciones.',
-        fecha: fechaItem(item), cta: item.estado === 'Vencido' ? 'Renovar' : 'Corregir', destino: { tipo: 'documentos' }, prioridad: 0,
-      }));
-      itemsTrabajadores.filter(item => item.requisito.obligatorio && ['Rechazado', 'Vencido'].includes(item.estado) && item.worker).forEach(item => result.push({
-        id: `${item.estado.toLowerCase()}:trabajador:${proyecto.id}:${item.worker!.rut}:${item.requisito.id}:${versionId(item)}`,
-        tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
-        titulo: `${item.worker!.nombre} quedó bloqueado`,
-        descripcion: `${item.requisito.nombre} ${item.estado === 'Vencido' ? 'está vencido' : 'fue rechazado'}. El trabajador no puede ingresar a faena hasta corregir el requisito.`,
-        fecha: fechaItem(item), cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: item.worker }, prioridad: 1,
-      }));
+      empresa.filter(item => item.requisito.obligatorio && (['Rechazado', 'Vencido'].includes(item.estado) || item.doc?.versionEnTramite?.estado === 'rechazado')).forEach(item => {
+        const renewalRejected = item.doc?.versionEnTramite?.estado === 'rechazado';
+        result.push({
+          id: `${renewalRejected ? 'renovacion-rechazada' : item.estado.toLowerCase()}:empresa:${proyecto.id}:${item.requisito.id}:${versionId(item)}`,
+          tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+          titulo: renewalRejected ? `Renovación de ${item.requisito.nombre} rechazada` : `${item.requisito.nombre} ${item.estado === 'Vencido' ? 'está vencido' : 'fue rechazado'}`,
+          descripcion: renewalRejected
+            ? `${item.doc?.versionEnTramite?.explicacionRechazo || item.doc?.versionEnTramite?.motivoRechazo || 'Debes corregir la renovación.'} La versión ${item.doc?.version || 1} continúa vigente${item.doc?.vencimiento && item.doc.vencimiento !== '—' ? ` hasta ${item.doc.vencimiento}` : ''}.`
+            : item.estado === 'Rechazado' ? motivoRechazo(item.doc) : 'Debes renovar el documento obligatorio para recuperar sus habilitaciones.',
+          fecha: renewalRejected ? item.doc?.versionEnTramite?.fecha : fechaItem(item),
+          cta: renewalRejected ? 'Corregir renovación' : item.estado === 'Vencido' ? 'Renovar' : 'Corregir',
+          destino: { tipo: 'documentos' },
+          prioridad: renewalRejected ? 2 : 0,
+        });
+      });
+      itemsTrabajadores.filter(item => item.requisito.obligatorio && item.worker && (['Rechazado', 'Vencido'].includes(item.estado) || item.doc?.versionEnTramite?.estado === 'rechazado')).forEach(item => {
+        const renewalRejected = item.doc?.versionEnTramite?.estado === 'rechazado';
+        result.push({
+          id: `${renewalRejected ? 'renovacion-rechazada' : item.estado.toLowerCase()}:trabajador:${proyecto.id}:${item.worker!.rut}:${item.requisito.id}:${versionId(item)}`,
+          tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+          titulo: renewalRejected ? `Renovación de ${item.requisito.nombre} de ${item.worker!.nombre} rechazada` : `${item.worker!.nombre} quedó bloqueado`,
+          descripcion: renewalRejected
+            ? `${item.doc?.versionEnTramite?.explicacionRechazo || item.doc?.versionEnTramite?.motivoRechazo || 'Debes corregir la renovación.'} La versión vigente anterior mantiene la habilitación hasta su vencimiento.`
+            : `${item.requisito.nombre} ${item.estado === 'Vencido' ? 'está vencido' : 'fue rechazado'}. El trabajador no puede ingresar a faena hasta corregir el requisito.`,
+          fecha: renewalRejected ? item.doc?.versionEnTramite?.fecha : fechaItem(item),
+          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: item.worker }, prioridad: renewalRejected ? 2 : 1,
+        });
+      });
     }
 
     if (preferencias.documentoPorVencer) {
-      [...empresa, ...itemsTrabajadores].filter(item => item.requisito.obligatorio && item.estado === 'Por vencer' && item.doc).forEach(item => {
+      [...empresa, ...itemsTrabajadores].filter(item => item.requisito.obligatorio && item.estado === 'Por vencer' && item.doc && !item.doc.versionEnTramite).forEach(item => {
         const dias = obtenerDiasRestantes(item.doc!.vencimiento);
         result.push({
           id: `por-vencer:${item.worker ? 'trabajador' : 'empresa'}:${proyecto.id}:${item.worker?.rut || contratista.id}:${item.requisito.id}:${versionId(item)}`,
@@ -71,13 +85,18 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
       });
     }
 
-    [...empresa, ...itemsTrabajadores].filter(item => item.requisito.obligatorio && item.estado === 'En revisión').forEach(item => result.push({
-      id: `revision:${item.worker ? 'trabajador' : 'empresa'}:${proyecto.id}:${item.worker?.rut || contratista.id}:${item.requisito.id}:${versionId(item)}`,
-      tipo: 'revision', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
-      titulo: `${item.requisito.nombre}${item.worker ? ` de ${item.worker.nombre}` : ''} está en revisión`,
-      descripcion: `La versión ${item.doc?.version || 1} fue enviada correctamente. No necesitas hacer nada mientras Acredita la revisa.`,
-      fecha: fechaItem(item), cta: 'Ver', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, prioridad: 3,
-    }));
+    [...empresa, ...itemsTrabajadores].filter(item => item.requisito.obligatorio && (item.estado === 'En revisión' || item.doc?.versionEnTramite?.estado === 'revision')).forEach(item => {
+      const renewal = item.doc?.versionEnTramite?.estado === 'revision' ? item.doc.versionEnTramite : undefined;
+      result.push({
+        id: `revision:${item.worker ? 'trabajador' : 'empresa'}:${proyecto.id}:${item.worker?.rut || contratista.id}:${item.requisito.id}:${versionId(item)}`,
+        tipo: 'revision', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+        titulo: `${renewal ? 'Renovación de ' : ''}${item.requisito.nombre}${item.worker ? ` de ${item.worker.nombre}` : ''} está en revisión`,
+        descripcion: renewal
+          ? `La versión ${renewal.version} está siendo revisada. La versión ${item.doc?.version || 1} sigue vigente${item.doc?.vencimiento && item.doc.vencimiento !== '—' ? ` hasta ${item.doc.vencimiento}` : ''}; no necesitas volver a subirla.`
+          : `La versión ${item.doc?.version || 1} fue enviada correctamente. No necesitas hacer nada mientras Acredita la revisa.`,
+        fecha: renewal?.fecha || fechaItem(item), cta: 'Ver', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, prioridad: 3,
+      });
+    });
 
     const row = rows.find(item => item.proyectoId === proyecto.id);
     if (preferencias.acreditacionAprobada && row && estadoUILabel(row.estado) === 'Acreditado') result.push({

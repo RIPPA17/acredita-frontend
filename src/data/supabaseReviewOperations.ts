@@ -17,6 +17,8 @@ type BackendRequirement = {
   integration_key: string | null;
   name: string;
   target: 'empresa' | 'trabajador';
+  frequency: string;
+  validity_days: number | null;
   is_active: boolean;
 };
 type BackendWorker = { id: string; contratista_id: string; rut: string; is_active: boolean };
@@ -26,6 +28,9 @@ type BackendVersion = {
   document_id: string;
   version_number: number;
   workflow_status: 'pendiente' | 'revision' | 'aprobado' | 'rechazado' | 'reemplazado';
+  issued_at: string | null;
+  expires_at: string | null;
+  uploaded_at: string;
 };
 type BackendMembership = { profile_id: string; role: string; is_active: boolean };
 type BackendProfile = { id: string; full_name: string | null; is_active: boolean };
@@ -50,6 +55,8 @@ type ReviewRpcResult = {
   status: 'aprobado' | 'rechazado';
   reviewed_at: string;
   document_key: string;
+  issued_at: string | null;
+  expires_at: string | null;
 };
 
 export interface ReviewOperationsSnapshot {
@@ -67,6 +74,8 @@ export interface ReviewDecisionInput {
   reason?: string;
   explanation?: string;
   solution?: string;
+  issuedAt?: string;
+  expiresAt?: string;
 }
 
 function authHeaders(accessToken: string, json = true): HeadersInit {
@@ -130,7 +139,7 @@ async function requireAdminSession(sessionHint?: SupabaseUserSession | null): Pr
 async function resolveLatestVersion(
   token: string,
   context: DocumentStorageContext,
-): Promise<BackendVersion> {
+): Promise<{ version: BackendVersion; requirement: BackendRequirement }> {
   const [projects, contractors] = await Promise.all([
     selectRows<BackendProject>('projects', token, {
       select: 'id,integration_key',
@@ -159,7 +168,7 @@ async function resolveLatestVersion(
   if (!accreditation) throw new Error('El contratista no tiene una acreditación activa en este proyecto.');
 
   const requirements = await selectRows<BackendRequirement>('requirements', token, {
-    select: 'id,project_id,integration_key,name,target,is_active',
+    select: 'id,project_id,integration_key,name,target,frequency,validity_days,is_active',
     project_id: `eq.${project.id}`,
     target: `eq.${context.requisito.destino}`,
     is_active: 'eq.true',
@@ -191,14 +200,14 @@ async function resolveLatestVersion(
   if (!document) throw new Error('Este requisito todavía no tiene un documento asociado.');
 
   const versions = await selectRows<BackendVersion>('document_versions', token, {
-    select: 'id,document_id,version_number,workflow_status',
+    select: 'id,document_id,version_number,workflow_status,issued_at,expires_at,uploaded_at',
     document_id: `eq.${document.id}`,
     order: 'version_number.desc',
     limit: '1',
   });
   const latest = versions[0];
   if (!latest) throw new Error('Este documento no tiene una versión disponible.');
-  return latest;
+  return { version: latest, requirement };
 }
 
 export function getReviewOperationsSnapshot(): ReviewOperationsSnapshot | null {
@@ -293,7 +302,7 @@ export async function claimDocumentReview(
   documentKey: string,
 ): Promise<ClaimRevision> {
   const session = await requireAdminSession();
-  const latest = await resolveLatestVersion(session._supabase.accessToken, context);
+  const { version: latest } = await resolveLatestVersion(session._supabase.accessToken, context);
   if (latest.workflow_status !== 'revision') throw new Error('La versión ya no está disponible para revisión.');
 
   const result = await rpc<ClaimRpcResult>('claim_document_review', session._supabase.accessToken, {
@@ -324,7 +333,7 @@ export async function reviewDocument(
   decision: ReviewDecisionInput,
 ): Promise<{ status: 'aprobado' | 'rechazado'; reviewedAt: string }> {
   const session = await requireAdminSession();
-  const latest = await resolveLatestVersion(session._supabase.accessToken, context);
+  const { version: latest } = await resolveLatestVersion(session._supabase.accessToken, context);
   if (latest.workflow_status !== 'revision') throw new Error('La versión más reciente ya no está en revisión.');
 
   const result = await rpc<ReviewRpcResult>('review_document_version', session._supabase.accessToken, {
@@ -334,6 +343,8 @@ export async function reviewDocument(
     p_explanation: decision.explanation?.trim() || null,
     p_solution: decision.solution?.trim() || null,
     p_reviewer_name: decision.reviewerName?.trim() || session.nombre || session.email,
+    p_issued_at: decision.issuedAt || null,
+    p_expires_at: decision.expiresAt || null,
   });
 
   await Promise.all([

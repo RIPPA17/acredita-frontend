@@ -30,6 +30,14 @@ const BADGE: Record<string, string> = {
   gray: 'border-cream3 bg-cream2 text-gray-600',
 };
 
+function addDaysIso(value: string, days: number): string {
+  if (!value || !Number.isFinite(days)) return '';
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatElapsed(fromMs: number): string {
   const mins = Math.max(0, Math.floor((Date.now() - fromMs) / 60000));
   if (mins < 1) return 'recién tomada';
@@ -72,6 +80,8 @@ export default function ColaRevisionTab({
   const [criterionChecks, setCriterionChecks] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
+  const [issuedAt, setIssuedAt] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
 
@@ -109,6 +119,11 @@ export default function ColaRevisionTab({
   const currentClaim = current ? claimsRevision.find(item => item.documentoKey === current.key) : undefined;
   const isMine = Boolean(currentClaim && currentReviewer && currentClaim.verificadorId === currentReviewer.id);
   const isOther = Boolean(currentClaim && currentReviewer && currentClaim.verificadorId !== currentReviewer.id);
+
+  useEffect(() => {
+    setIssuedAt(current?.issuedAt || '');
+    setExpiresAt(current?.expiresAt || '');
+  }, [current?.key, current?.version, current?.issuedAt, current?.expiresAt]);
 
   const mandanteName = (projectId?: string) => {
     const project = proyectos.find(item => item.id === projectId);
@@ -205,11 +220,23 @@ export default function ColaRevisionTab({
       showToast('Completa todos los criterios de revisión antes de aprobar.', 'warning');
       return;
     }
+    const validityDays = Number(current.validityDays || 0);
+    if (validityDays > 0 && !issuedAt) {
+      showToast('Confirma la fecha de emisión antes de aprobar este documento.', 'warning');
+      return;
+    }
+    const finalExpiresAt = expiresAt || (validityDays > 0 ? addDaysIso(issuedAt, validityDays) : '');
+    if (issuedAt && finalExpiresAt && finalExpiresAt < issuedAt) {
+      showToast('El vencimiento no puede ser anterior a la emisión.', 'warning');
+      return;
+    }
     setBusy(true);
     try {
       await reviewDocument(contextFor(current), {
         action: 'approve',
         reviewerName: currentReviewer?.nombre,
+        issuedAt: issuedAt || undefined,
+        expiresAt: finalExpiresAt || undefined,
       });
       const snapshot = await refreshReviewOperationsCache();
       setClaimsRevision(snapshot.claims);
@@ -356,6 +383,7 @@ export default function ColaRevisionTab({
                   <div className="border border-cream3 rounded-lg p-2"><span className="text-[8px] uppercase text-gray-400">Trabajador</span><strong className="block text-[10.5px] mt-0.5 truncate">{current.trabajadorNombre || 'No aplica'}</strong></div>
                 </div>
                 {current.periodoEtiqueta && <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800"><strong>Período:</strong> {current.periodoEtiqueta}</div>}
+                {current.isRenewal && <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800"><strong>Renovación anticipada:</strong> estás revisando la versión {current.version}. La versión {current.activeVersion} sigue siendo la vigente{current.activeUntil && current.activeUntil !== '—' ? ` hasta ${current.activeUntil}` : ''} mientras esta renovación se revisa.</div>}
                 <div className="bg-gray-50 border border-cream3 rounded-xl min-h-[430px] flex items-center justify-center p-4">
                   <DocumentPreview item={current} />
                 </div>
@@ -402,6 +430,39 @@ export default function ColaRevisionTab({
               </div>
 
               {Boolean(current.criteriosRevision?.length) && <><div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold mb-2">Criterios del requisito</div><div className="flex flex-col gap-2 mb-3">{current.criteriosRevision.map((criterion: string) => <label key={criterion} className="flex items-start gap-2 border border-cream3 rounded-lg p-2 text-[11px]"><input type="checkbox" disabled={!isMine || busy} checked={Boolean(criterionChecks[criterion])} onChange={event => setCriterionChecks(value => ({ ...value, [criterion]: event.target.checked }))} /><span>{criterion}</span></label>)}</div></>}
+
+              <div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold mb-2">Vigencia documental</div>
+              <div className="rounded-lg border border-cream3 p-2.5 mb-3">
+                <div className="text-[10px] text-gray-500 mb-2">
+                  {current.validityDays
+                    ? `Vigencia configurada: ${current.validityDays} días. Confirma la emisión; Acredita calcula el vencimiento y puedes corregirlo si el documento indica otra fecha.`
+                    : 'Este requisito no tiene una vigencia automática configurada. Puedes registrar emisión y vencimiento si el documento los informa.'}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-[10px] text-gray-500">Emisión
+                    <input
+                      type="date"
+                      disabled={!isMine || busy}
+                      value={issuedAt}
+                      onChange={event => {
+                        const next = event.target.value;
+                        setIssuedAt(next);
+                        if (current.validityDays && next) setExpiresAt(addDaysIso(next, Number(current.validityDays)));
+                      }}
+                      className="form-input w-full mt-1 text-[11px]"
+                    />
+                  </label>
+                  <label className="text-[10px] text-gray-500">Vencimiento
+                    <input
+                      type="date"
+                      disabled={!isMine || busy}
+                      value={expiresAt}
+                      onChange={event => setExpiresAt(event.target.value)}
+                      className="form-input w-full mt-1 text-[11px]"
+                    />
+                  </label>
+                </div>
+              </div>
 
               <select disabled={!isMine || busy} value={reason} onChange={event => setReason(event.target.value)} className="form-input w-full text-[11px] mb-2">
                 <option value="">Motivo si rechazas...</option>

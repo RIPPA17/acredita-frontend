@@ -84,8 +84,12 @@ export interface HistorialVersionDocumento {
   version: number;
   estado: Documento['estado'];
   fecha: string;
+  emitido?: string;
+  vencimientoIso?: string;
+  archivoReferencia?: string;
   motivoRechazo?: string;
   explicacionRechazo?: string;
+  solucionRechazo?: string;
   verificador?: string;
 }
 
@@ -95,6 +99,8 @@ export interface Documento {
   categoria: 'Laboral' | 'Tributario' | 'Prevención';
   estado: 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' | 'revision';
   vencimiento: string;
+  vencimientoIso?: string;
+  emitido?: string;
   subido?: string;
   motivo?: string;      // Explicación de rechazo (también usado como observacion)
   observacion?: string; // Alias o copia para compatibilidad con vistas contratista
@@ -107,6 +113,7 @@ export interface Documento {
   archivoReferencia?: string;
   version?: number;                          // Defaults to 1 when absent
   historial?: HistorialVersionDocumento[];    // Versiones anteriores (superadas por una nueva carga)
+  versionEnTramite?: HistorialVersionDocumento; // Renovación/corrección más nueva sin reemplazar aún una versión aprobada vigente
   obligacionId?: string;
   periodoEtiqueta?: string;
   periodoInicio?: string;
@@ -121,6 +128,7 @@ export interface Requisito {
   destino: 'empresa' | 'trabajador';
   obligatorio: boolean;
   frecuencia: string;
+  diasVigencia?: number;
   alertaDias: number;
   criticidad: 'bloquea_pago' | 'bloquea_acceso' | 'advertencia' | 'bloquea_ambas';
   proyectoId: string;
