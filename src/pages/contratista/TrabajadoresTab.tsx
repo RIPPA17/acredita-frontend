@@ -275,14 +275,14 @@ export default function TrabajadoresTab({
   if (!proyecto) return <div className="tw-empty">Todavía no tienes proyectos asociados.</div>;
 
   if (selected) {
-    const asignacion = getAsignacionProyecto(selected.trabajador, selectedProyectoId);
+    const asignacion = getAsignacionContextual(selected.trabajador, selectedProyectoId, modoConsulta);
     const servicio = asignacion?.servicioId ? servicioPorId.get(asignacion.servicioId) : undefined;
-    const problemasFicha = getProblemasFichaTrabajador(selected.trabajador, selectedProyectoId, contratistaLogueado.id);
-    const contratoVencido = contratoTrabajadorVencido(selected.trabajador);
+    const problemasFicha = modoConsulta ? [] : getProblemasFichaTrabajador(selected.trabajador, selectedProyectoId, contratistaLogueado.id);
+    const contratoVencido = modoConsulta ? false : contratoTrabajadorVencido(selected.trabajador);
     const historialAsignaciones = [...(selected.trabajador.asignaciones || [])]
       .filter(item => item.proyectoId === selectedProyectoId)
       .sort((a, b) => (b.fechaIngreso || '').localeCompare(a.fechaIngreso || ''));
-    const acreditacionHabilita = selected.estado === 'aprobado' || selected.estado === 'por_vencer';
+    const acreditacionHabilita = !modoConsulta && (selected.estado === 'aprobado' || selected.estado === 'por_vencer');
     const accesoHabilitado = acreditacionHabilita && asignacion?.estadoAcceso !== 'bloqueado';
     const candidatosVencimiento = selected.checklist
       .filter(item => item.documento && documentoVigente(item.documento, item.requisito))
@@ -310,8 +310,8 @@ export default function TrabajadoresTab({
             </div>
           </div>
           <div className="tw-detail-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => onEditWorker(selected.trabajador)}><Pencil size={14} /> Editar</button>
-            <button
+            {!modoConsulta && <button type="button" className="btn btn-secondary" onClick={() => onEditWorker(selected.trabajador)}><Pencil size={14} /> Editar</button>}
+            {!modoConsulta && <button
               type="button"
               className="btn btn-ghost border border-red-200 text-red-700"
               onClick={() => {
@@ -319,15 +319,15 @@ export default function TrabajadoresTab({
                   void onRetireWorker(selected.trabajador);
                 }
               }}
-            ><UserMinus size={14} /> Retirar</button>
-            <span className={`tw-badge ${ESTADO_UI[selected.estado].badge}`}>{problemasFicha.length > 0 && selected.estado === 'pendiente' ? 'Ficha incompleta' : ESTADO_UI[selected.estado].label}</span>
+            ><UserMinus size={14} /> Retirar</button>}
+            <span className={`tw-badge ${modoConsulta ? 'tw-badge-gray' : ESTADO_UI[selected.estado].badge}`}>{modoConsulta ? 'Histórico' : problemasFicha.length > 0 && selected.estado === 'pendiente' ? 'Ficha incompleta' : ESTADO_UI[selected.estado].label}</span>
           </div>
         </header>
 
         <div className="tw-folder-summary">
           <div className="tw-folder-kpi"><span>Asignación</span><b>{asignacion?.estado === 'activa' ? 'Activa' : asignacion?.estado || 'Activa'}</b></div>
-          <div className="tw-folder-kpi"><span>Contrato</span><b>{tipoContratoLabel(selected.trabajador)}</b></div>
-          <div className="tw-folder-kpi"><span>Acceso a faena</span><b className={accesoHabilitado ? 'tw-text-green' : 'tw-text-red'}>{accesoHabilitado ? 'Habilitado' : 'No habilitado'}</b></div>
+          <div className="tw-folder-kpi"><span>Contrato</span><b>{asignacion?.tipoContrato ? tipoContratoAsignacionLabel(asignacion) : modoConsulta ? 'No registrado para este período' : tipoContratoLabel(selected.trabajador)}</b></div>
+          <div className="tw-folder-kpi"><span>Acceso a faena</span><b className={accesoHabilitado ? 'tw-text-green' : 'tw-text-red'}>{modoConsulta ? 'No operativo' : accesoHabilitado ? 'Habilitado' : 'No habilitado'}</b></div>
           <div className="tw-folder-kpi"><span>Documentos vigentes</span><b>{selected.vigentes}/{selected.totalObligatorios} · {selected.porcentaje}%</b></div>
           <div className="tw-folder-kpi"><span>Próximo vencimiento</span><b>{proximo?.item.documento?.vencimiento || 'Sin alertas'}</b></div>
         </div>
@@ -337,9 +337,9 @@ export default function TrabajadoresTab({
             <h3 className="tw-section-title">Checklist de requisitos</h3>
             <div className="tw-checklist">
               {selected.checklist.length === 0 && (
-                <div className="tw-info tw-info-yellow">
-                  <strong>Configuración documental incompleta</strong>
-                  <p>No existen requisitos aplicables para la combinación actual de servicio y categoría del trabajador. Permanece en proceso hasta corregir la ficha o la matriz documental.</p>
+                <div className={`tw-info ${modoConsulta ? '' : 'tw-info-yellow'}`}>
+                  <strong>{modoConsulta ? 'Historial documental' : 'Configuración documental incompleta'}</strong>
+                  <p>{modoConsulta ? 'Este período está cerrado. Revisa el historial de asignación y los documentos conservados del trabajador.' : 'No existen requisitos aplicables para la combinación actual de servicio y categoría del trabajador. Permanece en proceso hasta corregir la ficha o la matriz documental.'}</p>
                 </div>
               )}
               {selected.checklist.map(item => {
@@ -355,9 +355,9 @@ export default function TrabajadoresTab({
                     <div className="tw-validity">{item.documento?.vencimiento && item.documento.vencimiento !== '—' ? item.documento.vencimiento : '—'}</div>
                     <button
                       className={`tw-doc-action ${action.className}`}
-                      disabled={uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}`}
+                      disabled={uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}` || (modoConsulta && action.actionable)}
                       onClick={() => void ejecutarAccion(item, selected.trabajador)}
-                    >{uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}` ? 'Subiendo…' : action.label}</button>
+                    >{uploadingKey === `${selected.trabajador.rut}:${item.requisito.id}` ? 'Subiendo…' : modoConsulta && action.actionable ? 'Sin acción' : action.label}</button>
                   </div>
                 );
               })}
