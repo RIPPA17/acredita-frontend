@@ -1,4 +1,5 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   esTrabajadorAsignado,
   getRequisitos,
@@ -41,20 +42,36 @@ const DOC_PRIORITY: Record<DocEstado, number> = {
 type Scope = 'todos' | 'empresa' | 'trabajadores';
 type StatusFilter = 'todos' | 'accion' | 'revision' | 'por_vencer' | 'aprobado';
 
+const proyectoOperativo = (proyecto: Proyecto | undefined): boolean =>
+  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
+
 interface Row extends RequisitoConDoc {
   key: string;
   scope: 'empresa' | 'trabajadores';
   ownerNombre: string;
 }
 
-function accionDoc(item: Row): { label: string; cls: string } {
+function accionDoc(item: Row, readOnly = false): { label: string; cls: string; disabled?: boolean } {
+  if (readOnly) return item.doc
+    ? { label: 'Ver', cls: 'doc-btn-ghost' }
+    : { label: 'Sin archivo', cls: 'doc-btn-ghost', disabled: true };
   if (!item.doc || item.estado === 'Pendiente') return { label: 'Subir', cls: 'doc-btn-primary' };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
   if (item.estado === 'Por vencer') return { label: 'Renovar', cls: 'doc-btn-warning' };
   return { label: 'Ver', cls: 'doc-btn-ghost' };
 }
 
-function stateCopy(item: RequisitoConDoc): string {
+function stateCopy(item: RequisitoConDoc, readOnly = false): string {
+  if (readOnly) {
+    switch (item.estado) {
+      case 'Pendiente': return 'Este requisito quedó sin documento cargado al cierre del proyecto.';
+      case 'Rechazado': return 'Esta versión quedó registrada como rechazada durante la vigencia del proyecto.';
+      case 'Vencido': return 'El documento quedó vencido en el historial del proyecto.';
+      case 'En revisión': return 'Esta versión quedó registrada en revisión dentro del historial disponible.';
+      case 'Por vencer': return 'El documento figuraba vigente y próximo a vencer en el último estado registrado.';
+      default: return 'El documento quedó aprobado y vigente en el último estado registrado.';
+    }
+  }
   switch (item.estado) {
     case 'Pendiente':
       return item.requisito.obligatorio
@@ -115,15 +132,23 @@ export default function SubirTab({
   onDataChanged: () => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
+  const location = useLocation();
+  const initialParams = new URLSearchParams(location.search);
+  const requestedStatus = initialParams.get('estado');
   const [scope, setScope] = useState<Scope>('todos');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    requestedStatus && ['accion', 'revision', 'por_vencer', 'aprobado'].includes(requestedStatus)
+      ? requestedStatus as StatusFilter
+      : 'todos',
+  );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [uploadTarget, setUploadTarget] = useState<Row | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const proyectoActual = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
+  const modoConsulta = !proyectoOperativo(proyectoActual);
   const requisitosAll = getRequisitos();
 
   const trabajadoresAsignados = proyectoActual
@@ -151,9 +176,9 @@ export default function SubirTab({
       ]
     : [];
 
-  const accion = allItems.filter(i => i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado)).length;
-  const revision = allItems.filter(i => i.estado === 'En revisión').length;
-  const porVencer = allItems.filter(i => i.estado === 'Por vencer').length;
+  const accion = modoConsulta ? 0 : allItems.filter(i => i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado)).length;
+  const revision = modoConsulta ? 0 : allItems.filter(i => i.estado === 'En revisión').length;
+  const porVencer = modoConsulta ? 0 : allItems.filter(i => i.estado === 'Por vencer').length;
   const aprobados = allItems.filter(i => i.estado === 'Aprobado').length;
 
   const q = normalizarNombreDocumento(search);
@@ -183,6 +208,21 @@ export default function SubirTab({
   const totalMostrado = grupos.reduce((acc, [, rows]) => acc + rows.length, 0);
 
   const selected = allItems.find(i => i.key === selectedKey);
+  const itemKeys = allItems.map(item => item.key).join('|');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextStatus = params.get('estado');
+    if (nextStatus && ['accion', 'revision', 'por_vencer', 'aprobado'].includes(nextStatus)) {
+      setStatusFilter(nextStatus as StatusFilter);
+    }
+
+    const requisitoId = params.get('requisito');
+    const trabajadorRut = params.get('trabajador');
+    if (!requisitoId) return;
+    const deepLinkKey = trabajadorRut ? `${requisitoId}::${trabajadorRut}` : requisitoId;
+    if (allItems.some(item => item.key === deepLinkKey)) setSelectedKey(deepLinkKey);
+  }, [location.search, itemKeys]);
 
   const cambiarProyecto = (id: string) => {
     setSelectedProyectoId(id);
@@ -202,6 +242,10 @@ export default function SubirTab({
   });
 
   const seleccionarArchivo = (item: Row) => {
+    if (modoConsulta) {
+      showToast('Este proyecto está finalizado y solo permite consultar su historial.', 'warning');
+      return;
+    }
     if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado) || uploadingKey) return;
     setUploadTarget(item);
     setSelectedKey(item.key);
@@ -273,21 +317,22 @@ export default function SubirTab({
       </section>
 
       <section className="doc-floating">
+        {modoConsulta && <div className="doc-historical-notice"><strong>Proyecto finalizado · modo consulta</strong><span>Puedes revisar requisitos, archivos y versiones históricas, pero no subir, corregir ni renovar documentos.</span></div>}
         <div className="doc-summary">
           <div className="doc-metric action">
             <div className="doc-metric-label">Requieren acción</div>
             <div className="doc-metric-value">{accion}</div>
-            <div className="doc-metric-foot">Obligatorios pendientes, rechazados o vencidos</div>
+            <div className="doc-metric-foot">{modoConsulta ? 'Sin acciones operativas en proyectos históricos' : 'Obligatorios pendientes, rechazados o vencidos'}</div>
           </div>
           <div className="doc-metric review">
             <div className="doc-metric-label">En revisión</div>
             <div className="doc-metric-value">{revision}</div>
-            <div className="doc-metric-foot">Esperando validación de Acredita</div>
+            <div className="doc-metric-foot">{modoConsulta ? 'Consulta del último estado registrado' : 'Esperando validación de Acredita'}</div>
           </div>
           <div className="doc-metric expiry">
             <div className="doc-metric-label">Por vencer</div>
             <div className="doc-metric-value">{porVencer}</div>
-            <div className="doc-metric-foot">Todavía vigentes; conviene renovar</div>
+            <div className="doc-metric-foot">{modoConsulta ? 'No se generan renovaciones' : 'Todavía vigentes; conviene renovar'}</div>
           </div>
           <div className="doc-metric ok">
             <div className="doc-metric-label">Aprobados</div>
@@ -298,7 +343,7 @@ export default function SubirTab({
 
         <div className="doc-notice">
           <div className="doc-notice-icon">!</div>
-          <div><b>Cómo funciona:</b> cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".</div>
+          <div><b>{modoConsulta ? 'Modo consulta:' : 'Cómo funciona:'}</b> {modoConsulta ? 'este proyecto ya finalizó. Los estados se conservan como historial y las acciones de carga están deshabilitadas.' : 'cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".'}</div>
         </div>
 
         <div className="doc-workspace">
@@ -350,7 +395,7 @@ export default function SubirTab({
                     <span>{rows.length} requisito{rows.length === 1 ? '' : 's'}</span>
                   </div>
                   {rows.map(item => {
-                    const { label, cls } = accionDoc(item);
+                    const { label, cls, disabled } = accionDoc(item, modoConsulta);
                     const isUploading = uploadingKey === item.key;
                     return (
                       <div
@@ -389,7 +434,7 @@ export default function SubirTab({
                         </div>
                         <button
                           className={`doc-btn ${cls}`}
-                          disabled={isUploading}
+                          disabled={isUploading || disabled}
                           onClick={e => {
                             e.stopPropagation();
                             setSelectedKey(item.key);
@@ -415,7 +460,7 @@ export default function SubirTab({
                 <div style={{ marginTop: 6, fontSize: 11.5 }}>Aquí verás su estado, impacto, vigencia, corrección y versiones anteriores.</div>
               </div>
             ) : (() => {
-              const { label, cls } = accionDoc(selected);
+              const { label, cls, disabled } = accionDoc(selected, modoConsulta);
               const historial = selected.doc?.historial || [];
               const today = new Date().toISOString().slice(0, 10);
               const periodos = getObligacionesDocumentales().filter(item =>
@@ -458,7 +503,7 @@ export default function SubirTab({
 
                     <div className={`doc-info-box ${stateBoxClass(selected.estado)}`}>
                       <strong>{selected.estado}</strong>
-                      <p>{stateCopy(selected)}</p>
+                      <p>{stateCopy(selected, modoConsulta)}</p>
                     </div>
 
                     {selected.estado === 'Rechazado' && (selected.doc?.motivoRechazo || selected.doc?.motivo || selected.doc?.observacion) && (
@@ -468,7 +513,7 @@ export default function SubirTab({
                       </div>
                     )}
 
-                    {guidanceText(selected) && (
+                    {!modoConsulta && guidanceText(selected) && (
                       <div className={`doc-info-box ${selected.estado === 'Rechazado' || selected.estado === 'Vencido' ? 'red' : selected.estado === 'Por vencer' ? 'yellow' : ''}`}>
                         <strong>{selected.estado === 'Pendiente' ? 'Qué debes hacer' : selected.estado === 'Por vencer' ? 'Renovación anticipada' : 'Cómo corregirlo'}</strong>
                         <p>{guidanceText(selected)}</p>
@@ -529,7 +574,7 @@ export default function SubirTab({
                       <button className="doc-btn doc-btn-ghost" onClick={() => setSelectedKey(null)}>Cerrar</button>
                       <button
                         className={`doc-btn ${cls}`}
-                        disabled={isUploading}
+                        disabled={isUploading || disabled}
                         onClick={() => {
                           if (label === 'Ver') void verDocumento(selected);
                           else seleccionarArchivo(selected);
@@ -537,9 +582,11 @@ export default function SubirTab({
                       >
                         {isUploading
                           ? 'Subiendo…'
-                          : selected.estado === 'En revisión' || selected.estado === 'Aprobado'
-                            ? 'Ver documento'
-                            : label}
+                          : modoConsulta
+                            ? label
+                            : selected.estado === 'En revisión' || selected.estado === 'Aprobado'
+                              ? 'Ver documento'
+                              : label}
                       </button>
                     </div>
                   </div>
