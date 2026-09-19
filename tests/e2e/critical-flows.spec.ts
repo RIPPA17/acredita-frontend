@@ -14,10 +14,14 @@ const ASSIGNMENT = '80000000-0000-4000-8000-000000000001';
 const REQ_COMPANY = '90000000-0000-4000-8000-000000000001';
 const REQ_WORKER = '90000000-0000-4000-8000-000000000002';
 const REQ_COMPANY_OLD = '90000000-0000-4000-8000-000000000003';
+const DOCUMENT_COMPANY = '91000000-0000-4000-8000-000000000001';
+const VERSION_COMPANY_V1 = '92000000-0000-4000-8000-000000000001';
+const VERSION_COMPANY_V2 = '92000000-0000-4000-8000-000000000002';
+const VERSION_COMPANY_V3 = '92000000-0000-4000-8000-000000000003';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
-type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean; historicalProject?: boolean };
+type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean; historicalProject?: boolean; renewalScenario?: boolean };
 
 function appSession(role: Role) {
   return {
@@ -56,8 +60,12 @@ function fixtures(role: Role, options: MockOptions) {
     services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
     workers: options.emptyProject ? [] : [{ id: WORKER, contratista_id: CONTRACTOR, rut: '18.123.456-7', full_name: 'Trabajador Piloto', job_title: 'Operador', is_active: true }],
     worker_assignments: options.emptyProject ? [] : [{ id: ASSIGNMENT, accreditation_id: ACCREDITATION, worker_id: WORKER, is_active: true, service_id: SERVICE, job_title: 'Operador', categories: ['general'], assignment_status: 'activa', access_status: 'pendiente', assigned_at: '2026-09-01', unassigned_at: null }],
-    documents: [],
-    document_versions: [],
+    documents: options.renewalScenario ? [{ id: DOCUMENT_COMPANY, accreditation_id: ACCREDITATION, requirement_id: REQ_COMPANY, worker_id: null, obligation_id: null }] : [],
+    document_versions: options.renewalScenario ? [
+      { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+      { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-25', expires_at: '2026-09-24', uploaded_at: '2026-08-25T12:00:00Z', reviewed_at: '2026-08-26T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+      { id: VERSION_COMPANY_V3, document_id: DOCUMENT_COMPANY, version_number: 3, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v3/f30-v3.pdf', original_filename: 'f30-v3.pdf', metadata: { frontend_document_id: 'doc_renewal' } },
+    ] : [],
     obligation_statuses: [],
     compliance_periods: [],
     accreditation_statuses: [
@@ -72,6 +80,8 @@ function fixtures(role: Role, options: MockOptions) {
     business_sync_control: [{ revision: 10 }],
     notification_preferences: [],
     notification_reads: [],
+    review_claims: options.renewalScenario && role === 'admin' ? [{ document_key: 'contratista_piloto_a::doc_renewal', document_version_id: VERSION_COMPANY_V3, claimed_by: PROFILE, claimed_at: '2026-09-19T12:00:00Z', expires_at: '2026-09-20T12:00:00Z' }] : [],
+    review_activity: [],
   } as Record<string, unknown[]>;
 }
 
@@ -287,6 +297,34 @@ test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
   await expect(page.locator('body')).toContainText('F30 / F31 SII');
+});
+
+test('11b renovación anticipada mantiene versión vigente y expone historial por versión', async ({ page }) => {
+  await protectedPage(page, 'contratista', { renewalScenario: true });
+  await page.goto('/contratista/documentos?proyecto=proyecto_piloto&estado=revision');
+
+  await expect(page.getByLabel('Filtrar por estado')).toHaveValue('revision');
+  await expect(page.getByText('F30 / F31 SII', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/v3 en revisión/i).first()).toBeVisible();
+
+  await page.getByText('F30 / F31 SII', { exact: true }).first().click();
+  await expect(page.getByText('Renovación v3 en revisión', { exact: true })).toBeVisible();
+  await expect(page.getByText(/La versión v2 continúa vigente/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ver versión' })).toBeVisible();
+});
+
+test('11c verificador confirma emisión y Acredita calcula vencimiento antes de aprobar', async ({ page }) => {
+  await protectedPage(page, 'admin', { renewalScenario: true });
+  await page.goto('/admin');
+  await page.getByText('Cola de revisión', { exact: true }).first().click();
+  await page.getByRole('button', { name: /En revisión · 1/ }).click();
+
+  await expect(page.getByText(/Renovación anticipada:/)).toBeVisible();
+  const emission = page.getByLabel('Emisión');
+  const expiry = page.getByLabel('Vencimiento');
+  await emission.fill('2026-09-19');
+  await expect(expiry).toHaveValue('2026-10-19');
+  await expect(page.getByText(/Vigencia configurada: 30 días/)).toBeVisible();
 });
 
 test('12 Contratista ve trabajador asignado', async ({ page }) => {
