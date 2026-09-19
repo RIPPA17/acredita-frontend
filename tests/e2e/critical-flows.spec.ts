@@ -239,7 +239,7 @@ test('09d Contratista ve problemas no documentales y abre el pendiente documenta
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
 
-  await expect(page.getByText('Ficha laboral incompleta', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Trabajador Piloto · Ficha laboral incompleta/).first()).toBeVisible();
   const priority = page.locator('.inicio2-priority').first();
   await expect(priority).toContainText('Prioridad 1 · Bloquea pago');
   await expect(priority).toContainText('F30 / F31 SII');
@@ -291,7 +291,7 @@ test('12 Contratista ve trabajador asignado', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
   await page.getByText('Trabajadores', { exact: true }).first().click();
-  await expect(page.getByText('Trabajador Piloto')).toBeVisible();
+  await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
 });
 
 test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
