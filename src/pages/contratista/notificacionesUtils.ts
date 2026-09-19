@@ -1,4 +1,4 @@
-import { calcularEstadoTrabajador, esTrabajadorAsignado, obtenerDiasRestantes } from '../../data/localStorageDb';
+import { calcularEstadoTrabajador, contratoTrabajadorVencido, esTrabajadorAsignado, getProblemasFichaTrabajador, obtenerDiasRestantes } from '../../data/localStorageDb';
 import { Contratista, PreferenciasNotificacionesContratista, Proyecto, Requisito, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
 import { buildRequisitosEmpresa, buildRequisitosTrabajador, motivoRechazo, RequisitoConDoc } from './inicio/inicioUtils';
@@ -28,12 +28,15 @@ interface Params {
 
 const versionId = (item: RequisitoConDoc) => `v${item.doc?.version || 1}`;
 const fechaItem = (item: RequisitoConDoc) => item.doc?.fechaRevisado || item.doc?.subido;
+const proyectoOperativo = (proyecto: Proyecto): boolean =>
+  ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
 
 export function buildNotificacionesContratista({ contratista, proyectos, requisitos, preferencias }: Params): NotificacionContratista[] {
   const result: NotificacionContratista[] = [];
-  const rows = buildAcreditacionRows([contratista], proyectos, []);
+  const proyectosOperativos = proyectos.filter(proyectoOperativo);
+  const rows = buildAcreditacionRows([contratista], proyectosOperativos, []);
 
-  proyectos.forEach(proyecto => {
+  proyectosOperativos.forEach(proyecto => {
     const empresa = buildRequisitosEmpresa(contratista, proyecto.id, requisitos);
     const trabajadores = (contratista.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, proyecto.id, proyectos));
     const itemsTrabajadores = trabajadores.flatMap(worker => buildRequisitosTrabajador(worker, proyecto.id, requisitos));
@@ -85,6 +88,26 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
 
     if (preferencias.cambioEstadoTrabajador) trabajadores.forEach(worker => {
       const estado = calcularEstadoTrabajador(worker, proyecto.id);
+      const problemasFicha = getProblemasFichaTrabajador(worker, proyecto.id, contratista.id);
+      const requisitosAplicables = buildRequisitosTrabajador(worker, proyecto.id, requisitos);
+
+      if (!contratoTrabajadorVencido(worker) && problemasFicha.length > 0) {
+        result.push({
+          id: `ficha-incompleta:${proyecto.id}:${worker.rut}:${problemasFicha.join('|')}`,
+          tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+          titulo: `${worker.nombre} tiene la ficha incompleta`,
+          descripcion: `Falta completar: ${problemasFicha.join(', ')}. Mientras la ficha esté incompleta, el trabajador no puede quedar habilitado.`,
+          cta: 'Completar ficha', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 1,
+        });
+      } else if (!contratoTrabajadorVencido(worker) && problemasFicha.length === 0 && requisitosAplicables.length === 0) {
+        result.push({
+          id: `matriz-pendiente:${proyecto.id}:${worker.rut}`,
+          tipo: 'revision', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+          titulo: `${worker.nombre} no tiene una matriz documental aplicable`,
+          descripcion: 'La ficha laboral está completa, pero la combinación de servicio/categoría no tiene requisitos aplicables. Acredita o el Mandante debe revisar la configuración.',
+          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 3,
+        });
+      }
       if (worker.fechaTerminoContrato) {
         const diasContrato = obtenerDiasRestantes(worker.fechaTerminoContrato);
         if (diasContrato < 0) {
