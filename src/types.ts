@@ -45,6 +45,12 @@ export interface AsignacionTrabajador {
   fechaSalida?: string;
   estado: EstadoAsignacion;
   estadoAcceso: EstadoAcceso;
+  tipoContrato?: TipoContratoLaboral;
+  fechaInicioContrato?: string;
+  fechaTerminoContrato?: string;
+  obraFaenaContrato?: string;
+  regimenEspecial?: RegimenEspecialLaboral;
+  detalleRegimenEspecial?: string;
 }
 
 export type TipoContratoLaboral = 'indefinido' | 'plazo_fijo' | 'obra_faena';
