@@ -184,6 +184,9 @@ export default function ContratistaPortal() {
     return misProyectos[0]?.id || '';
   });
 
+  const proyectoActivo = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
+  const mandanteProyectoActivo = proyectoActivo ? allMandantes.find(m => m.id === proyectoActivo.mandanteId) : undefined;
+
   const [documentosData, setDocumentosData] = useState<Documento[]>([]);
 
   React.useEffect(() => {
@@ -488,6 +491,24 @@ export default function ContratistaPortal() {
           </button>
           Acre<b>dita</b>
         </div>
+        {proyectoActivo && (
+          <div className="contractor-project-context hidden sm:flex" aria-label="Contexto del proyecto activo">
+            <div>
+              <span>Proyecto activo</span>
+              <select
+                aria-label="Proyecto activo global"
+                value={proyectoActivo.id}
+                onChange={event => {
+                  setSelectedProyectoId(event.target.value);
+                  setSelectedWorkerForDocs(null);
+                }}
+              >
+                {misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}
+              </select>
+            </div>
+            <small>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
+          </div>
+        )}
         <div className="flex items-center gap-4">
           <DataSyncButton />
           <div className="relative">
@@ -512,6 +533,23 @@ export default function ContratistaPortal() {
           </button>
         </div>
       </div>
+
+      {proyectoActivo && (
+        <div className="contractor-project-context-mobile sm:hidden">
+          <label htmlFor="contractor-mobile-project">Proyecto activo</label>
+          <select
+            id="contractor-mobile-project"
+            value={proyectoActivo.id}
+            onChange={event => {
+              setSelectedProyectoId(event.target.value);
+              setSelectedWorkerForDocs(null);
+            }}
+          >
+            {misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}
+          </select>
+          <span>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
+        </div>
+      )}
 
       {misProyectos.length === 0 && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 flex items-center sticky top-[64px] z-40">
