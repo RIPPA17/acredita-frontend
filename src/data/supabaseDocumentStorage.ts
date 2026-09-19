@@ -28,6 +28,8 @@ type BackendVersion = {
   document_id: string;
   version_number: number;
   workflow_status: 'pendiente' | 'revision' | 'aprobado' | 'rechazado' | 'reemplazado';
+  issued_at?: string | null;
+  expires_at?: string | null;
   storage_bucket: string | null;
   storage_path: string | null;
   original_filename: string | null;
@@ -186,7 +188,7 @@ async function resolveDocumentContext(
   if (!document) throw new Error('Este requisito todavía no tiene un documento asociado.');
 
   const versions = await selectRows<BackendVersion>('document_versions', token, {
-    select: 'id,document_id,version_number,workflow_status,storage_bucket,storage_path,original_filename,mime_type,size_bytes',
+    select: 'id,document_id,version_number,workflow_status,issued_at,expires_at,storage_bucket,storage_path,original_filename,mime_type,size_bytes',
     document_id: `eq.${document.id}`,
   });
 
@@ -262,7 +264,7 @@ export async function uploadDocumentFile(
   return { version: versionNumber, filename: file.name };
 }
 
-async function fetchLatestStoredFile(context: DocumentStorageContext): Promise<{
+async function fetchStoredFile(context: DocumentStorageContext, versionNumber?: number): Promise<{
   blob: Blob;
   filename: string;
   mimeType: string;
@@ -271,14 +273,19 @@ async function fetchLatestStoredFile(context: DocumentStorageContext): Promise<{
   if (!session) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
 
   const { versions } = await resolveDocumentContext(session._supabase.accessToken, context, false);
-  const latest = [...versions]
+  const storedVersions = [...versions]
     .filter(item => item.storage_path && item.storage_bucket)
-    .sort((a, b) => b.version_number - a.version_number)[0];
-  if (!latest?.storage_path || !latest.storage_bucket) {
-    throw new Error('Esta versión no tiene un archivo real almacenado.');
+    .sort((a, b) => b.version_number - a.version_number);
+  const selected = versionNumber == null
+    ? storedVersions[0]
+    : storedVersions.find(item => item.version_number === versionNumber);
+  if (!selected?.storage_path || !selected.storage_bucket) {
+    throw new Error(versionNumber == null
+      ? 'Esta versión no tiene un archivo real almacenado.'
+      : `La versión ${versionNumber} no tiene un archivo real almacenado.`);
   }
 
-  const url = `${SUPABASE_URL}/storage/v1/object/authenticated/${encodeURIComponent(latest.storage_bucket)}/${encodeStoragePath(latest.storage_path)}`;
+  const url = `${SUPABASE_URL}/storage/v1/object/authenticated/${encodeURIComponent(selected.storage_bucket)}/${encodeStoragePath(selected.storage_path)}`;
   const response = await fetch(url, {
     headers: authHeaders(session._supabase.accessToken, false),
   });
@@ -289,15 +296,15 @@ async function fetchLatestStoredFile(context: DocumentStorageContext): Promise<{
 
   return {
     blob: await response.blob(),
-    filename: latest.original_filename || `documento-v${latest.version_number}`,
-    mimeType: latest.mime_type || response.headers.get('content-type') || 'application/octet-stream',
+    filename: selected.original_filename || `documento-v${selected.version_number}`,
+    mimeType: selected.mime_type || response.headers.get('content-type') || 'application/octet-stream',
   };
 }
 
-export async function openDocumentFile(context: DocumentStorageContext): Promise<void> {
+export async function openDocumentFile(context: DocumentStorageContext, versionNumber?: number): Promise<void> {
   const popup = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   try {
-    const file = await fetchLatestStoredFile(context);
+    const file = await fetchStoredFile(context, versionNumber);
     const objectUrl = URL.createObjectURL(file.blob);
     if (popup) {
       popup.document.title = file.filename;
@@ -316,12 +323,12 @@ export async function openDocumentFile(context: DocumentStorageContext): Promise
   }
 }
 
-export async function loadDocumentFileObjectUrl(context: DocumentStorageContext): Promise<{
+export async function loadDocumentFileObjectUrl(context: DocumentStorageContext, versionNumber?: number): Promise<{
   url: string;
   filename: string;
   mimeType: string;
 }> {
-  const file = await fetchLatestStoredFile(context);
+  const file = await fetchStoredFile(context, versionNumber);
   return {
     url: URL.createObjectURL(file.blob),
     filename: file.filename,
