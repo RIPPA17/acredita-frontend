@@ -85,6 +85,26 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
 
     if (preferencias.cambioEstadoTrabajador) trabajadores.forEach(worker => {
       const estado = calcularEstadoTrabajador(worker, proyecto.id);
+      if (worker.fechaTerminoContrato) {
+        const diasContrato = obtenerDiasRestantes(worker.fechaTerminoContrato);
+        if (diasContrato < 0) {
+          result.push({
+            id: `contrato-vencido:${proyecto.id}:${worker.rut}:${worker.fechaTerminoContrato}`,
+            tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+            titulo: `${worker.nombre} tiene el contrato vencido`,
+            descripcion: `El vínculo laboral terminó el ${worker.fechaTerminoContrato}. El trabajador permanece sin acceso hasta registrar una renovación o un nuevo contrato.`,
+            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 0,
+          });
+        } else if (diasContrato <= 30) {
+          result.push({
+            id: `contrato-por-vencer:${proyecto.id}:${worker.rut}:${worker.fechaTerminoContrato}`,
+            tipo: 'preventiva', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
+            titulo: diasContrato === 0 ? `El contrato de ${worker.nombre} vence hoy` : `El contrato de ${worker.nombre} vence en ${diasContrato} días`,
+            descripcion: 'Actualiza o renueva la relación laboral antes del vencimiento para evitar que el trabajador pierda su habilitación.',
+            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 2,
+          });
+        }
+      }
       const evidencia = buildRequisitosTrabajador(worker, proyecto.id, requisitos).find(item => item.doc?.historial?.some(version => version.estado === 'rechazado'));
       if ((estado === 'aprobado' || estado === 'por_vencer') && evidencia) result.push({
         id: `trabajador-habilitado:${proyecto.id}:${worker.rut}:${evidencia.requisito.id}:${versionId(evidencia)}`,
