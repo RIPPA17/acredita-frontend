@@ -13,6 +13,7 @@ const WORKER = '70000000-0000-4000-8000-000000000001';
 const ASSIGNMENT = '80000000-0000-4000-8000-000000000001';
 const REQ_COMPANY = '90000000-0000-4000-8000-000000000001';
 const REQ_WORKER = '90000000-0000-4000-8000-000000000002';
+const REQ_COMPANY_OLD = '90000000-0000-4000-8000-000000000003';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
@@ -50,6 +51,7 @@ function fixtures(role: Role, options: MockOptions) {
     requirements: [
       { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'req_f30', name: 'F30 / F31 SII', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento previsional', review_checklist: ['Vigencia'], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
+      ...(options.historicalProject ? [{ id: REQ_COMPANY_OLD, project_id: PROJECT_OLD, integration_key: 'req_historico', name: 'Documento Histórico QA', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'por_obra', validity_days: null, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Requisito histórico', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 }] : []),
     ],
     services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
     workers: options.emptyProject ? [] : [{ id: WORKER, contratista_id: CONTRACTOR, rut: '18.123.456-7', full_name: 'Trabajador Piloto', job_title: 'Operador', is_active: true }],
@@ -192,7 +194,8 @@ test('09 Contratista hidrata su empresa, mantiene proyecto activo visible y sepa
   await expect(page.locator('body')).toContainText('Contratista Piloto A');
   await expect(page.locator('body')).toContainText('Proyecto Piloto QA');
   await expect(page.getByLabel('Proyecto activo global')).toHaveValue('proyecto_piloto');
-  await expect(page.getByText('Acción tuya', { exact: true })).toBeVisible();
+  await expect(page.getByText('Requiere acción', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Acción preventiva', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Esperando a Acredita', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Sin acción requerida', { exact: true }).first()).toBeVisible();
 });
@@ -230,6 +233,44 @@ test('09c Contratista conserva proyecto en URL, memoria y navegación del navega
   await page.goto('/contratista');
   await expect(page).toHaveURL(/proyecto=proyecto_historico/);
   await expect(page.getByLabel('Proyecto activo global')).toHaveValue('proyecto_historico');
+});
+
+test('09d Contratista ve problemas no documentales y abre el pendiente documental exacto', async ({ page }) => {
+  await protectedPage(page, 'contratista');
+  await page.goto('/contratista');
+
+  await expect(page.getByText('Ficha laboral incompleta', { exact: true })).toBeVisible();
+  const priority = page.locator('.inicio2-priority').first();
+  await expect(priority).toContainText('Prioridad 1 · Bloquea pago');
+  await expect(priority).toContainText('F30 / F31 SII');
+  await priority.getByRole('button', { name: 'Resolver' }).click();
+
+  await expect(page).toHaveURL(/\/contratista\/documentos\?.*estado=accion.*requisito=req_f30/);
+  await expect(page.getByLabel('Filtrar por estado')).toHaveValue('accion');
+  await expect(page.locator('.doc-detail-title')).toHaveText('F30 / F31 SII');
+
+  await page.goto('/contratista?proyecto=proyecto_piloto');
+  const attentionCard = page.locator('.inicio2-card').filter({ hasText: 'Requiere atención' });
+  await attentionCard.getByRole('button', { name: 'Ver todo' }).click();
+  await expect(page).toHaveURL(/\/contratista\/documentos\?.*estado=accion/);
+  await expect(page.getByLabel('Filtrar por estado')).toHaveValue('accion');
+});
+
+test('09e Proyecto histórico no genera acciones y Documentos queda en modo consulta', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista?proyecto=proyecto_historico');
+
+  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true })).toBeVisible();
+  const responsibilities = page.getByLabel('Responsabilidad de pendientes');
+  await expect(responsibilities.locator('.mine b')).toHaveText('0');
+  await expect(responsibilities.locator('.preventive b')).toHaveText('0');
+  await expect(responsibilities.locator('.waiting b')).toHaveText('0');
+  await expect(page.getByRole('button', { name: /Subir documento/ })).toHaveCount(0);
+
+  await page.getByText('Documentos', { exact: true }).first().click();
+  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Documento Histórico QA', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sin archivo' })).toBeDisabled();
 });
 
 test('10 Contratista puede abrir Proyectos', async ({ page }) => {
