@@ -413,14 +413,20 @@ export default function ContratistaPortal() {
         editingWorker.estado = calcularEstadoTrabajador(editingWorker, selectedProyectoId);
         setSelectedWorkerForDocs(editingWorker);
       } else if (existingWorker) {
-        existingWorker.documentos = [...(existingWorker.documentos || []), ...workerDocs];
+        const existingDocKeys = new Set(
+          (existingWorker.documentos || []).map(doc => `${doc.proyectoId || ''}:${doc.nombre.trim().toLocaleLowerCase('es')}`),
+        );
+        const missingDocs = workerDocs.filter(doc => !existingDocKeys.has(`${doc.proyectoId || ''}:${doc.nombre.trim().toLocaleLowerCase('es')}`));
+        existingWorker.documentos = [...(existingWorker.documentos || []), ...missingDocs];
         existingWorker.asignaciones = [...(existingWorker.asignaciones || []), assignment];
-        existingWorker.tipoContrato ||= newWorkerForm.tipoContrato;
-        existingWorker.fechaInicioContrato ||= newWorkerForm.fechaInicioContrato;
-        existingWorker.fechaTerminoContrato ||= newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined;
-        existingWorker.obraFaenaContrato ||= newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined;
-        existingWorker.regimenEspecial ||= newWorkerForm.regimenEspecial || undefined;
-        existingWorker.detalleRegimenEspecial ||= newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined;
+        existingWorker.nombre = newWorkerForm.nombre.trim();
+        existingWorker.cargo = newWorkerForm.cargo || undefined;
+        existingWorker.tipoContrato = newWorkerForm.tipoContrato;
+        existingWorker.fechaInicioContrato = newWorkerForm.fechaInicioContrato;
+        existingWorker.fechaTerminoContrato = newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined;
+        existingWorker.obraFaenaContrato = newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined;
+        existingWorker.regimenEspecial = newWorkerForm.regimenEspecial || undefined;
+        existingWorker.detalleRegimenEspecial = newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined;
         existingWorker.estado = calcularEstadoTrabajador(existingWorker, selectedProyectoId);
       } else {
         contratista.trabajadores.push({
