@@ -61,6 +61,12 @@ type BackendAssignment = {
   access_status: AsignacionTrabajador['estadoAcceso'];
   assigned_at: string | null;
   unassigned_at: string | null;
+  contract_type_snapshot: Trabajador['tipoContrato'] | null;
+  contract_start_date_snapshot: string | null;
+  contract_end_date_snapshot: string | null;
+  contract_work_or_task_snapshot: string | null;
+  special_labor_regime_snapshot: Trabajador['regimenEspecial'] | null;
+  special_labor_regime_detail_snapshot: string | null;
 };
 type BackendDocument = {
   id: string;
@@ -320,7 +326,7 @@ async function fetchRows(token: string): Promise<BackendRows> {
     selectRows<BackendAccreditation>('accreditations', token, 'id,project_id,contratista_id,is_active'),
     selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,alert_days,is_active'),
     selectRows<BackendWorker>('workers', token, 'id,contratista_id,rut,full_name,job_title,contract_type,contract_start_date,contract_end_date,contract_work_or_task,special_labor_regime,special_labor_regime_detail,is_active'),
-    selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active,service_id,job_title,categories,assignment_status,access_status,assigned_at,unassigned_at'),
+    selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active,service_id,job_title,categories,assignment_status,access_status,assigned_at,unassigned_at,contract_type_snapshot,contract_start_date_snapshot,contract_end_date_snapshot,contract_work_or_task_snapshot,special_labor_regime_snapshot,special_labor_regime_detail_snapshot'),
     selectRows<BackendDocument>('documents', token, 'id,accreditation_id,requirement_id,worker_id,obligation_id'),
     selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,issued_at,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata'),
     selectRows<BackendService>('services', token, 'id,accreditation_id,integration_key'),
@@ -407,6 +413,12 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
           assigned_at: localAssignment?.fechaIngreso || backendAssignment?.assigned_at || new Date().toISOString().slice(0, 10),
           is_active: true,
           unassigned_at: null,
+          contract_type_snapshot: localAssignment?.tipoContrato || worker.tipoContrato || null,
+          contract_start_date_snapshot: localAssignment?.fechaInicioContrato || worker.fechaInicioContrato || null,
+          contract_end_date_snapshot: localAssignment?.fechaTerminoContrato || worker.fechaTerminoContrato || null,
+          contract_work_or_task_snapshot: localAssignment?.obraFaenaContrato || worker.obraFaenaContrato || null,
+          special_labor_regime_snapshot: localAssignment?.regimenEspecial || worker.regimenEspecial || null,
+          special_labor_regime_detail_snapshot: localAssignment?.detalleRegimenEspecial || worker.detalleRegimenEspecial || null,
         };
         if (backendAssignment) {
           await patchRows('worker_assignments', token, { id: `eq.${backendAssignment.id}` }, assignmentPayload);
@@ -812,6 +824,12 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
       fechaSalida: assignment.unassigned_at || undefined,
       estado: assignment.assignment_status || 'activa',
       estadoAcceso: assignment.access_status || 'pendiente',
+      tipoContrato: assignment.contract_type_snapshot || undefined,
+      fechaInicioContrato: assignment.contract_start_date_snapshot || undefined,
+      fechaTerminoContrato: assignment.contract_end_date_snapshot || undefined,
+      obraFaenaContrato: assignment.contract_work_or_task_snapshot || undefined,
+      regimenEspecial: assignment.special_labor_regime_snapshot || undefined,
+      detalleRegimenEspecial: assignment.special_labor_regime_detail_snapshot || undefined,
     });
     assignmentsByWorker.set(assignment.worker_id, current);
   }
