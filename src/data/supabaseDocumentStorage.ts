@@ -22,6 +22,24 @@ type BackendRequirement = {
   is_active: boolean;
 };
 type BackendWorker = { id: string; contratista_id: string; rut: string; is_active: boolean };
+type BackendAssignment = {
+  id: string;
+  accreditation_id: string;
+  worker_id: string;
+  is_active: boolean;
+  assignment_status: string;
+  assigned_at: string;
+};
+type BackendObligation = {
+  id: string;
+  accreditation_id: string;
+  worker_assignment_id: string | null;
+  requirement_id: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  is_active: boolean;
+};
 type BackendDocument = { id: string; accreditation_id: string; requirement_id: string; worker_id: string | null; obligation_id: string | null };
 type BackendVersion = {
   id: string;
@@ -136,15 +154,22 @@ async function resolveDocumentContext(
   const contractor = contractors[0];
   if (!project || !contractor) throw new Error('No fue posible resolver el proyecto o contratista en Supabase.');
 
-  const accreditations = await selectRows<BackendAccreditation>('accreditations', token, {
+  const accreditationParams: Record<string, string> = {
     select: 'id,project_id,contratista_id,is_active',
     project_id: `eq.${project.id}`,
     contratista_id: `eq.${contractor.id}`,
-    is_active: 'eq.true',
-    limit: '1',
-  });
-  const accreditation = accreditations[0];
-  if (!accreditation) throw new Error('El contratista no tiene una acreditación activa en este proyecto.');
+  };
+  if (ensureDocument) accreditationParams.is_active = 'eq.true';
+  const accreditations = await selectRows<BackendAccreditation>('accreditations', token, accreditationParams);
+  const accreditation = accreditations.find(item => item.is_active) || accreditations[0];
+  if (!accreditation) {
+    throw new Error(ensureDocument
+      ? 'El contratista no tiene una acreditación activa en este proyecto.'
+      : 'No encontramos la acreditación asociada a este documento.');
+  }
+  if (ensureDocument && !accreditation.is_active) {
+    throw new Error('Este proyecto está finalizado y no admite nuevas cargas documentales.');
+  }
 
   const requirements = await selectRows<BackendRequirement>('requirements', token, {
     select: 'id,project_id,integration_key,name,target,is_active',
@@ -157,32 +182,71 @@ async function resolveDocumentContext(
   if (!requirement) throw new Error('No fue posible encontrar el requisito correspondiente en Supabase.');
 
   let workerId: string | null = null;
+  let resolvedObligationId = context.obligacionId || undefined;
   if (context.requisito.destino === 'trabajador') {
     if (!context.trabajadorRut) throw new Error('Falta identificar al trabajador del documento.');
     const workers = await selectRows<BackendWorker>('workers', token, {
       select: 'id,contratista_id,rut,is_active',
       contratista_id: `eq.${contractor.id}`,
-      is_active: 'eq.true',
     });
     const worker = workers.find(item => normalizeRut(item.rut) === normalizeRut(context.trabajadorRut || ''));
     if (!worker) throw new Error('El trabajador todavía no está sincronizado con Supabase.');
     workerId = worker.id;
+
+    // Para cargas nuevas la obligación es la identidad documental real del
+    // período/asignación. Nunca se reutiliza un documento de un ingreso anterior.
+    if (!resolvedObligationId) {
+      const assignments = await selectRows<BackendAssignment>('worker_assignments', token, {
+        select: 'id,accreditation_id,worker_id,is_active,assignment_status,assigned_at',
+        accreditation_id: `eq.${accreditation.id}`,
+        worker_id: `eq.${worker.id}`,
+        is_active: 'eq.true',
+        assignment_status: 'eq.activa',
+        order: 'assigned_at.desc',
+        limit: '1',
+      });
+      const assignment = assignments[0];
+      if (!assignment) {
+        throw new Error('El trabajador no tiene una asignación activa en este proyecto.');
+      }
+
+      const obligations = await selectRows<BackendObligation>('document_obligations', token, {
+        select: 'id,accreditation_id,worker_assignment_id,requirement_id,period_start,period_end,due_date,is_active',
+        accreditation_id: `eq.${accreditation.id}`,
+        worker_assignment_id: `eq.${assignment.id}`,
+        requirement_id: `eq.${requirement.id}`,
+        is_active: 'eq.true',
+        order: 'period_start.desc',
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      const obligation = obligations.find(item => item.period_start <= today);
+      if (!obligation) {
+        throw new Error('No existe una obligación documental activa para este requisito y trabajador.');
+      }
+      resolvedObligationId = obligation.id;
+    }
   }
 
   const documents = await selectRows<BackendDocument>('documents', token, {
     select: 'id,accreditation_id,requirement_id,worker_id,obligation_id',
     accreditation_id: `eq.${accreditation.id}`,
     requirement_id: `eq.${requirement.id}`,
-    ...(context.obligacionId ? { obligation_id: `eq.${context.obligacionId}` } : {}),
+    ...(resolvedObligationId ? { obligation_id: `eq.${resolvedObligationId}` } : {}),
   });
-  let document = documents.find(item => item.worker_id === workerId && (!context.obligacionId || item.obligation_id === context.obligacionId));
+  let document = documents.find(item =>
+    item.worker_id === workerId
+    && (!resolvedObligationId || item.obligation_id === resolvedObligationId)
+  );
 
   if (!document && ensureDocument) {
+    if (context.requisito.destino === 'trabajador' && !resolvedObligationId) {
+      throw new Error('No fue posible vincular el documento a la obligación activa del trabajador.');
+    }
     document = await insertReturning<BackendDocument>('documents', token, {
       accreditation_id: accreditation.id,
       requirement_id: requirement.id,
       worker_id: workerId,
-      obligation_id: context.obligacionId || null,
+      obligation_id: resolvedObligationId || null,
     });
   }
   if (!document) throw new Error('Este requisito todavía no tiene un documento asociado.');
