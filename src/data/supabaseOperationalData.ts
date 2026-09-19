@@ -413,12 +413,15 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
           assigned_at: localAssignment?.fechaIngreso || backendAssignment?.assigned_at || new Date().toISOString().slice(0, 10),
           is_active: true,
           unassigned_at: null,
-          contract_type_snapshot: localAssignment?.tipoContrato || worker.tipoContrato || null,
-          contract_start_date_snapshot: localAssignment?.fechaInicioContrato || worker.fechaInicioContrato || null,
-          contract_end_date_snapshot: localAssignment?.fechaTerminoContrato || worker.fechaTerminoContrato || null,
-          contract_work_or_task_snapshot: localAssignment?.obraFaenaContrato || worker.obraFaenaContrato || null,
-          special_labor_regime_snapshot: localAssignment?.regimenEspecial || worker.regimenEspecial || null,
-          special_labor_regime_detail_snapshot: localAssignment?.detalleRegimenEspecial || worker.detalleRegimenEspecial || null,
+          // Mientras el período está activo, el snapshot sigue la relación laboral
+          // vigente del trabajador. Al dar de baja la asignación deja de sincronizarse
+          // y queda congelado como evidencia histórica de ese período.
+          contract_type_snapshot: worker.tipoContrato || null,
+          contract_start_date_snapshot: worker.fechaInicioContrato || null,
+          contract_end_date_snapshot: worker.fechaTerminoContrato || null,
+          contract_work_or_task_snapshot: worker.obraFaenaContrato || null,
+          special_labor_regime_snapshot: worker.regimenEspecial || null,
+          special_labor_regime_detail_snapshot: worker.detalleRegimenEspecial || null,
         };
         if (backendAssignment) {
           await patchRows('worker_assignments', token, { id: `eq.${backendAssignment.id}` }, assignmentPayload);
