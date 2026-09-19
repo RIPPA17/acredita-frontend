@@ -98,9 +98,7 @@ async function mockContractor(page: Page) {
         const payload = JSON.parse(request.postData() || '[]');
         const rows = Array.isArray(payload) ? payload : [payload];
         for (const row of rows) {
-          const existing = assignments.find(item => item.accreditation_id === row.accreditation_id && item.worker_id === row.worker_id);
-          if (existing) Object.assign(existing, row);
-          else assignments.push({
+          assignments.push({
             id: `67000000-0000-4000-8000-${String(assignmentSeq++).padStart(12, '0')}`,
             ...row,
           });
@@ -211,7 +209,7 @@ test('trabajador sin matriz documental queda en proceso y no habilitado', async 
   await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
 
   await page.getByRole('button', { name: 'Ver carpeta' }).click();
-  await expect(page.getByText('Matriz documental pendiente')).toBeVisible();
+  await expect(page.getByText('Configuración documental incompleta')).toBeVisible();
   await expect(page.getByText('No habilitado')).toBeVisible();
 });
 
@@ -239,9 +237,45 @@ test('permite editar la asignación y retirar al trabajador conservando la baja'
   await expect(page.getByText('Trabajador retirado del proyecto. Su historial fue conservado.')).toBeVisible();
 
   await expect.poll(() => calls.some(call => {
-    if (call.method !== 'POST' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
+    if (call.method !== 'PATCH' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
     const parsed = JSON.parse(call.body);
-    const rows = Array.isArray(parsed) ? parsed : [parsed];
-    return rows.some(row => row.job_title === 'Supervisora');
+    return parsed.job_title === 'Supervisora';
   })).toBeTruthy();
+});
+
+test('reingreso al mismo proyecto crea un nuevo periodo y conserva la baja anterior', async ({ page }) => {
+  const calls = await mockContractor(page);
+
+  await page.goto('/contratista');
+  await page.getByText('Trabajadores', { exact: true }).first().click();
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+
+  await page.getByPlaceholder('Ej. María González').fill('Luis Reingreso QA');
+  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-0');
+  await page.getByPlaceholder('Ej. Operador').fill('Operador');
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Retirar' }).click();
+  await expect(page.getByText('Trabajador retirado del proyecto. Su historial fue conservado.')).toBeVisible();
+
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+  await page.getByPlaceholder('Ej. María González').fill('Luis Reingreso QA');
+  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-0');
+  await page.getByPlaceholder('Ej. Operador').fill('Operador senior');
+  await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
+  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
+
+  await expect.poll(() => calls.filter(call => call.method === 'POST' && call.path === '/rest/v1/worker_assignments').length).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => calls.some(call => {
+    if (call.method !== 'PATCH' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
+    const parsed = JSON.parse(call.body);
+    return parsed.assignment_status === 'baja' && parsed.is_active === false;
+  })).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Historial de asignaciones')).toBeVisible();
+  await expect(page.getByText(/Baja/).first()).toBeVisible();
 });

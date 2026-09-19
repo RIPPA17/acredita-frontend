@@ -371,6 +371,11 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
   const workerByContractorRut = new Map(refreshed.workers.map(w => [`${w.contratista_id}:${normalizeRut(w.rut)}`, w]));
   const accreditationByContext = new Map(refreshed.accreditations.filter(a => a.is_active).map(a => [`${a.project_id}:${a.contratista_id}`, a]));
   const serviceUuidByKey = new Map(refreshed.services.filter(item => item.integration_key).map(item => [item.integration_key as string, item.id]));
+  const activeBackendAssignmentByKey = new Map(
+    refreshed.assignments
+      .filter(item => item.is_active && item.assignment_status === 'activa')
+      .map(item => [`${item.accreditation_id}:${item.worker_id}`, item]),
+  );
   const desiredAssignments = new Set<string>();
 
   for (const contractor of scoped) {
@@ -389,7 +394,8 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
         const key = `${accreditation.id}:${backendWorker.id}`;
         desiredAssignments.add(key);
         const localAssignment = worker.asignaciones?.find(item => item.proyectoId === project.id && item.estado === 'activa');
-        await insertRows('worker_assignments', token, {
+        const backendAssignment = activeBackendAssignmentByKey.get(key);
+        const assignmentPayload = {
           accreditation_id: accreditation.id,
           worker_id: backendWorker.id,
           service_id: localAssignment?.servicioId ? serviceUuidByKey.get(localAssignment.servicioId) || null : null,
@@ -397,10 +403,15 @@ async function syncWorkersAndAssignments(session: SupabaseUserSession, rows: Bac
           categories: localAssignment?.categorias || [],
           assignment_status: localAssignment?.estado || 'activa',
           access_status: localAssignment?.estadoAcceso || 'pendiente',
-          assigned_at: localAssignment?.fechaIngreso || new Date().toISOString().slice(0, 10),
+          assigned_at: localAssignment?.fechaIngreso || backendAssignment?.assigned_at || new Date().toISOString().slice(0, 10),
           is_active: true,
           unassigned_at: null,
-        }, 'accreditation_id,worker_id');
+        };
+        if (backendAssignment) {
+          await patchRows('worker_assignments', token, { id: `eq.${backendAssignment.id}` }, assignmentPayload);
+        } else {
+          await insertRows('worker_assignments', token, assignmentPayload);
+        }
       }
     }
   }

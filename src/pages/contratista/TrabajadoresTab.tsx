@@ -2,8 +2,10 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Pencil, Search, UserMinus, UserPlus } from 'lucide-react';
 import {
   calcularEstadoTrabajador,
+  contratoTrabajadorVencido,
   esTrabajadorAsignado,
   getMotivoBloqueoTrabajador,
+  getProblemasFichaTrabajador,
   getRequisitos,
   obtenerDiasRestantes,
   requisitoAplicaATrabajador,
@@ -225,6 +227,11 @@ export default function TrabajadoresTab({
   if (selected) {
     const asignacion = getAsignacionProyecto(selected.trabajador, selectedProyectoId);
     const servicio = asignacion?.servicioId ? servicioPorId.get(asignacion.servicioId) : undefined;
+    const problemasFicha = getProblemasFichaTrabajador(selected.trabajador, selectedProyectoId, contratistaLogueado.id);
+    const contratoVencido = contratoTrabajadorVencido(selected.trabajador);
+    const historialAsignaciones = [...(selected.trabajador.asignaciones || [])]
+      .filter(item => item.proyectoId === selectedProyectoId)
+      .sort((a, b) => (b.fechaIngreso || '').localeCompare(a.fechaIngreso || ''));
     const acreditacionHabilita = selected.estado === 'aprobado' || selected.estado === 'por_vencer';
     const accesoHabilitado = acreditacionHabilita && asignacion?.estadoAcceso !== 'bloqueado';
     const candidatosVencimiento = selected.checklist
@@ -263,7 +270,7 @@ export default function TrabajadoresTab({
                 }
               }}
             ><UserMinus size={14} /> Retirar</button>
-            <span className={`tw-badge ${ESTADO_UI[selected.estado].badge}`}>{ESTADO_UI[selected.estado].label}</span>
+            <span className={`tw-badge ${ESTADO_UI[selected.estado].badge}`}>{problemasFicha.length > 0 && selected.estado === 'pendiente' ? 'Ficha incompleta' : ESTADO_UI[selected.estado].label}</span>
           </div>
         </header>
 
@@ -281,8 +288,8 @@ export default function TrabajadoresTab({
             <div className="tw-checklist">
               {selected.checklist.length === 0 && (
                 <div className="tw-info tw-info-yellow">
-                  <strong>Matriz documental pendiente</strong>
-                  <p>Este proyecto todavía no tiene requisitos documentales aplicables al trabajador. El trabajador permanece en proceso y no puede habilitarse hasta que la matriz sea configurada.</p>
+                  <strong>Configuración documental incompleta</strong>
+                  <p>No existen requisitos aplicables para la combinación actual de servicio y categoría del trabajador. Permanece en proceso hasta corregir la ficha o la matriz documental.</p>
                 </div>
               )}
               {selected.checklist.map(item => {
@@ -309,6 +316,9 @@ export default function TrabajadoresTab({
 
           <aside className="tw-side">
             <div className="tw-info"><strong>Relación laboral</strong><p>{tipoContratoLabel(selected.trabajador)}{selected.trabajador.fechaInicioContrato ? ` · inicio ${selected.trabajador.fechaInicioContrato}` : ''}{selected.trabajador.obraFaenaContrato ? ` · ${selected.trabajador.obraFaenaContrato}` : ''}</p>{regimenEspecialLabel(selected.trabajador) && <p>Régimen especial: {regimenEspecialLabel(selected.trabajador)}</p>}</div>
+            {contratoVencido && <div className="tw-info tw-info-red"><strong>Contrato vencido</strong><p>El contrato terminó el {selected.trabajador.fechaTerminoContrato}. El acceso queda bloqueado hasta registrar una renovación o un nuevo vínculo laboral.</p></div>}
+            {!contratoVencido && problemasFicha.length > 0 && <div className="tw-info tw-info-yellow"><strong>Ficha incompleta</strong><p>Completa: {problemasFicha.join(', ')}. El trabajador no puede quedar habilitado mientras falten estos datos.</p></div>}
+            <div className="tw-info"><strong>Historial de asignaciones</strong>{historialAsignaciones.length === 0 ? <p>Sin períodos registrados.</p> : <div className="mt-2 space-y-1">{historialAsignaciones.map(item => <p key={item.id}>{item.fechaIngreso || 'Sin fecha'} → {item.fechaSalida || 'Actual'} · {item.estado === 'activa' ? 'Activa' : item.estado === 'baja' ? 'Baja' : 'Inactiva'}{item.cargo ? ` · ${item.cargo}` : ''}</p>)}</div>}</div>
             {selected.estado === 'rechazado' && (
               <>
                 <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || `${bloqueo?.requisito.nombre || 'Un requisito obligatorio'} requiere corrección.`}</p></div>
@@ -316,7 +326,7 @@ export default function TrabajadoresTab({
               </>
             )}
             {selected.estado === 'por_vencer' && <div className="tw-info tw-info-yellow"><strong>Acceso aún habilitado</strong><p>Puede seguir ingresando mientras el documento esté vigente. Renueva antes de su vencimiento.</p></div>}
-            {selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{selected.checklist.length === 0 ? 'La matriz documental del trabajador debe configurarse antes de habilitar su ingreso.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
+            {selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
             {selected.estado === 'aprobado' && <div className="tw-info"><strong>Trabajador habilitado</strong><p>Todos los requisitos obligatorios están vigentes para este proyecto.</p></div>}
           </aside>
         </div>
@@ -384,7 +394,9 @@ export default function TrabajadoresTab({
           <div className="tw-table-head"><span>Trabajador</span><span>Cargo</span><span>Estado</span><span>Documentos</span><span>Acceso</span><span /></div>
           {filtrados.length === 0 ? <div className="tw-empty">No hay trabajadores que coincidan con los filtros.</div> : filtrados.map(item => {
             const acceso = item.estado === 'aprobado' || item.estado === 'por_vencer';
+            const problemasFicha = getProblemasFichaTrabajador(item.trabajador, selectedProyectoId, contratistaLogueado.id);
             const motivo = item.estado === 'rechazado' ? getMotivoBloqueoTrabajador(item.trabajador, selectedProyectoId) : undefined;
+            const estadoVisible = problemasFicha.length > 0 && item.estado === 'pendiente' ? 'Ficha incompleta' : ESTADO_UI[item.estado].label;
             return (
               <div className="tw-table-row" key={item.trabajador.rut}>
                 <div className="tw-person"><div className="tw-avatar">{iniciales(item.trabajador.nombre)}</div><div className="tw-min-0"><strong>{item.trabajador.nombre}</strong><small>{item.trabajador.rut}</small></div></div>
@@ -393,9 +405,9 @@ export default function TrabajadoresTab({
                   const service = assignment?.servicioId ? servicioPorId.get(assignment.servicioId) : undefined;
                   return <>{assignment?.cargo || item.trabajador.cargo || 'Sin cargo'}{service && <small>{service.nombre}</small>}</>;
                 })()}</div>
-                <div><span className={`tw-badge ${ESTADO_UI[item.estado].badge}`}>{ESTADO_UI[item.estado].label}</span></div>
+                <div><span className={`tw-badge ${ESTADO_UI[item.estado].badge}`}>{estadoVisible}</span></div>
                 <div className="tw-progress-cell"><div><span>{item.vigentes}/{item.totalObligatorios} vigentes</span><b>{item.porcentaje}%</b></div><div className="tw-progress"><i style={{ width: `${item.porcentaje}%` }} /></div></div>
-                <div><strong className={acceso ? 'tw-access-ok' : 'tw-access-no'}>{acceso ? 'Habilitado' : 'No habilitado'}</strong><small>{item.estado === 'por_vencer' ? 'Válido hasta su vencimiento.' : item.estado === 'pendiente' ? 'Faltan requisitos obligatorios.' : motivo || 'Sin bloqueos.'}</small></div>
+                <div><strong className={acceso ? 'tw-access-ok' : 'tw-access-no'}>{acceso ? 'Habilitado' : 'No habilitado'}</strong><small>{item.estado === 'por_vencer' ? 'Válido hasta su vencimiento.' : item.estado === 'pendiente' ? problemasFicha.length > 0 ? `Ficha incompleta: ${problemasFicha.join(', ')}.` : item.checklist.length === 0 ? 'Revisar servicio, categoría o matriz documental.' : 'Faltan requisitos obligatorios.' : motivo || 'Sin bloqueos.'}</small></div>
                 <button className={`tw-row-action ${item.estado === 'rechazado' ? 'tw-row-danger' : ''}`} onClick={() => setSelectedWorkerForDocs(item.trabajador)}>{item.estado === 'rechazado' ? 'Resolver' : 'Ver carpeta'}</button>
               </div>
             );
