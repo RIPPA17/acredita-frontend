@@ -286,12 +286,22 @@ export default function ContratistaPortal() {
   });
 
   const openAddWorkerModal = () => {
+    const project = misProyectos.find(item => item.id === selectedProyectoId);
+    if (!project || !proyectoEstaActivo(project)) {
+      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+      return;
+    }
     setEditingWorkerRut(null);
     resetWorkerForm();
     setShowAddWorkerModal(true);
   };
 
   const openEditWorkerModal = (worker: Trabajador) => {
+    const project = misProyectos.find(item => item.id === selectedProyectoId);
+    if (!project || !proyectoEstaActivo(project)) {
+      showToast('Este proyecto está finalizado y no permite editar trabajadores.', 'warning');
+      return;
+    }
     const assignment = getAsignacionProyecto(worker, selectedProyectoId);
     if (!assignment) {
       showToast('No encontramos una asignación activa para editar.', 'warning');
@@ -316,6 +326,11 @@ export default function ContratistaPortal() {
   };
 
   const handleRetireWorker = async (worker: Trabajador) => {
+    const project = misProyectos.find(item => item.id === selectedProyectoId);
+    if (!project || !proyectoEstaActivo(project)) {
+      showToast('Este proyecto está finalizado y no permite retirar trabajadores.', 'warning');
+      return;
+    }
     const list = getContratistas();
     const contractor = list.find(item => item.id === contratistaLogueado.id);
     const target = contractor?.trabajadores?.find(item => item.rut === worker.rut);
@@ -354,8 +369,17 @@ export default function ContratistaPortal() {
       showToast('RUT inválido, revisa el formato y dígito verificador', 'error');
       return;
     }
+    const project = misProyectos.find(item => item.id === selectedProyectoId);
+    if (!project || !proyectoEstaActivo(project)) {
+      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+      return;
+    }
     if (!newWorkerForm.fechaInicioContrato) {
       showToast('Debes indicar la fecha de inicio del contrato.', 'error');
+      return;
+    }
+    if (!newWorkerForm.fechaIngreso) {
+      showToast('Debes indicar la fecha de ingreso al proyecto.', 'error');
       return;
     }
     if (newWorkerForm.tipoContrato === 'plazo_fijo' && !newWorkerForm.fechaTerminoContrato) {
@@ -367,6 +391,18 @@ export default function ContratistaPortal() {
       newWorkerForm.fechaTerminoContrato < newWorkerForm.fechaInicioContrato
     ) {
       showToast('La fecha de término no puede ser anterior a la fecha de inicio.', 'error');
+      return;
+    }
+    if (newWorkerForm.fechaIngreso < newWorkerForm.fechaInicioContrato) {
+      showToast('La fecha de ingreso al proyecto no puede ser anterior al inicio del contrato.', 'error');
+      return;
+    }
+    if (
+      newWorkerForm.tipoContrato === 'plazo_fijo'
+      && newWorkerForm.fechaTerminoContrato
+      && newWorkerForm.fechaIngreso > newWorkerForm.fechaTerminoContrato
+    ) {
+      showToast('La fecha de ingreso al proyecto no puede ser posterior al término del contrato.', 'error');
       return;
     }
     if (newWorkerForm.tipoContrato === 'obra_faena' && !newWorkerForm.obraFaenaContrato.trim()) {
@@ -429,6 +465,12 @@ export default function ContratistaPortal() {
       fechaIngreso: newWorkerForm.fechaIngreso || undefined,
       estado: 'activa' as const,
       estadoAcceso: 'pendiente' as const,
+      tipoContrato: newWorkerForm.tipoContrato,
+      fechaInicioContrato: newWorkerForm.fechaInicioContrato,
+      fechaTerminoContrato: newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined,
+      obraFaenaContrato: newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined,
+      regimenEspecial: newWorkerForm.regimenEspecial || undefined,
+      detalleRegimenEspecial: newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined,
     };
 
     setSavingWorker(true);
@@ -449,6 +491,12 @@ export default function ContratistaPortal() {
         currentAssignment.categorias = assignmentCategories;
         currentAssignment.fechaIngreso = newWorkerForm.fechaIngreso || undefined;
         currentAssignment.estadoAcceso = 'pendiente';
+        currentAssignment.tipoContrato = newWorkerForm.tipoContrato;
+        currentAssignment.fechaInicioContrato = newWorkerForm.fechaInicioContrato;
+        currentAssignment.fechaTerminoContrato = newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato : undefined;
+        currentAssignment.obraFaenaContrato = newWorkerForm.tipoContrato === 'obra_faena' ? newWorkerForm.obraFaenaContrato.trim() : undefined;
+        currentAssignment.regimenEspecial = newWorkerForm.regimenEspecial || undefined;
+        currentAssignment.detalleRegimenEspecial = newWorkerForm.regimenEspecial === 'otro' ? newWorkerForm.detalleRegimenEspecial.trim() : undefined;
 
         const existingDocKeys = new Set(
           (editingWorker.documentos || []).map(doc => `${doc.proyectoId || ''}:${doc.nombre.trim().toLocaleLowerCase('es')}`),
@@ -1018,8 +1066,17 @@ export default function ContratistaPortal() {
               </div>
 
               <div>
-                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de ingreso</label>
-                <input type="date" value={newWorkerForm.fechaIngreso} onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaIngreso: e.target.value})} className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm" />
+                <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Fecha de ingreso *</label>
+                <input
+                  aria-label="Fecha de ingreso al proyecto"
+                  type="date"
+                  min={newWorkerForm.fechaInicioContrato || undefined}
+                  max={newWorkerForm.tipoContrato === 'plazo_fijo' ? newWorkerForm.fechaTerminoContrato || undefined : undefined}
+                  value={newWorkerForm.fechaIngreso}
+                  onChange={(e) => setNewWorkerForm({...newWorkerForm, fechaIngreso: e.target.value})}
+                  className="form-input w-full p-2.5 border border-cream3 rounded-lg text-sm"
+                  required
+                />
               </div>
 
               <div>
