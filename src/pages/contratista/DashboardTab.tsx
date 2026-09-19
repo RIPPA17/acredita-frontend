@@ -112,6 +112,7 @@ export default function DashboardTab({
   const estadosTrabajadores = trabajadores.map(trabajador => ({ trabajador, estado: calcularEstadoTrabajador(trabajador, proyectoActual.id) }));
   const aprobados = estadosTrabajadores.filter(item => item.estado === 'aprobado').length;
   const enProceso = estadosTrabajadores.filter(item => item.estado === 'pendiente' || item.estado === 'rechazado').length;
+  const trabajadoresBloqueados = estadosTrabajadores.filter(item => item.estado === 'rechazado').length;
   const porVencer = estadosTrabajadores.filter(item => item.estado === 'por_vencer').length;
   const empresaRevision = empresaItems.filter(item => item.requisito.obligatorio && item.estado === 'En revisión').length;
   const empresaRechazados = empresaItems.filter(item => item.requisito.obligatorio && ['Rechazado', 'Vencido'].includes(item.estado)).length;
@@ -128,7 +129,8 @@ export default function DashboardTab({
     .filter(item => item.requisito.obligatorio && item.estado === 'En revisión')
     .map(item => ({ key: `${item.requisito.id}:${item.worker?.rut || 'empresa'}`, item, owner: item.worker?.nombre || 'Empresa', worker: item.worker, prioridad: prioridadItem(item) }))
     .sort((a, b) => a.prioridad - b.prioridad);
-  const prioridad = [...accionables, ...esperando].sort((a, b) => a.prioridad - b.prioridad)[0];
+  const prioridad = accionables[0];
+  const sinAccion = todosItems.filter(item => item.estado === 'Aprobado').length;
   const vencimientos = todosItems
     .filter(item => item.doc && item.estado === 'Por vencer')
     .map(item => ({ item, dias: obtenerDiasRestantes(item.doc!.vencimiento) }))
@@ -154,6 +156,12 @@ export default function DashboardTab({
       : `Tu empresa tiene ${empresaRevision} documento${empresaRevision === 1 ? '' : 's'} en revisión y ${enProceso} trabajador${enProceso === 1 ? '' : 'es'} aún no completa${enProceso === 1 ? '' : 'n'} sus requisitos obligatorios.`;
   const empresaDetalle = empresaRechazados > 0 ? `${empresaRechazados} rechazado${empresaRechazados === 1 ? '' : 's'}` : empresaRevision > 0 ? `${empresaRevision} en revisión` : empresaPendientes > 0 ? `${empresaPendientes} pendiente${empresaPendientes === 1 ? '' : 's'}` : 'Todo al día';
   const accesoCorto = acceso.estado === 'habilitado' ? 'Habilitado' : acceso.estado === 'bloqueado' ? 'Bloqueado' : acceso.estado === 'pendiente' ? 'Pendiente' : 'Parcial';
+  const bloqueosVisibles = [
+    empresaRechazados > 0 ? { label: 'Empresa', detail: `${empresaRechazados} requisito${empresaRechazados === 1 ? '' : 's'} bloqueante${empresaRechazados === 1 ? '' : 's'}` } : null,
+    trabajadoresBloqueados > 0 ? { label: 'Trabajadores', detail: `${trabajadoresBloqueados} bloqueado${trabajadoresBloqueados === 1 ? '' : 's'}` } : null,
+    acceso.estado === 'bloqueado' ? { label: 'Acceso', detail: acceso.motivo || 'Ingreso a faena bloqueado' } : null,
+    accesoPago.pagoEstado === 'bloqueado' ? { label: 'Pago', detail: accesoPago.motivoPago || 'Pago retenido' } : null,
+  ].filter(Boolean) as Array<{ label: string; detail: string }>;
 
   return (
     <div className="inicio2-page">
@@ -166,7 +174,13 @@ export default function DashboardTab({
       <section className="inicio2-floating">
         {showWelcomeAlert && <div className="inicio2-welcome"><span><CheckCircle size={16} /> Bienvenido al proyecto. Revisa sus requisitos de acreditación.</span><button type="button" onClick={() => setShowWelcomeAlert(false)} aria-label="Cerrar bienvenida"><X size={15} /></button></div>}
 
-        {proyectoRecienIniciado ? <div className="inicio2-empty"><FileText size={34} /><strong>Proyecto recién iniciado</strong><p>Aún no hay documentos ni trabajadores cargados para {proyectoActual.nombre}.</p><div><button type="button" onClick={() => setActiveTab('subir')}>Subir primer documento</button><button type="button" onClick={() => { setActiveTab('trabajadores'); setShowAddWorkerModal(true); }}>Agregar trabajador</button></div></div> : <>
+        {proyectoRecienIniciado ? <div className="inicio2-empty inicio2-onboarding"><FileText size={34} /><strong>Comienza la acreditación de {proyectoActual.nombre}</strong><p>Sigue este orden para evitar cargar información fuera de contexto y llegar a la acreditación de forma clara.</p><div className="inicio2-onboarding-steps">
+          <button type="button" onClick={() => setActiveTab('subir')}><b>1</b><span>Revisar requisitos<small>Conoce qué exige el Mandante.</small></span></button>
+          <button type="button" onClick={() => setActiveTab('subir')}><b>2</b><span>Completar empresa<small>Sube los documentos corporativos.</small></span></button>
+          <button type="button" onClick={() => { setActiveTab('trabajadores'); setShowAddWorkerModal(true); }}><b>3</b><span>Cargar trabajadores<small>Registra y asigna tu equipo.</small></span></button>
+          <button type="button" onClick={() => setActiveTab('trabajadores')}><b>4</b><span>Completar trabajadores<small>Resuelve sus requisitos documentales.</small></span></button>
+          <button type="button" onClick={abrirFicha}><b>5</b><span>Obtener acreditación<small>Revisa el resultado integral.</small></span></button>
+        </div></div> : <>
           <div className={`inicio2-status inicio2-${visual}`}><div className="inicio2-status-main"><div className="inicio2-status-icon">{estado === 'Acreditado' ? <CheckCircle /> : estado === 'Bloqueado' ? <XCircle /> : <Clock3 />}</div><div><span>Acreditación del proyecto</span><div className="inicio2-status-title"><h2>{estado}</h2><b>{estado === 'Acreditado' ? 'Todo al día' : estado === 'Bloqueado' ? 'Requiere corrección' : 'Requiere atención'}</b></div><p>{descripcionEstado}</p></div></div><div className="inicio2-progress-zone"><div><span>Obligaciones completadas</span><strong>{obligacionesTotal > 0 ? `${obligacionesOk} de ${obligacionesTotal}` : 'Sin obligaciones'}</strong></div><div className="inicio2-progress"><i style={{ width: `${avance}%` }} /></div><small>Empresa obligatoria + trabajadores asignados</small></div></div>
 
           <div className="inicio2-metrics">
@@ -176,7 +190,15 @@ export default function DashboardTab({
             <div className="inicio2-metric"><div><span>Pago</span><strong>{accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong><small>{accesoPago.motivoPago || 'Sin restricciones de pago'}</small></div><i className={accesoPago.pagoEstado === 'bloqueado' ? 'inicio2-red' : accesoPago.pagoEstado === 'pendiente' ? 'inicio2-yellow' : 'inicio2-green'}><WalletCards /></i></div>
           </div>
 
-          {prioridad ? <div className={`inicio2-priority ${prioridad.item.estado === 'En revisión' ? 'waiting' : ''}`}><div className="inicio2-priority-copy"><i>{prioridad.item.estado === 'En revisión' ? <Clock3 /> : <AlertTriangle />}</i><div><strong>Prioridad de hoy</strong><p>{prioridad.item.estado === 'En revisión' ? `${prioridad.item.requisito.nombre} ya fue enviado y está siendo revisado por Acredita. No necesitas hacer nada mientras permanezca en revisión.` : `${prioridad.owner} · ${prioridad.item.requisito.nombre}. ${textoEstadoDocumento(prioridad.item)}`}</p></div></div><button type="button" onClick={() => irAItem(prioridad)}>{prioridad.item.estado === 'En revisión' ? 'Ver documento' : prioridad.item.estado === 'Por vencer' ? 'Renovar' : 'Resolver'}</button></div> : <div className="inicio2-priority clear"><div className="inicio2-priority-copy"><i><CheckCircle /></i><div><strong>Todo al día</strong><p>No tienes acciones pendientes en este proyecto.</p></div></div></div>}
+          {bloqueosVisibles.length > 0 && <section className="inicio2-block-map" aria-label="Impactos bloqueados"><header><strong>Qué está bloqueado</strong><span>Impacto operativo actual del proyecto</span></header><div>{bloqueosVisibles.map(item => <article key={item.label}><b>{item.label}</b><small>{item.detail}</small></article>)}</div></section>}
+
+          <div className="inicio2-responsibility-strip" aria-label="Responsabilidad de pendientes">
+            <div className="mine"><strong>Acción tuya</strong><b>{accionables.length}</b><small>Puedes resolverlo ahora.</small></div>
+            <div className="waiting"><strong>Esperando a Acredita</strong><b>{esperando.length}</b><small>Ya fue enviado; no vuelvas a cargar.</small></div>
+            <div className="clear"><strong>Sin acción requerida</strong><b>{sinAccion}</b><small>Aprobados y vigentes.</small></div>
+          </div>
+
+          {prioridad ? <div className="inicio2-priority"><div className="inicio2-priority-copy"><i><AlertTriangle /></i><div><strong>Acción tuya · prioridad de hoy</strong><p>{prioridad.owner} · {prioridad.item.requisito.nombre}. {textoEstadoDocumento(prioridad.item)}</p></div></div><button type="button" onClick={() => irAItem(prioridad)}>{prioridad.item.estado === 'Por vencer' ? 'Renovar' : 'Resolver'}</button></div> : esperando.length > 0 ? <div className="inicio2-priority waiting"><div className="inicio2-priority-copy"><i><Clock3 /></i><div><strong>Esperando a Acredita</strong><p>No tienes una acción pendiente ahora. Hay {esperando.length} documento{esperando.length === 1 ? '' : 's'} enviado{esperando.length === 1 ? '' : 's'} en revisión.</p></div></div><button type="button" onClick={() => setActiveTab('subir')}>Ver revisión</button></div> : <div className="inicio2-priority clear"><div className="inicio2-priority-copy"><i><CheckCircle /></i><div><strong>Sin acción requerida</strong><p>No tienes acciones pendientes en este proyecto.</p></div></div></div>}
 
           <div className="inicio2-main-grid">
             <section className="inicio2-card"><header><div><h3>Avance de acreditación</h3><p>Progreso real dentro de {proyectoActual.nombre}.</p></div><button type="button" onClick={abrirFicha}>Ver ficha completa</button></header><div className="inicio2-card-body"><div className="inicio2-advance"><div><strong><i />Empresa</strong><span>{empresaOk} de {empresaTotal} obligatorios listos</span></div><div><i style={{ width: `${empresaTotal ? (empresaOk / empresaTotal) * 100 : 0}%` }} /></div></div><div className="inicio2-advance workers"><div><strong><i />Trabajadores</strong><span>{trabajadoresOk} de {trabajadoresTotal} habilitados</span></div><div><i style={{ width: `${trabajadoresTotal ? (trabajadoresOk / trabajadoresTotal) * 100 : 0}%` }} /></div></div><div className="inicio2-minis"><div><span>Aprobados</span><b>{aprobados} trabajadores</b></div><div><span>En proceso</span><b>{enProceso} trabajadores</b></div><div><span>Trabajadores por vencer</span><b>{porVencer} trabajadores</b></div></div></div></section>
