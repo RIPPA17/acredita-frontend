@@ -14,7 +14,7 @@ import { AsignacionTrabajador, Contratista, Documento, Mandante, Proyecto, Requi
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
-import { getAsignacionProyecto, getServiciosProyecto } from '../../data/operationalCore';
+import { getServiciosProyecto } from '../../data/operationalCore';
 import {
   documentoVigente,
   getEstadoDocumentoEfectivo,
