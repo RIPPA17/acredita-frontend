@@ -244,7 +244,7 @@ export function getProblemasFichaTrabajador(w: Trabajador, proyectoId: string, c
 
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
   if (contratoTrabajadorVencido(w)) return 'rechazado';
-  if (getProblemasFichaTrabajador(w, proyectoId).length > 0) return 'pendiente';
+  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
 
   const configuredWorkerReqs = getRequisitos().filter(
     r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
@@ -254,10 +254,11 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
 
   const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
   if (backendState) {
+    if (backendState.status === 'vencido_bloqueado') return 'rechazado';
+    if (problemasFicha.length > 0) return 'pendiente';
     // Defensa adicional: una vista derivada con 0 requisitos no puede habilitar al trabajador.
     if (backendState.requiredCount === 0) return 'pendiente';
     if (backendState.status === 'aprobado') return backendState.nearExpiryCount > 0 ? 'por_vencer' : 'aprobado';
-    if (backendState.status === 'vencido_bloqueado') return 'rechazado';
     return 'pendiente';
   }
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
@@ -296,6 +297,7 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   });
 
   if (hasRechazado) return 'rechazado';
+  if (problemasFicha.length > 0) return 'pendiente';
   if (hasPendiente) return 'pendiente';
   if (hasPorVencer) return 'por_vencer';
   return 'aprobado';
@@ -850,33 +852,29 @@ export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
 
 export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): string {
   if (contratoTrabajadorVencido(w)) return `Contrato laboral vencido el ${w.fechaTerminoContrato}`;
-  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
-  if (problemasFicha.length > 0) return `Ficha laboral incompleta: ${problemasFicha.join(', ')}`;
 
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const docs = w.documentos || [];
-  
-  let result = '';
+  let bloqueo = '';
+  let pendiente = '';
+
   reqs.forEach(req => {
     const doc = buscarDocumentoRequisito(docs, req, proyectoId);
+    if (!req.obligatorio) return;
     if (!doc) {
-      if (req.obligatorio) {
-        result = `${req.nombre} pendiente`;
-      }
-    } else {
-      const isVencido = esVencidoPorFecha(doc.vencimiento);
-      if (req.obligatorio) {
-        if (doc.estado === 'rechazado') {
-          result = `${req.nombre} rechazado`;
-        } else if (isVencido) {
-          result = `${req.nombre} vencido`;
-        } else if (doc.estado === 'pendiente' || doc.estado === 'revision') {
-          result = `${req.nombre} pendiente`;
-        }
-      }
+      pendiente ||= `${req.nombre} pendiente`;
+      return;
     }
+    const isVencido = esVencidoPorFecha(doc.vencimiento);
+    if (doc.estado === 'rechazado') bloqueo ||= `${req.nombre} rechazado`;
+    else if (isVencido) bloqueo ||= `${req.nombre} vencido`;
+    else if (doc.estado === 'pendiente' || doc.estado === 'revision') pendiente ||= `${req.nombre} pendiente`;
   });
-  return result || 'Requisitos en proceso';
+
+  if (bloqueo) return bloqueo;
+  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
+  if (problemasFicha.length > 0) return `Ficha laboral incompleta: ${problemasFicha.join(', ')}`;
+  return pendiente || 'Requisitos en proceso';
 }
 
 export type UserSession = SupabaseUserSession;
