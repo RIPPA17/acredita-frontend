@@ -36,6 +36,8 @@ const worker: Trabajador = {
   nombre: 'Trabajador Prueba',
   cargo: 'Operador',
   faena: 'una-faena-legacy-distinta',
+  tipoContrato: 'indefinido',
+  fechaInicioContrato: '2026-09-01',
   estado: 'pendiente',
   asignaciones: [assignment],
   documentos: [],
@@ -169,6 +171,28 @@ const expiredWorkerContractor: Contratista = {
 saveContratistas([expiredWorkerContractor]);
 assert(calcularEstadoTrabajador(workerWithExpiredAccess, project.id) === 'rechazado', 'Un documento obligatorio de acceso vencido debe inhabilitar al trabajador.');
 assert(calcularEstadoAcreditacion(expiredWorkerContractor, project.id) === 'Vencido/Bloqueado', 'Un trabajador con requisito obligatorio vencido debe bloquear la acreditación global.');
+
+const expiredContractWorker: Trabajador = {
+  ...approvedWorker,
+  tipoContrato: 'plazo_fijo',
+  fechaInicioContrato: '2020-01-01',
+  fechaTerminoContrato: '2020-12-31',
+};
+assert(calcularEstadoTrabajador(expiredContractWorker, project.id) === 'rechazado', 'Un contrato laboral vencido debe inhabilitar automáticamente al trabajador.');
+
+const incompleteProfileWorker: Trabajador = {
+  ...approvedWorker,
+  tipoContrato: undefined,
+  fechaInicioContrato: undefined,
+};
+assert(calcularEstadoTrabajador(incompleteProfileWorker, project.id) === 'pendiente', 'Una ficha laboral incompleta nunca debe habilitar al trabajador.');
+
+const noApplicableRequirementsWorker: Trabajador = {
+  ...approvedWorker,
+  asignaciones: [{ ...assignment, id: 'asignacion-sin-requisitos', categorias: ['izaje'] }],
+  documentos: [],
+};
+assert(calcularEstadoTrabajador(noApplicableRequirementsWorker, project.id) === 'pendiente', 'Una combinación sin requisitos aplicables debe quedar en proceso y nunca aprobarse por omisión.');
 
 assert(formatPeriodo('2026-09-01', '2026-09-30') === 'Septiembre de 2026', 'El período mensual debe tener una etiqueta legible.');
 const csv = buildComplianceCsv([
