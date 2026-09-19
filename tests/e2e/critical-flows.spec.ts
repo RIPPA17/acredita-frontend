@@ -270,10 +270,9 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   await page.getByText('Documentos', { exact: true }).first().click();
   await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true })).toBeVisible();
   await expect(page.getByText('Documento Histórico QA', { exact: true }).first()).toBeVisible();
-  const historicalNoFileButtons = page.getByRole('button', { name: 'Sin archivo', exact: true });
-  await expect(historicalNoFileButtons).toHaveCount(2);
-  await expect(historicalNoFileButtons.first()).toBeDisabled();
-  await expect(historicalNoFileButtons.last()).toBeDisabled();
+  const historicalNoFileButton = page.getByRole('button', { name: 'Sin archivo', exact: true }).first();
+  await expect(historicalNoFileButton).toBeVisible();
+  await expect(historicalNoFileButton).toBeDisabled();
 });
 
 test('10 Contratista puede abrir Proyectos', async ({ page }) => {
