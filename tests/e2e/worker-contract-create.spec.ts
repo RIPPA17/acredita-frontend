@@ -251,7 +251,7 @@ test('reingreso al mismo proyecto crea un nuevo periodo y conserva la baja anter
   await page.getByRole('button', { name: /Agregar trabajador/ }).click();
 
   await page.getByPlaceholder('Ej. María González').fill('Luis Reingreso QA');
-  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-3');
+  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-0');
   await page.getByPlaceholder('Ej. Operador').fill('Operador');
   await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
   await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
@@ -263,7 +263,7 @@ test('reingreso al mismo proyecto crea un nuevo periodo y conserva la baja anter
 
   await page.getByRole('button', { name: /Agregar trabajador/ }).click();
   await page.getByPlaceholder('Ej. María González').fill('Luis Reingreso QA');
-  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-3');
+  await page.getByPlaceholder('12.345.678-9').fill('13.654.321-0');
   await page.getByPlaceholder('Ej. Operador').fill('Operador senior');
   await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
   await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
