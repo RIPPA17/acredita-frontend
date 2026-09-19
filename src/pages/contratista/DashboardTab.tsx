@@ -141,7 +141,7 @@ export default function DashboardTab({
   const tieneDocumentosCargados = documentosData.some(doc =>
     doc.estado !== 'pendiente'
     || Boolean(doc.subido && doc.subido !== '—')
-    || Boolean(doc.archivoUrl)
+    || Boolean(doc.archivoReferencia)
   );
   const proyectoRecienIniciado = !tieneDocumentosCargados && trabajadores.length === 0;
   const irAItem = (accion: AccionInicio) => {
