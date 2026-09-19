@@ -317,7 +317,7 @@ test('11c verificador confirma emisión y Acredita calcula vencimiento antes de 
   await protectedPage(page, 'admin', { renewalScenario: true });
   await page.goto('/admin');
   await page.getByText('Cola de revisión', { exact: true }).first().click();
-  await page.getByRole('button', { name: /En revisión · 1/ }).click();
+  await page.getByRole('button', { name: /En revisión/ }).click();
 
   await expect(page.getByText(/Renovación anticipada:/)).toBeVisible();
   const emission = page.getByLabel('Emisión');
