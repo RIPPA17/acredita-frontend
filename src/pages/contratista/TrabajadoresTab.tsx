@@ -10,7 +10,7 @@ import {
   obtenerDiasRestantes,
   requisitoAplicaATrabajador,
 } from '../../data/localStorageDb';
-import { Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
+import { AsignacionTrabajador, Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
@@ -57,6 +57,43 @@ const DOC_UI: Record<DocEstado, { label: string; badge: string }> = {
 };
 
 
+const proyectoOperativo = (proyecto?: Proyecto): boolean =>
+  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
+
+function getAsignacionContextual(trabajador: Trabajador, proyectoId: string, modoConsulta: boolean): AsignacionTrabajador | undefined {
+  const delProyecto = (trabajador.asignaciones || [])
+    .filter(item => item.proyectoId === proyectoId)
+    .sort((a, b) => (b.fechaIngreso || '').localeCompare(a.fechaIngreso || ''));
+  if (modoConsulta) return delProyecto[0];
+  return delProyecto.find(item => item.estado === 'activa');
+}
+
+function tipoContratoAsignacionLabel(asignacion?: AsignacionTrabajador): string {
+  if (!asignacion?.tipoContrato) return 'No registrado para este período';
+  if (asignacion.tipoContrato === 'plazo_fijo') {
+    return asignacion.fechaTerminoContrato ? `Plazo fijo · hasta ${asignacion.fechaTerminoContrato}` : 'Plazo fijo';
+  }
+  if (asignacion.tipoContrato === 'obra_faena') return 'Obra o faena determinada';
+  return 'Indefinido';
+}
+
+function regimenAsignacionLabel(asignacion?: AsignacionTrabajador): string | undefined {
+  if (!asignacion?.regimenEspecial) return undefined;
+  const labels: Record<string, string> = {
+    servicios_transitorios: 'Servicios transitorios',
+    aprendizaje: 'Aprendizaje',
+    agricola_temporada: 'Agrícola de temporada',
+    casa_particular: 'Casa particular',
+    gente_mar_portuario_buceo: 'Gente de mar / portuario / buceo',
+    artes_espectaculos: 'Artes y espectáculos',
+    deportista_profesional: 'Deportista profesional',
+    tripulacion_aerea: 'Tripulación aérea',
+    plataforma_digital_dependiente: 'Plataforma digital dependiente',
+    otro: asignacion.detalleRegimenEspecial || 'Otro régimen especial',
+  };
+  return labels[asignacion.regimenEspecial];
+}
+
 function tipoContratoLabel(trabajador: Trabajador): string {
   if (trabajador.tipoContrato === 'plazo_fijo') {
     return trabajador.fechaTerminoContrato
@@ -86,6 +123,10 @@ function regimenEspecialLabel(trabajador: Trabajador): string | undefined {
 
 function iniciales(nombre: string): string {
   return nombre.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function historialAsignacionesCount(trabajadores: Trabajador[], proyectoId: string, estado: AsignacionTrabajador['estado']): number {
+  return trabajadores.flatMap(item => item.asignaciones || []).filter(item => item.proyectoId === proyectoId && item.estado === estado).length;
 }
 
 function buildResumen(trabajador: Trabajador, proyectoId: string, requisitos: Requisito[]): ResumenTrabajador {
@@ -150,11 +191,16 @@ export default function TrabajadoresTab({
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const proyecto = misProyectos.find(item => item.id === selectedProyectoId) || misProyectos[0];
+  const modoConsulta = !proyectoOperativo(proyecto);
   const requisitos = getRequisitos().filter(item =>
     item.proyectoId === selectedProyectoId && item.destino === 'trabajador' && item.activo !== false
   );
   const trabajadores = proyecto
-    ? (contratistaLogueado.trabajadores || []).filter(item => esTrabajadorAsignado(item, proyecto.id, misProyectos))
+    ? (contratistaLogueado.trabajadores || []).filter(item =>
+        modoConsulta
+          ? Boolean(item.asignaciones?.some(asignacion => asignacion.proyectoId === proyecto.id))
+          : esTrabajadorAsignado(item, proyecto.id, misProyectos)
+      )
     : [];
   const resumenes = trabajadores.map(item => buildResumen(item, selectedProyectoId, requisitos));
   const selectedWorker = selectedWorkerForDocs
@@ -183,6 +229,10 @@ export default function TrabajadoresTab({
 
   const ejecutarAccion = async (item: ChecklistItem, trabajador: Trabajador) => {
     const action = accionDocumento(item);
+    if (modoConsulta && action.actionable) {
+      showToast('Este proyecto está finalizado y solo permite consultar documentos existentes.', 'warning');
+      return;
+    }
     if (!action.actionable) {
       try {
         await openDocumentFile(contextoDocumento(item, trabajador));
