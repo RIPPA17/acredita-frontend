@@ -491,6 +491,62 @@ test('12c Alta de trabajador limita ingreso a la vigencia del contrato', async (
   await expect(entry).toHaveAttribute('max', '2026-09-20');
 });
 
+test('12d primera carga de trabajador se vincula a la obligación activa exacta', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'contratista', { workerDocumentScenario: 'pending' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Certificado ODI', { exact: true })).toBeVisible();
+
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Subir', exact: true }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: 'odi-trabajador.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\n% Acredita E2E'),
+  });
+
+  await expect.poll(() => {
+    const post = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/documents');
+    return post?.body?.obligation_id || null;
+  }).toBe(OBLIGATION_WORKER);
+});
+
+test('12e documento obligatorio en revisión queda esperando a Acredita sin pedir otra carga', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'review' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Esperando a Acredita', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Hay 1 documento obligatorio en revisión/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Subir', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toHaveCount(0);
+});
+
+test('12f rechazo de trabajador muestra el requisito y motivo exactos para corregir', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'rejected' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Resolver', exact: true }).click();
+  await expect(page.getByText('Motivo: Falta firma', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Certificado ODI: Falta firma/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toBeVisible();
+  await expect(page.getByText('Qué bloquea el ingreso', { exact: true })).toBeVisible();
+});
+
+test('12g renovación anticipada en revisión conserva vigencia y evita cargas duplicadas', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'renewal_review' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText(/Renovación v2 en revisión/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'En revisión', exact: true })).toBeVisible();
+  await expect(page.getByText('Renovaciones en revisión', { exact: true })).toBeVisible();
+  await expect(page.getByText('Habilitado', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Renovar', exact: true })).toHaveCount(0);
+});
+
 test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
