@@ -14,7 +14,7 @@ const REQ_WORKER = '90000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
-type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado' };
+type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean };
 
 function appSession(role: Role) {
   return {
@@ -44,14 +44,14 @@ function fixtures(role: Role, options: MockOptions) {
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
     ],
     services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
-    workers: [{ id: WORKER, contratista_id: CONTRACTOR, rut: '18.123.456-7', full_name: 'Trabajador Piloto', job_title: 'Operador', is_active: true }],
-    worker_assignments: [{ id: ASSIGNMENT, accreditation_id: ACCREDITATION, worker_id: WORKER, is_active: true, service_id: SERVICE, job_title: 'Operador', categories: ['general'], assignment_status: 'activa', access_status: 'pendiente', assigned_at: '2026-09-01', unassigned_at: null }],
+    workers: options.emptyProject ? [] : [{ id: WORKER, contratista_id: CONTRACTOR, rut: '18.123.456-7', full_name: 'Trabajador Piloto', job_title: 'Operador', is_active: true }],
+    worker_assignments: options.emptyProject ? [] : [{ id: ASSIGNMENT, accreditation_id: ACCREDITATION, worker_id: WORKER, is_active: true, service_id: SERVICE, job_title: 'Operador', categories: ['general'], assignment_status: 'activa', access_status: 'pendiente', assigned_at: '2026-09-01', unassigned_at: null }],
     documents: [],
     document_versions: [],
     obligation_statuses: [],
     compliance_periods: [],
     accreditation_statuses: [{ accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }],
-    worker_accreditation_statuses: [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
+    worker_accreditation_statuses: options.emptyProject ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
     contractor_evaluations: [],
     payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
     support_tickets: [],
@@ -175,18 +175,31 @@ test('08 un pago liberado permite únicamente confirmar Pagado', async ({ page }
   await expect.poll(() => calls.some(call => call.includes('/rest/v1/rpc/mark_payment_paid'))).toBeTruthy();
 });
 
-test('09 Contratista hidrata su empresa y proyecto', async ({ page }) => {
+test('09 Contratista hidrata su empresa, mantiene proyecto activo visible y separa responsabilidades', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
   await expect(page.locator('body')).toContainText('Contratista Piloto A');
   await expect(page.locator('body')).toContainText('Proyecto Piloto QA');
+  await expect(page.getByLabel('Proyecto activo global')).toHaveValue('proyecto_piloto');
+  await expect(page.getByText('Acción tuya', { exact: true })).toBeVisible();
+  await expect(page.getByText('Esperando a Acredita', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Sin acción requerida', { exact: true }).first()).toBeVisible();
+});
+
+test('09b Contratista nuevo recibe onboarding guiado de cinco pasos', async ({ page }) => {
+  await protectedPage(page, 'contratista', { emptyProject: true });
+  await page.goto('/contratista');
+  await expect(page.getByText('Comienza la acreditación de Proyecto Piloto QA')).toBeVisible();
+  for (const step of ['Revisar requisitos', 'Completar empresa', 'Cargar trabajadores', 'Completar trabajadores', 'Obtener acreditación']) {
+    await expect(page.getByRole('button', { name: new RegExp(step) })).toBeVisible();
+  }
 });
 
 test('10 Contratista puede abrir Proyectos', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
   await page.getByText('Proyectos', { exact: true }).first().click();
-  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
+  await expect(page.locator('.mp-project-title').filter({ hasText: 'Proyecto Piloto QA' }).first()).toBeVisible();
 });
 
 test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }) => {
