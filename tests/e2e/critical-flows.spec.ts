@@ -316,7 +316,10 @@ test('11b renovación anticipada mantiene versión vigente y expone historial po
 test('11c verificador confirma emisión y Acredita calcula vencimiento antes de aprobar', async ({ page }) => {
   await protectedPage(page, 'admin', { renewalScenario: true });
   await page.goto('/admin');
-  await page.getByText('Cola de revisión', { exact: true }).first().click();
+  const reviewNav = page.getByTitle('Cola de revisión');
+  if (await reviewNav.count()) await reviewNav.first().click();
+  else await page.getByRole('button', { name: /Cola de revisión/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'Cola de revisión' })).toBeVisible();
   await page.getByRole('button', { name: /En revisión/ }).click();
 
   await expect(page.getByText(/Renovación anticipada:/)).toBeVisible();
