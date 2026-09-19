@@ -233,6 +233,8 @@ test('Acredita aprueba la versión corregida después del chequeo mínimo', asyn
   await page.locator('label').filter({ hasText: 'Documento legible' }).locator('input[type="checkbox"]').check();
   await page.locator('label').filter({ hasText: 'Datos coinciden' }).locator('input[type="checkbox"]').check();
   await page.locator('label').filter({ hasText: 'Vigencia correcta' }).locator('input[type="checkbox"]').check();
+  await page.getByLabel('Emisión').fill('2026-09-16');
+  await expect(page.getByLabel('Vencimiento')).toHaveValue('2026-10-16');
   await page.getByRole('button', { name: 'Aprobar' }).click();
 
   await expect.poll(() => calls.some(call => call.path === '/rest/v1/rpc/review_document_version' && (call.body || '').includes('approve'))).toBeTruthy();

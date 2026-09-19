@@ -65,6 +65,8 @@ function accionDoc(item: Row, readOnly = false): { label: string; cls: string; d
       ? { label: 'Ver', cls: 'doc-btn-ghost' }
       : { label: 'Sin archivo', cls: 'doc-btn-ghost', disabled: true };
   }
+  if (item.doc?.versionEnTramite?.estado === 'revision') return { label: 'Ver renovación', cls: 'doc-btn-ghost' };
+  if (item.doc?.versionEnTramite?.estado === 'rechazado') return { label: 'Corregir renovación', cls: 'doc-btn-danger' };
   if (!item.doc || item.estado === 'Pendiente') return { label: 'Subir', cls: 'doc-btn-primary' };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
   if (item.estado === 'Por vencer') return { label: 'Renovar', cls: 'doc-btn-warning' };
@@ -186,26 +188,35 @@ export default function SubirTab({
       ]
     : [];
 
-  const accion = modoConsulta ? 0 : allItems.filter(i => i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado)).length;
-  const revision = modoConsulta ? 0 : allItems.filter(i => i.estado === 'En revisión').length;
-  const porVencer = modoConsulta ? 0 : allItems.filter(i => i.estado === 'Por vencer').length;
-  const aprobados = allItems.filter(i => i.estado === 'Aprobado').length;
+  const tieneRenovacionRevision = (item: Row) => item.doc?.versionEnTramite?.estado === 'revision';
+  const tieneRenovacionRechazada = (item: Row) => item.doc?.versionEnTramite?.estado === 'rechazado';
+  const requiereAccion = (item: Row) => item.requisito.obligatorio
+    && (tieneRenovacionRechazada(item) || ['Pendiente', 'Rechazado', 'Vencido'].includes(item.estado));
+  const estaEnRevision = (item: Row) => tieneRenovacionRevision(item) || item.estado === 'En revisión';
+  const estaPorVencer = (item: Row) => !item.doc?.versionEnTramite && item.estado === 'Por vencer';
+  const estaAprobado = (item: Row) => !item.doc?.versionEnTramite && item.estado === 'Aprobado';
+
+  const accion = modoConsulta ? 0 : allItems.filter(requiereAccion).length;
+  const revision = modoConsulta ? 0 : allItems.filter(estaEnRevision).length;
+  const porVencer = modoConsulta ? 0 : allItems.filter(estaPorVencer).length;
+  const aprobados = allItems.filter(estaAprobado).length;
 
   const q = normalizarNombreDocumento(search);
   const filtrados = allItems
     .filter(i => {
       const scopeOk = scope === 'todos' || i.scope === scope;
       let statusOk = true;
-      if (statusFilter === 'accion') statusOk = i.requisito.obligatorio && ['Pendiente', 'Rechazado', 'Vencido'].includes(i.estado);
-      else if (statusFilter === 'revision') statusOk = i.estado === 'En revisión';
-      else if (statusFilter === 'por_vencer') statusOk = i.estado === 'Por vencer';
-      else if (statusFilter === 'aprobado') statusOk = i.estado === 'Aprobado';
+      if (statusFilter === 'accion') statusOk = requiereAccion(i);
+      else if (statusFilter === 'revision') statusOk = estaEnRevision(i);
+      else if (statusFilter === 'por_vencer') statusOk = estaPorVencer(i);
+      else if (statusFilter === 'aprobado') statusOk = estaAprobado(i);
       const qOk = !q || [i.requisito.nombre, i.ownerNombre, i.requisito.categoria]
         .some(value => normalizarNombreDocumento(value).includes(q));
       return scopeOk && statusOk && qOk;
     })
     .sort((a, b) => {
-      const p = DOC_PRIORITY[a.estado] - DOC_PRIORITY[b.estado];
+      const priorityFor = (item: Row) => tieneRenovacionRechazada(item) ? 0 : tieneRenovacionRevision(item) ? 3 : DOC_PRIORITY[item.estado];
+      const p = priorityFor(a) - priorityFor(b);
       if (p !== 0) return p;
       if (a.requisito.obligatorio !== b.requisito.obligatorio) return a.requisito.obligatorio ? -1 : 1;
       const ownerOrder = a.ownerNombre.localeCompare(b.ownerNombre, 'es');
@@ -256,7 +267,8 @@ export default function SubirTab({
       showToast('Este proyecto está finalizado y solo permite consultar su historial.', 'warning');
       return;
     }
-    if (!['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado) || uploadingKey) return;
+    const correctingRenewal = item.doc?.versionEnTramite?.estado === 'rechazado';
+    if ((!correctingRenewal && !['Pendiente', 'Rechazado', 'Vencido', 'Por vencer'].includes(item.estado)) || uploadingKey) return;
     setUploadTarget(item);
     setSelectedKey(item.key);
     fileInputRef.current?.click();
@@ -281,9 +293,11 @@ export default function SubirTab({
     }
   };
 
-  const verDocumento = async (item: Row) => {
+  const verDocumento = async (item: Row, versionNumber?: number) => {
     try {
-      await openDocumentFile(contextoDocumento(item));
+      const requestedVersion = versionNumber
+        ?? (item.doc?.versionEnTramite?.estado === 'revision' ? item.doc.versionEnTramite.version : item.doc?.version);
+      await openDocumentFile(contextoDocumento(item), requestedVersion);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible abrir el documento.', 'error');
     }
@@ -440,6 +454,7 @@ export default function SubirTab({
                         </div>
                         <div>
                           <span className={`doc-badge ${DOC_BADGE_CLASS[item.estado]}`}><span className="doc-dot" />{item.estado}</span>
+                          {item.doc?.versionEnTramite && <div className="doc-date"><b>v{item.doc.versionEnTramite.version}</b> {item.doc.versionEnTramite.estado === 'revision' ? 'en revisión' : 'rechazada'}</div>}
                           <div className="doc-date">{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}</div>
                         </div>
                         <button
@@ -448,7 +463,7 @@ export default function SubirTab({
                           onClick={e => {
                             e.stopPropagation();
                             setSelectedKey(item.key);
-                            if (label === 'Ver') void verDocumento(item);
+                            if (label.startsWith('Ver')) void verDocumento(item);
                             else seleccionarArchivo(item);
                           }}
                         >
@@ -516,6 +531,19 @@ export default function SubirTab({
                       <p>{stateCopy(selected, modoConsulta)}</p>
                     </div>
 
+                    {selected.doc?.versionEnTramite?.estado === 'revision' && (
+                      <div className="doc-info-box blue">
+                        <strong>Renovación v{selected.doc.versionEnTramite.version} en revisión</strong>
+                        <p>La versión v{selected.doc.version} continúa vigente{selected.doc.vencimiento && selected.doc.vencimiento !== '—' ? ` hasta ${selected.doc.vencimiento}` : ''}. La renovación no suspende acceso ni pago mientras la versión anterior siga válida.</p>
+                      </div>
+                    )}
+                    {selected.doc?.versionEnTramite?.estado === 'rechazado' && (
+                      <div className="doc-info-box red">
+                        <strong>Renovación v{selected.doc.versionEnTramite.version} rechazada</strong>
+                        <p>{selected.doc.versionEnTramite.explicacionRechazo || selected.doc.versionEnTramite.motivoRechazo || 'Debes corregir la renovación.'} La versión v{selected.doc.version} sigue vigente{selected.doc.vencimiento && selected.doc.vencimiento !== '—' ? ` hasta ${selected.doc.vencimiento}` : ''}.</p>
+                      </div>
+                    )}
+
                     {selected.estado === 'Rechazado' && (selected.doc?.motivoRechazo || selected.doc?.motivo || selected.doc?.observacion) && (
                       <div className="doc-info-box red">
                         <strong>Motivo</strong>
@@ -572,9 +600,12 @@ export default function SubirTab({
                                 </div>
                               )}
                             </div>
-                            <span className={`doc-badge ${h.estado === 'aprobado' ? 'doc-badge-green' : h.estado === 'rechazado' ? 'doc-badge-red' : h.estado === 'por_vencer' ? 'doc-badge-yellow' : 'doc-badge-blue'}`}>
-                              {h.estado === 'aprobado' ? 'Aprobado' : h.estado === 'rechazado' ? 'Rechazado' : h.estado === 'por_vencer' ? 'Por vencer' : h.estado === 'revision' ? 'En revisión' : 'Pendiente'}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span className={`doc-badge ${h.estado === 'aprobado' ? 'doc-badge-green' : h.estado === 'rechazado' ? 'doc-badge-red' : h.estado === 'por_vencer' ? 'doc-badge-yellow' : 'doc-badge-blue'}`}>
+                                {h.estado === 'aprobado' ? 'Aprobado' : h.estado === 'rechazado' ? 'Rechazado' : h.estado === 'por_vencer' ? 'Por vencer' : h.estado === 'revision' ? 'En revisión' : 'Pendiente'}
+                              </span>
+                              {h.archivoReferencia && <button type="button" className="doc-btn doc-btn-ghost" onClick={() => void verDocumento(selected, h.version)}>Ver versión</button>}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -586,7 +617,7 @@ export default function SubirTab({
                         className={`doc-btn ${cls}`}
                         disabled={isUploading || disabled}
                         onClick={() => {
-                          if (label === 'Ver') void verDocumento(selected);
+                          if (label.startsWith('Ver')) void verDocumento(selected);
                           else seleccionarArchivo(selected);
                         }}
                       >
@@ -594,9 +625,7 @@ export default function SubirTab({
                           ? 'Subiendo…'
                           : modoConsulta
                             ? label
-                            : selected.estado === 'En revisión' || selected.estado === 'Aprobado'
-                              ? 'Ver documento'
-                              : label}
+                            : label}
                       </button>
                     </div>
                   </div>

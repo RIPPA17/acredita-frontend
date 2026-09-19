@@ -102,6 +102,7 @@ type BackendVersion = {
   document_id: string;
   version_number: number;
   workflow_status: 'pendiente' | 'revision' | 'aprobado' | 'rechazado' | 'reemplazado';
+  issued_at: string | null;
   expires_at: string | null;
   uploaded_at: string;
   reviewed_at: string | null;
@@ -321,7 +322,7 @@ async function fetchRows(token: string): Promise<BackendRows> {
     selectRows<BackendWorker>('workers', token, 'id,contratista_id,rut,full_name,job_title,contract_type,contract_start_date,contract_end_date,contract_work_or_task,special_labor_regime,special_labor_regime_detail,is_active'),
     selectRows<BackendAssignment>('worker_assignments', token, 'id,accreditation_id,worker_id,is_active,service_id,job_title,categories,assignment_status,access_status,assigned_at,unassigned_at'),
     selectRows<BackendDocument>('documents', token, 'id,accreditation_id,requirement_id,worker_id,obligation_id'),
-    selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata'),
+    selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,issued_at,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata'),
     selectRows<BackendService>('services', token, 'id,accreditation_id,integration_key'),
     selectRows<BackendObligation>('obligation_statuses', token, 'obligation_id,accreditation_id,service_id,worker_assignment_id,requirement_id,period_start,period_end,due_date,is_active,effective_status,version_number'),
     selectRows<BackendClosure>('compliance_periods', token, 'id,project_id,period_start,period_end,upload_deadline,status,closed_at,snapshot'),
@@ -472,15 +473,16 @@ function buildHistoryPayload(doc: Documento, documentId: string): Array<Record<s
       document_id: documentId,
       version_number: history.version,
       workflow_status: status,
-      expires_at: null,
+      issued_at: history.emitido || null,
+      expires_at: history.vencimientoIso || null,
       uploaded_at: dateToTimestamp(history.fecha) || new Date().toISOString(),
       reviewed_at: status === 'aprobado' || status === 'rechazado' ? dateToTimestamp(history.fecha) : null,
       rejection_reason: status === 'rechazado' ? (history.motivoRechazo || 'Rechazado durante migración') : null,
       rejection_explanation: status === 'rechazado' ? (history.explicacionRechazo || history.motivoRechazo || 'Sin detalle adicional') : null,
-      rejection_solution: null,
+      rejection_solution: history.solucionRechazo || null,
       storage_bucket: null,
       storage_path: null,
-      original_filename: null,
+      original_filename: history.archivoReferencia || null,
       metadata: {
         frontend_document_id: doc.id,
         reviewer_name: history.verificador || null,
@@ -499,7 +501,8 @@ function currentVersionPayload(doc: Documento, documentId: string, session: Supa
     document_id: documentId,
     version_number: Math.max(1, doc.version || 1),
     workflow_status: status,
-    expires_at: parseFrontendDate(doc.vencimiento),
+    issued_at: doc.emitido || null,
+    expires_at: doc.vencimientoIso || parseFrontendDate(doc.vencimiento),
     uploaded_by: session.role === 'contratista' && (status === 'revision' || status === 'pendiente') ? session.profileId : null,
     uploaded_at: dateToTimestamp(doc.subido) || new Date().toISOString(),
     reviewed_by: null,
@@ -624,10 +627,23 @@ function versionToHistory(version: BackendVersion): HistorialVersionDocumento {
     version: version.version_number,
     estado: frontendStatus(version, 0),
     fecha: String(metadata.frontend_reviewed_text || formatDate(version.reviewed_at || version.uploaded_at)),
+    emitido: version.issued_at || undefined,
+    vencimientoIso: version.expires_at || undefined,
+    archivoReferencia: version.original_filename || version.storage_path || undefined,
     motivoRechazo: version.rejection_reason || undefined,
     explicacionRechazo: version.rejection_explanation || undefined,
+    solucionRechazo: version.rejection_solution || undefined,
     verificador: typeof metadata.reviewer_name === 'string' ? metadata.reviewer_name : undefined,
   };
+}
+
+function versionAprobadaVigente(version: BackendVersion): boolean {
+  if (version.workflow_status !== 'aprobado') return false;
+  if (!version.expires_at) return true;
+  const expiry = new Date(`${version.expires_at}T12:00:00Z`).getTime();
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return !Number.isNaN(expiry) && expiry >= start;
 }
 
 function backendDocumentToFrontend(
@@ -639,27 +655,43 @@ function backendDocumentToFrontend(
 ): Documento {
   const ordered = versions.filter(v => v.document_id === document.id).sort((a, b) => a.version_number - b.version_number);
   const latest = ordered[ordered.length - 1];
-  const metadata = latest?.metadata || {};
+  const approvedStillValid = [...ordered].reverse().find(versionAprobadaVigente);
+  const keepApprovedWhileRenewing = Boolean(
+    latest
+    && approvedStillValid
+    && latest.version_number > approvedStillValid.version_number
+    && ['revision', 'rechazado', 'pendiente', 'reemplazado'].includes(latest.workflow_status)
+  );
+  const effective = keepApprovedWhileRenewing ? approvedStillValid : latest;
+  const metadata = effective?.metadata || latest?.metadata || {};
+  const versionEnTramite = keepApprovedWhileRenewing && latest ? versionToHistory(latest) : undefined;
+  const history = ordered
+    .filter(version => version.version_number !== effective?.version_number && version.version_number !== versionEnTramite?.version)
+    .map(versionToHistory);
+
   return {
     id: typeof metadata.frontend_document_id === 'string'
       ? metadata.frontend_document_id
       : `doc_${slug(projectKey)}_${slug(requirement.integration_key || requirement.id)}_${slug(document.worker_id || 'empresa')}`,
     nombre: requirement.name,
     categoria: (requirement.category || 'Laboral') as Documento['categoria'],
-    estado: frontendStatus(latest, requirement.alert_days),
-    vencimiento: latest?.expires_at ? formatDate(latest.expires_at) : '—',
-    subido: latest ? String(metadata.frontend_uploaded_text || formatDate(latest.uploaded_at)) : undefined,
-    motivo: latest?.rejection_reason || undefined,
-    observacion: latest?.rejection_explanation || undefined,
-    motivoRechazo: latest?.rejection_reason || undefined,
-    explicacionRechazo: latest?.rejection_explanation || undefined,
-    solucionRechazo: latest?.rejection_solution || undefined,
+    estado: frontendStatus(effective, requirement.alert_days),
+    vencimiento: effective?.expires_at ? formatDate(effective.expires_at) : '—',
+    vencimientoIso: effective?.expires_at || undefined,
+    emitido: effective?.issued_at || undefined,
+    subido: effective ? String(metadata.frontend_uploaded_text || formatDate(effective.uploaded_at)) : undefined,
+    motivo: effective?.rejection_reason || undefined,
+    observacion: effective?.rejection_explanation || undefined,
+    motivoRechazo: effective?.rejection_reason || undefined,
+    explicacionRechazo: effective?.rejection_explanation || undefined,
+    solucionRechazo: effective?.rejection_solution || undefined,
     proyectoId: projectKey,
-    archivoReferencia: latest?.original_filename || latest?.storage_path || undefined,
+    archivoReferencia: effective?.original_filename || effective?.storage_path || undefined,
     revisor: typeof metadata.reviewer_name === 'string' ? metadata.reviewer_name : undefined,
-    fechaRevisado: latest?.reviewed_at ? String(metadata.frontend_reviewed_text || formatDate(latest.reviewed_at)) : undefined,
-    version: latest?.version_number || 1,
-    historial: ordered.slice(0, -1).map(versionToHistory),
+    fechaRevisado: effective?.reviewed_at ? String(metadata.frontend_reviewed_text || formatDate(effective.reviewed_at)) : undefined,
+    version: effective?.version_number || latest?.version_number || 1,
+    historial: history,
+    versionEnTramite,
     obligacionId: obligation?.obligation_id,
     periodoEtiqueta: obligation ? formatPeriodo(obligation.period_start, obligation.period_end) : undefined,
     periodoInicio: obligation?.period_start,
