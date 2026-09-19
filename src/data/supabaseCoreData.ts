@@ -245,14 +245,20 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   const contractorKeyByUuid = new Map(rows.contratistas.map(row => [row.id, row.integration_key || row.id]));
   const serviceKeyByUuid = new Map(rows.services.map(row => [row.id, row.integration_key || row.id]));
 
-  const activeContractorsByProject = new Map<string, string[]>();
-  rows.accreditations.filter(row => row.is_active).forEach(row => {
+  // El contratista conserva acceso de consulta a proyectos históricos mediante
+  // acreditaciones inactivas. Admin y Mandante mantienen únicamente asociaciones
+  // activas para que una hidratación histórica no pueda reactivar relaciones al sincronizar.
+  const visibleAccreditations = session.role === 'contratista'
+    ? rows.accreditations
+    : rows.accreditations.filter(row => row.is_active);
+  const contractorsByProject = new Map<string, string[]>();
+  visibleAccreditations.forEach(row => {
     const projectKey = projectKeyByUuid.get(row.project_id);
     const contractorKey = contractorKeyByUuid.get(row.contratista_id);
     if (!projectKey || !contractorKey) return;
-    const current = activeContractorsByProject.get(projectKey) || [];
+    const current = contractorsByProject.get(projectKey) || [];
     current.push(contractorKey);
-    activeContractorsByProject.set(projectKey, current);
+    contractorsByProject.set(projectKey, current);
   });
 
   const frontendMandantes: Mandante[] = rows.mandantes
@@ -283,7 +289,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         nombre: row.name,
         mandanteId: mandanteKeyByUuid.get(row.mandante_id)!,
         estado: frontendStatus(row.status),
-        contratistas: activeContractorsByProject.get(id) || [],
+        contratistas: contractorsByProject.get(id) || [],
         ubicacion: row.location || fallback?.ubicacion,
         fechaInicio: row.starts_at || fallback?.fechaInicio,
         fechaTermino: row.ends_at || fallback?.fechaTermino,
