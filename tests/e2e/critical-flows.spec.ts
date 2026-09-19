@@ -11,6 +11,7 @@ const ACCREDITATION_OLD = '50000000-0000-4000-8000-000000000002';
 const SERVICE = '60000000-0000-4000-8000-000000000001';
 const WORKER = '70000000-0000-4000-8000-000000000001';
 const ASSIGNMENT = '80000000-0000-4000-8000-000000000001';
+const ASSIGNMENT_OLD = '80000000-0000-4000-8000-000000000002';
 const REQ_COMPANY = '90000000-0000-4000-8000-000000000001';
 const REQ_WORKER = '90000000-0000-4000-8000-000000000002';
 const REQ_COMPANY_OLD = '90000000-0000-4000-8000-000000000003';
@@ -58,8 +59,60 @@ function fixtures(role: Role, options: MockOptions) {
       ...(options.historicalProject ? [{ id: REQ_COMPANY_OLD, project_id: PROJECT_OLD, integration_key: 'req_historico', name: 'Documento Histórico QA', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'por_obra', validity_days: null, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Requisito histórico', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 }] : []),
     ],
     services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
-    workers: options.emptyProject ? [] : [{ id: WORKER, contratista_id: CONTRACTOR, rut: '18.123.456-7', full_name: 'Trabajador Piloto', job_title: 'Operador', is_active: true }],
-    worker_assignments: options.emptyProject ? [] : [{ id: ASSIGNMENT, accreditation_id: ACCREDITATION, worker_id: WORKER, is_active: true, service_id: SERVICE, job_title: 'Operador', categories: ['general'], assignment_status: 'activa', access_status: 'pendiente', assigned_at: '2026-09-01', unassigned_at: null }],
+    workers: options.emptyProject ? [] : [{
+      id: WORKER,
+      contratista_id: CONTRACTOR,
+      rut: '18.123.456-7',
+      full_name: 'Trabajador Piloto',
+      job_title: 'Operador',
+      contract_type: options.historicalProject ? 'indefinido' : null,
+      contract_start_date: options.historicalProject ? '2026-09-01' : null,
+      contract_end_date: null,
+      contract_work_or_task: null,
+      special_labor_regime: null,
+      special_labor_regime_detail: null,
+      is_active: true,
+    }],
+    worker_assignments: options.emptyProject ? [] : [
+      {
+        id: ASSIGNMENT,
+        accreditation_id: ACCREDITATION,
+        worker_id: WORKER,
+        is_active: true,
+        service_id: SERVICE,
+        job_title: 'Operador',
+        categories: ['general'],
+        assignment_status: 'activa',
+        access_status: 'pendiente',
+        assigned_at: '2026-09-01',
+        unassigned_at: null,
+        contract_type_snapshot: options.historicalProject ? 'indefinido' : null,
+        contract_start_date_snapshot: options.historicalProject ? '2026-09-01' : null,
+        contract_end_date_snapshot: null,
+        contract_work_or_task_snapshot: null,
+        special_labor_regime_snapshot: null,
+        special_labor_regime_detail_snapshot: null,
+      },
+      ...(options.historicalProject ? [{
+        id: ASSIGNMENT_OLD,
+        accreditation_id: ACCREDITATION_OLD,
+        worker_id: WORKER,
+        is_active: false,
+        service_id: null,
+        job_title: 'Ayudante',
+        categories: ['general'],
+        assignment_status: 'baja',
+        access_status: 'bloqueado',
+        assigned_at: '2025-01-10',
+        unassigned_at: '2025-12-20',
+        contract_type_snapshot: 'plazo_fijo',
+        contract_start_date_snapshot: '2025-01-01',
+        contract_end_date_snapshot: '2025-12-31',
+        contract_work_or_task_snapshot: null,
+        special_labor_regime_snapshot: null,
+        special_labor_regime_detail_snapshot: null,
+      }] : []),
+    ],
     documents: options.renewalScenario ? [{ id: DOCUMENT_COMPANY, accreditation_id: ACCREDITATION, requirement_id: REQ_COMPANY, worker_id: null, obligation_id: null }] : [],
     document_versions: options.renewalScenario ? [
       { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
@@ -335,6 +388,37 @@ test('12 Contratista ve trabajador asignado', async ({ page }) => {
   await page.goto('/contratista');
   await page.getByText('Trabajadores', { exact: true }).first().click();
   await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
+});
+
+test('12b Trabajadores históricos son solo consulta y conservan el contrato de ese período', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_historico');
+
+  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Agregar trabajador/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Ver historial' }).click();
+  await expect(page.getByText('Histórico', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Editar' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retirar' })).toHaveCount(0);
+  await expect(page.getByText(/Plazo fijo · hasta 2025-12-31/).first()).toBeVisible();
+  await expect(page.getByText(/contrato desde 2025-01-01/)).toBeVisible();
+  await expect(page.getByText(/Proyecto finalizado · modo consulta/).last()).toBeVisible();
+});
+
+test('12c Alta de trabajador limita ingreso a la vigencia del contrato', async ({ page }) => {
+  await protectedPage(page, 'contratista', { emptyProject: true });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: /Agregar trabajador/ }).click();
+  await page.getByLabel('Tipo de contrato').selectOption('plazo_fijo');
+  await page.getByLabel('Fecha de inicio del contrato').fill('2026-09-10');
+  await page.getByLabel('Fecha de término del contrato').fill('2026-09-20');
+
+  const entry = page.getByLabel('Fecha de ingreso al proyecto');
+  await expect(entry).toHaveAttribute('min', '2026-09-10');
+  await expect(entry).toHaveAttribute('max', '2026-09-20');
 });
 
 test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
