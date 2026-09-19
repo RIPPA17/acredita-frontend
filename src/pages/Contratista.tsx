@@ -339,6 +339,12 @@ export default function ContratistaPortal() {
       showToast('No encontramos una asignación activa para retirar.', 'warning');
       return;
     }
+    assignment.tipoContrato ||= target.tipoContrato;
+    assignment.fechaInicioContrato ||= target.fechaInicioContrato;
+    assignment.fechaTerminoContrato ||= target.fechaTerminoContrato;
+    assignment.obraFaenaContrato ||= target.obraFaenaContrato;
+    assignment.regimenEspecial ||= target.regimenEspecial;
+    assignment.detalleRegimenEspecial ||= target.detalleRegimenEspecial;
     assignment.estado = 'baja';
     assignment.estadoAcceso = 'bloqueado';
     assignment.fechaSalida = new Date().toISOString().slice(0, 10);
