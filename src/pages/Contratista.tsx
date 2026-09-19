@@ -211,7 +211,8 @@ export default function ContratistaPortal() {
     if (misProyectos.length === 0) {
       if (selectedProyectoId) setSelectedProyectoId('');
       const params = new URLSearchParams(location.search);
-      if (params.delete('proyecto')) {
+      if (params.has('proyecto')) {
+        params.delete('proyecto');
         navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
       }
       return;
