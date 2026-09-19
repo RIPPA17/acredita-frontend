@@ -545,7 +545,7 @@ export default function ContratistaPortal() {
                 {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
               </select>
             </div>
-            <small>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
+            <small>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
           </div>
         )}
         <div className="flex items-center gap-4">
@@ -584,7 +584,7 @@ export default function ContratistaPortal() {
             {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
             {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
           </select>
-          <span>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
+          <span>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
         </div>
       )}
 
