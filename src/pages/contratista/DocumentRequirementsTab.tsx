@@ -52,9 +52,19 @@ interface Row extends RequisitoConDoc {
 }
 
 function accionDoc(item: Row, readOnly = false): { label: string; cls: string; disabled?: boolean } {
-  if (readOnly) return item.doc
-    ? { label: 'Ver', cls: 'doc-btn-ghost' }
-    : { label: 'Sin archivo', cls: 'doc-btn-ghost', disabled: true };
+  if (readOnly) {
+    const tieneArchivoHistorico = Boolean(
+      item.doc
+      && (
+        item.estado !== 'Pendiente'
+        || item.doc.archivoReferencia
+        || (item.doc.subido && item.doc.subido !== '—')
+      )
+    );
+    return tieneArchivoHistorico
+      ? { label: 'Ver', cls: 'doc-btn-ghost' }
+      : { label: 'Sin archivo', cls: 'doc-btn-ghost', disabled: true };
+  }
   if (!item.doc || item.estado === 'Pendiente') return { label: 'Subir', cls: 'doc-btn-primary' };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', cls: 'doc-btn-danger' };
   if (item.estado === 'Por vencer') return { label: 'Renovar', cls: 'doc-btn-warning' };
