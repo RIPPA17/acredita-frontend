@@ -148,6 +148,9 @@ function buildResumen(trabajador: Trabajador, proyectoId: string, requisitos: Re
 }
 
 function accionDocumento(item: ChecklistItem): { label: string; className: string; actionable: boolean } {
+  const renewal = item.documento?.versionEnTramite;
+  if (renewal?.estado === 'revision') return { label: 'En revisión', className: '', actionable: false };
+  if (renewal?.estado === 'rechazado') return { label: 'Corregir renovación', className: 'tw-action-danger', actionable: true };
   if (item.estado === 'Pendiente') return { label: 'Subir', className: 'tw-action-primary', actionable: true };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', className: 'tw-action-danger', actionable: true };
   if (item.estado === 'Por vencer') return { label: 'Renovar', className: 'tw-action-warning', actionable: true };
@@ -156,6 +159,15 @@ function accionDocumento(item: ChecklistItem): { label: string; className: strin
 
 function motivoDocumento(documento?: Documento): string | undefined {
   return documento?.motivoRechazo || documento?.motivo || documento?.observacion || documento?.explicacionRechazo;
+}
+
+function motivoRenovacion(documento?: Documento): string | undefined {
+  const renewal = documento?.versionEnTramite;
+  return renewal?.motivoRechazo || renewal?.explicacionRechazo;
+}
+
+function solucionRenovacion(documento?: Documento): string | undefined {
+  return documento?.versionEnTramite?.solucionRechazo;
 }
 
 export default function TrabajadoresTab({
@@ -290,11 +302,24 @@ export default function TrabajadoresTab({
       .filter(value => value.dias >= 0 && value.dias < 99999)
       .sort((a, b) => a.dias - b.dias);
     const proximo = candidatosVencimiento[0];
-    const bloqueo = selected.checklist.find(item =>
+    const bloqueos = selected.checklist.filter(item =>
       item.requisito.obligatorio && (item.estado === 'Rechazado' || item.estado === 'Vencido')
     );
-    const motivoReal = motivoDocumento(bloqueo?.documento) ||
-      (selected.estado === 'rechazado' ? getMotivoBloqueoTrabajador(selected.trabajador, selectedProyectoId) : undefined);
+    const pendientesObligatorios = selected.checklist.filter(item =>
+      item.requisito.obligatorio && item.estado === 'Pendiente'
+    );
+    const revisionesObligatorias = selected.checklist.filter(item =>
+      item.requisito.obligatorio && item.estado === 'En revisión'
+    );
+    const renovacionesEnRevision = selected.checklist.filter(item =>
+      item.documento?.versionEnTramite?.estado === 'revision'
+    );
+    const renovacionesRechazadas = selected.checklist.filter(item =>
+      item.documento?.versionEnTramite?.estado === 'rechazado'
+    );
+    const motivoReal = bloqueos.length > 0
+      ? bloqueos.map(item => `${item.requisito.nombre}: ${motivoDocumento(item.documento) || item.estado.toLowerCase()}`).join(' · ')
+      : (selected.estado === 'rechazado' ? getMotivoBloqueoTrabajador(selected.trabajador, selectedProyectoId) : undefined);
 
     return (
       <>
@@ -350,6 +375,15 @@ export default function TrabajadoresTab({
                     <div className="tw-min-0">
                       <div className="tw-check-title">{item.requisito.nombre}</div>
                       <div className="tw-check-meta">{item.requisito.obligatorio ? 'Obligatorio' : 'Opcional'} · {impactoLabel(item.requisito)}</div>
+                      {item.estado === 'Rechazado' && motivoDocumento(item.documento) && (
+                        <div className="mt-1 text-[10.5px] text-red-700">Motivo: {motivoDocumento(item.documento)}</div>
+                      )}
+                      {item.documento?.versionEnTramite?.estado === 'revision' && (
+                        <div className="mt-1 text-[10.5px] text-blue-700">Renovación v{item.documento.versionEnTramite.version} en revisión. La versión vigente se conserva mientras corresponda.</div>
+                      )}
+                      {item.documento?.versionEnTramite?.estado === 'rechazado' && (
+                        <div className="mt-1 text-[10.5px] text-red-700">Renovación rechazada: {motivoRenovacion(item.documento) || 'requiere corrección'}{solucionRenovacion(item.documento) ? ` · ${solucionRenovacion(item.documento)}` : ''}</div>
+                      )}
                     </div>
                     <span className={`tw-badge ${estado.badge}`}>{estado.label}</span>
                     <div className="tw-validity">{item.documento?.vencimiento && item.documento.vencimiento !== '—' ? item.documento.vencimiento : '—'}</div>
