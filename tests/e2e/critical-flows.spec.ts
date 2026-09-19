@@ -4,8 +4,10 @@ const SUPABASE = 'https://jwlscxbmttpicwljozwf.supabase.co';
 const PROFILE = '10000000-0000-4000-8000-000000000001';
 const MANDANTE = '20000000-0000-4000-8000-000000000001';
 const PROJECT = '30000000-0000-4000-8000-000000000001';
+const PROJECT_OLD = '30000000-0000-4000-8000-000000000002';
 const CONTRACTOR = '40000000-0000-4000-8000-000000000001';
 const ACCREDITATION = '50000000-0000-4000-8000-000000000001';
+const ACCREDITATION_OLD = '50000000-0000-4000-8000-000000000002';
 const SERVICE = '60000000-0000-4000-8000-000000000001';
 const WORKER = '70000000-0000-4000-8000-000000000001';
 const ASSIGNMENT = '80000000-0000-4000-8000-000000000001';
@@ -14,7 +16,7 @@ const REQ_WORKER = '90000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
-type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean };
+type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean; historicalProject?: boolean };
 
 function appSession(role: Role) {
   return {
@@ -36,9 +38,15 @@ function fixtures(role: Role, options: MockOptions) {
     mandante_memberships: role === 'mandante' ? [{ profile_id: PROFILE, mandante_id: MANDANTE, role: 'mandante_admin', is_active: true }] : [],
     contratista_memberships: role === 'contratista' ? [{ profile_id: PROFILE, contratista_id: CONTRACTOR, role: 'contratista_admin', is_active: true }] : [],
     mandantes: [{ id: MANDANTE, name: 'Mandante Piloto', rut: '76.000.000-0', legal_name: 'Mandante Piloto SpA', integration_key: 'mandante_piloto', is_active: true }],
-    projects: [{ id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null }],
+    projects: [
+      { id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null },
+      ...(options.historicalProject ? [{ id: PROJECT_OLD, mandante_id: MANDANTE, name: 'Proyecto Histórico QA', code: 'HIST-QA', status: 'archived', integration_key: 'proyecto_historico', location: 'Santiago', starts_at: '2025-01-01', ends_at: '2025-12-31' }] : []),
+    ],
     contratistas: [{ id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null }],
-    accreditations: [{ id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: true }],
+    accreditations: [
+      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: true },
+      ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false }] : []),
+    ],
     requirements: [
       { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'req_f30', name: 'F30 / F31 SII', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento previsional', review_checklist: ['Vigencia'], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
@@ -50,7 +58,10 @@ function fixtures(role: Role, options: MockOptions) {
     document_versions: [],
     obligation_statuses: [],
     compliance_periods: [],
-    accreditation_statuses: [{ accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }],
+    accreditation_statuses: [
+      { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
+      ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
+    ],
     worker_accreditation_statuses: options.emptyProject ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
     contractor_evaluations: [],
     payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
@@ -193,6 +204,32 @@ test('09b Contratista nuevo recibe onboarding guiado de cinco pasos', async ({ p
   for (const step of ['Revisar requisitos', 'Completar empresa', 'Cargar trabajadores', 'Completar trabajadores', 'Obtener acreditación']) {
     await expect(page.getByRole('button', { name: new RegExp(step) })).toBeVisible();
   }
+});
+
+test('09c Contratista conserva proyecto en URL, memoria y navegación del navegador', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista');
+
+  const selector = page.getByLabel('Proyecto activo global');
+  await expect(selector).toHaveValue('proyecto_piloto');
+  await expect(selector.locator('optgroup[label="Proyectos activos"] option')).toHaveText(['Proyecto Piloto QA']);
+  await expect(selector.locator('optgroup[label="Históricos / finalizados"] option')).toHaveText(['Proyecto Histórico QA · Histórico']);
+
+  await selector.selectOption('proyecto_historico');
+  await expect(page).toHaveURL(/proyecto=proyecto_historico/);
+  await expect(selector).toHaveValue('proyecto_historico');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('acredita:last-project:10000000-0000-4000-8000-000000000001'))).toBe('proyecto_historico');
+
+  await page.getByText('Documentos', { exact: true }).first().click();
+  await expect(page).toHaveURL(/\/contratista\/documentos\?proyecto=proyecto_historico/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/contratista\?proyecto=proyecto_historico/);
+  await expect(page.getByLabel('Proyecto activo global')).toHaveValue('proyecto_historico');
+
+  await page.goto('/contratista');
+  await expect(page).toHaveURL(/proyecto=proyecto_historico/);
+  await expect(page.getByLabel('Proyecto activo global')).toHaveValue('proyecto_historico');
 });
 
 test('10 Contratista puede abrir Proyectos', async ({ page }) => {

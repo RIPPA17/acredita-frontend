@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Bell, LayoutDashboard, Folder, Upload, Users,
   Settings, LogOut, AlertCircle, AlertTriangle, CheckCircle, ArrowRight, ArrowLeft,
@@ -8,7 +8,7 @@ import {
   UserPlus, Briefcase, FolderOpen, Save, Shield, Mail, Smartphone, ToggleRight, ClipboardList, Menu,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Contratista, Documento, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
+import { Contratista, Documento, Proyecto, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
@@ -28,8 +28,11 @@ import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadRead
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getAsignacionProyecto, getServiciosProyecto } from '../data/operationalCore';
 
+const proyectoEstaActivo = (proyecto: Proyecto): boolean => ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
+
 export default function ContratistaPortal() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { revision: dataSyncRevision } = useDataSync();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
@@ -116,7 +119,12 @@ export default function ContratistaPortal() {
   };
   const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
   const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
-  const misProyectos = allProyectos.filter(p => p.contratistas.includes(contratistaLogueado.id));
+  const misProyectos = allProyectos
+    .filter(p => p.contratistas.includes(contratistaLogueado.id))
+    .sort((a, b) => Number(proyectoEstaActivo(b)) - Number(proyectoEstaActivo(a)) || a.nombre.localeCompare(b.nombre, 'es'));
+  const proyectosActivos = misProyectos.filter(proyectoEstaActivo);
+  const proyectosHistoricos = misProyectos.filter(proyecto => !proyectoEstaActivo(proyecto));
+  const proyectosKey = misProyectos.map(proyecto => `${proyecto.id}:${proyecto.estado}`).join('|');
 
   React.useEffect(() => {
     if (!session?.profileId) return;
@@ -161,7 +169,7 @@ export default function ContratistaPortal() {
 
   const navegarNotificacion = (notificacion: NotificacionContratista) => {
     marcarLeidas([notificacion.id]);
-    setSelectedProyectoId(notificacion.proyectoId);
+    seleccionarProyecto(notificacion.proyectoId);
     if (notificacion.destino.tipo === 'trabajador' && notificacion.destino.trabajador) {
       setSelectedWorkerForDocs(notificacion.destino.trabajador);
       setActiveTab('trabajadores');
@@ -180,25 +188,59 @@ export default function ContratistaPortal() {
     return () => window.removeEventListener('keydown', close);
   }, [showNotif]);
 
+  const projectStorageKey = `acredita:last-project:${session?.profileId || contratistaLogueado.id}`;
   const [selectedProyectoId, setSelectedProyectoId] = useState(() => {
-    return misProyectos[0]?.id || '';
+    const requested = new URLSearchParams(location.search).get('proyecto');
+    if (requested && misProyectos.some(proyecto => proyecto.id === requested)) return requested;
+    const saved = localStorage.getItem(projectStorageKey);
+    if (saved && misProyectos.some(proyecto => proyecto.id === saved)) return saved;
+    return proyectosActivos[0]?.id || misProyectos[0]?.id || '';
   });
 
-  const proyectoActivo = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
-  const mandanteProyectoActivo = proyectoActivo ? allMandantes.find(m => m.id === proyectoActivo.mandanteId) : undefined;
-
-  const [documentosData, setDocumentosData] = useState<Documento[]>([]);
+  const seleccionarProyecto = React.useCallback((proyectoId: string, replace = false) => {
+    if (!misProyectos.some(proyecto => proyecto.id === proyectoId)) return;
+    setSelectedProyectoId(proyectoId);
+    setSelectedWorkerForDocs(null);
+    localStorage.setItem(projectStorageKey, proyectoId);
+    const params = new URLSearchParams(location.search);
+    params.set('proyecto', proyectoId);
+    navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace });
+  }, [location.pathname, location.search, misProyectos, navigate, projectStorageKey]);
 
   React.useEffect(() => {
     if (misProyectos.length === 0) {
       if (selectedProyectoId) setSelectedProyectoId('');
+      const params = new URLSearchParams(location.search);
+      if (params.has('proyecto')) {
+        params.delete('proyecto');
+        navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
+      }
       return;
     }
-    if (!misProyectos.some(proyecto => proyecto.id === selectedProyectoId)) {
-      setSelectedProyectoId(misProyectos[0].id);
-      setSelectedWorkerForDocs(null);
+
+    const params = new URLSearchParams(location.search);
+    const requested = params.get('proyecto');
+    if (requested && misProyectos.some(proyecto => proyecto.id === requested)) {
+      if (requested !== selectedProyectoId) {
+        setSelectedProyectoId(requested);
+        setSelectedWorkerForDocs(null);
+      }
+      localStorage.setItem(projectStorageKey, requested);
+      return;
     }
-  }, [misProyectos, selectedProyectoId]);
+
+    const saved = localStorage.getItem(projectStorageKey);
+    const fallback = (saved && misProyectos.some(proyecto => proyecto.id === saved) ? saved : undefined)
+      || (misProyectos.some(proyecto => proyecto.id === selectedProyectoId) ? selectedProyectoId : undefined)
+      || proyectosActivos[0]?.id
+      || misProyectos[0].id;
+    seleccionarProyecto(fallback, true);
+  }, [location.pathname, location.search, projectStorageKey, proyectosKey]);
+
+  const proyectoActivo = misProyectos.find(p => p.id === selectedProyectoId) || proyectosActivos[0] || misProyectos[0];
+  const mandanteProyectoActivo = proyectoActivo ? allMandantes.find(m => m.id === proyectoActivo.mandanteId) : undefined;
+
+  const [documentosData, setDocumentosData] = useState<Documento[]>([]);
 
   React.useEffect(() => {
     const list = getContratistas();
@@ -498,15 +540,13 @@ export default function ContratistaPortal() {
               <select
                 aria-label="Proyecto activo global"
                 value={proyectoActivo.id}
-                onChange={event => {
-                  setSelectedProyectoId(event.target.value);
-                  setSelectedWorkerForDocs(null);
-                }}
+                onChange={event => seleccionarProyecto(event.target.value)}
               >
-                {misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}
+                {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
+                {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
               </select>
             </div>
-            <small>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
+            <small>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
           </div>
         )}
         <div className="flex items-center gap-4">
@@ -540,14 +580,12 @@ export default function ContratistaPortal() {
           <select
             id="contractor-mobile-project"
             value={proyectoActivo.id}
-            onChange={event => {
-              setSelectedProyectoId(event.target.value);
-              setSelectedWorkerForDocs(null);
-            }}
+            onChange={event => seleccionarProyecto(event.target.value)}
           >
-            {misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}
+            {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
+            {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
           </select>
-          <span>{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
+          <span>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
         </div>
       )}
 
@@ -669,7 +707,7 @@ export default function ContratistaPortal() {
             <DashboardTab
               contratistaLogueado={contratistaLogueado}
               selectedProyectoId={selectedProyectoId}
-              setSelectedProyectoId={setSelectedProyectoId}
+              setSelectedProyectoId={seleccionarProyecto}
               misProyectos={misProyectos}
               allMandantes={allMandantes}
               showWelcomeAlert={showWelcomeAlert}
@@ -688,7 +726,7 @@ export default function ContratistaPortal() {
               misProyectos={misProyectos}
               allMandantes={allMandantes}
               selectedProyectoId={selectedProyectoId}
-              setSelectedProyectoId={setSelectedProyectoId}
+              setSelectedProyectoId={seleccionarProyecto}
               onDataChanged={() => setDataRevision(value => value + 1)}
               showToast={showToast}
             />
@@ -700,7 +738,7 @@ export default function ContratistaPortal() {
               misProyectos={misProyectos}
               allMandantes={allMandantes}
               selectedProyectoId={selectedProyectoId}
-              setSelectedProyectoId={setSelectedProyectoId}
+              setSelectedProyectoId={seleccionarProyecto}
               setActiveTab={setActiveTab}
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
               setShowFichaAcreditacion={setShowFichaAcreditacion}
@@ -714,7 +752,7 @@ export default function ContratistaPortal() {
               setSelectedWorkerForDocs={setSelectedWorkerForDocs}
               contratistaLogueado={contratistaLogueado}
               selectedProyectoId={selectedProyectoId}
-              setSelectedProyectoId={setSelectedProyectoId}
+              setSelectedProyectoId={seleccionarProyecto}
               misProyectos={misProyectos}
               allMandantes={allMandantes}
               setShowAddWorkerModal={(value) => value ? openAddWorkerModal() : setShowAddWorkerModal(false)}
@@ -737,7 +775,7 @@ export default function ContratistaPortal() {
                   contratista={contratistaLogueado}
                   proyectos={misProyectos}
                   selectedProyectoId={selectedProyectoId}
-                  setSelectedProyectoId={setSelectedProyectoId}
+                  setSelectedProyectoId={seleccionarProyecto}
                   showToast={showToast}
                 />
               </section>
@@ -790,13 +828,13 @@ export default function ContratistaPortal() {
           rol="contratista"
           proyectos={misProyectos}
           mandantes={allMandantes}
-          onProyectoChange={setSelectedProyectoId}
+          onProyectoChange={seleccionarProyecto}
           onIrADocumentos={(proyectoId) => {
-            setSelectedProyectoId(proyectoId);
+            seleccionarProyecto(proyectoId);
             setActiveTab('subir');
           }}
           onIrATrabajador={(proyectoId, trabajador) => {
-            setSelectedProyectoId(proyectoId);
+            seleccionarProyecto(proyectoId);
             setSelectedWorkerForDocs(trabajador);
             setActiveTab('trabajadores');
           }}
