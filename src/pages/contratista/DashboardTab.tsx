@@ -138,7 +138,12 @@ export default function DashboardTab({
     .sort((a, b) => a.dias - b.dias)
     .slice(0, 3);
 
-  const proyectoRecienIniciado = documentosData.length === 0 && trabajadores.length === 0;
+  const tieneDocumentosCargados = documentosData.some(doc =>
+    doc.estado !== 'pendiente'
+    || Boolean(doc.subido && doc.subido !== '—')
+    || Boolean(doc.archivoUrl)
+  );
+  const proyectoRecienIniciado = !tieneDocumentosCargados && trabajadores.length === 0;
   const irAItem = (accion: AccionInicio) => {
     if (accion.worker) {
       setSelectedWorkerForDocs(accion.worker);
