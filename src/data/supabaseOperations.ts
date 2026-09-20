@@ -34,12 +34,39 @@ export interface OperationAttachmentRecord {
   id: string; action_plan_id?: string; file_name: string; mime_type: string; file_size: number;
   storage_bucket: string; storage_path: string; uploaded_by: string; created_at: string;
 }
+export type PaymentStatus = 'observado' | 'retenido' | 'liberado' | 'pagado' | 'anulado';
+export interface PaymentComplianceContext {
+  eligible: boolean;
+  periodStatus: string;
+  source: string;
+  periodStart?: string;
+  periodEnd?: string;
+  generatedAt?: string;
+  accreditationStatus?: string;
+  compliancePercent?: number;
+  paymentBlockedCount?: number;
+  paymentPendingCount?: number;
+  eligibleReason?: string | null;
+  reason?: string | null;
+}
 export interface PaymentRecord {
-  id: string; accreditation_id: string; period_start: string; period_end: string; amount?: number; currency: string;
-  status: string; block_reason?: string; invoice_number?: string; submitted_at?: string; paid_at?: string;
+  id: string; accreditation_id: string; compliance_period_id?: string; period_start: string; period_end: string;
+  amount?: number; currency: string; status: PaymentStatus; block_reason?: string; invoice_number?: string;
+  submitted_by?: string; submitted_at?: string; released_by?: string; released_at?: string;
+  paid_by?: string; paid_at?: string; payment_reference?: string; payment_note?: string;
+  voided_by?: string; voided_at?: string; void_reason?: string;
+  compliance_snapshot?: PaymentComplianceContext; compliance_checked_at?: string;
+  contratista_id?: string; accreditation_active?: boolean;
 }
 export interface PaymentApprovalRecord {
-  id: string; payment_case_id: string; decision: 'aprobado' | 'observado' | 'rechazado'; comment?: string; created_at: string;
+  id: string; payment_case_id: string; decision: 'aprobado' | 'observado' | 'rechazado'; comment?: string;
+  decided_by: string; created_at: string;
+}
+export interface PaymentCaseEventRecord {
+  id: string; payment_case_id: string;
+  event_type: 'creado' | 'actualizado' | 'observado' | 'retenido' | 'liberado' | 'pagado' | 'anulado';
+  from_status?: string; to_status?: string; reason?: string; compliance_snapshot?: PaymentComplianceContext;
+  actor_profile_id?: string; created_at: string;
 }
 export interface TicketRecord {
   id: string; accreditation_id?: string; category: string; priority: string; status: string;
@@ -91,12 +118,17 @@ export async function loadOperations(projectKey: string) {
   const ids = accreditations.map(item => item.id);
   const accreditationMap = new Map(accreditations.map(item => [item.id, item]));
   const filter = ids.length ? `&accreditation_id=in.(${ids.join(',')})` : '';
-  const [rawEvaluations, payments, tickets] = await Promise.all([
+  const [rawEvaluations, rawPayments, tickets] = await Promise.all([
     ids.length ? request<EvaluationRecord[]>(`contractor_evaluations?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     ids.length ? request<PaymentRecord[]>(`payment_cases?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     request<TicketRecord[]>(`support_tickets?select=*&project_id=eq.${projectId}&order=created_at.desc`),
   ]);
   const evaluations = rawEvaluations.map(item => ({
+    ...item,
+    contratista_id: accreditationMap.get(item.accreditation_id)?.contratista_id,
+    accreditation_active: accreditationMap.get(item.accreditation_id)?.is_active === true,
+  }));
+  const payments = rawPayments.map(item => ({
     ...item,
     contratista_id: accreditationMap.get(item.accreditation_id)?.contratista_id,
     accreditation_active: accreditationMap.get(item.accreditation_id)?.is_active === true,
@@ -245,7 +277,7 @@ export async function openOperationAttachment(item: OperationAttachmentRecord): 
 }
 
 export async function createPayment(projectKey: string, contractorKey: string, input: {
-  start: string; end: string; amount?: number; status: string; reason?: string; invoiceNumber?: string;
+  start: string; end: string; amount?: number; reason?: string; invoiceNumber?: string;
 }) {
   const session = await getSupabaseSessionForRequest();
   if (!session) throw new Error('Tu sesión expiró.');
@@ -254,7 +286,7 @@ export async function createPayment(projectKey: string, contractorKey: string, i
     method: 'POST', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
       accreditation_id, period_start: input.start, period_end: input.end,
-      amount: input.amount || null, status: input.status, block_reason: input.reason || null,
+      amount: input.amount || null, block_reason: input.reason || null,
       invoice_number: input.invoiceNumber || null, submitted_by: session.profileId, submitted_at: new Date().toISOString(),
     }),
   });
@@ -272,6 +304,50 @@ export async function createPaymentApproval(paymentCaseId: string, decision: Pay
     body: JSON.stringify({ payment_case_id: paymentCaseId, decision, comment: comment || null, decided_by: session.profileId }),
   });
 }
+
+export async function getPaymentCompliance(paymentCaseId: string): Promise<PaymentComplianceContext> {
+  return request<PaymentComplianceContext>('rpc/get_payment_case_compliance', {
+    method: 'POST',
+    body: JSON.stringify({ p_payment_case_id: paymentCaseId }),
+  });
+}
+
+export async function listPaymentEvents(paymentCaseId: string): Promise<PaymentCaseEventRecord[]> {
+  return request<PaymentCaseEventRecord[]>(`payment_case_events?select=*&payment_case_id=eq.${paymentCaseId}&order=created_at.desc`);
+}
+
+export async function closePaymentCompliancePeriod(periodId: string): Promise<void> {
+  await request<void>('rpc/close_compliance_period', {
+    method: 'POST',
+    body: JSON.stringify({ p_period_id: periodId }),
+  });
+}
+
+export async function reopenPaymentCompliancePeriod(periodId: string, reason: string): Promise<void> {
+  await request<void>('rpc/reopen_compliance_period', {
+    method: 'POST',
+    body: JSON.stringify({ p_period_id: periodId, p_reason: reason.trim() }),
+  });
+}
+
+export async function voidPaymentCase(paymentCaseId: string, reason: string): Promise<void> {
+  await request<void>('rpc/void_payment_case', {
+    method: 'POST',
+    body: JSON.stringify({ p_payment_case_id: paymentCaseId, p_reason: reason.trim() }),
+  });
+}
+
+export async function updatePaymentMetadata(paymentCaseId: string, input: { amount?: number; invoiceNumber?: string }): Promise<void> {
+  await request<void>(`payment_cases?id=eq.${paymentCaseId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      amount: input.amount ?? null,
+      invoice_number: input.invoiceNumber?.trim() || null,
+    }),
+  });
+}
+
 
 export async function createTicket(projectKey: string, contractorKey: string | undefined, input: { subject: string; description: string; priority: string; category: string }) {
   const session = await getSupabaseSessionForRequest();
