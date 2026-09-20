@@ -503,7 +503,7 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   await protectedPage(page, 'contratista', { historicalProject: true });
   await page.goto('/contratista?proyecto=proyecto_historico');
 
-  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true }).last()).toBeVisible();
   const responsibilities = page.getByLabel('Responsabilidad de pendientes');
   await expect(responsibilities.locator('.mine b')).toHaveText('0');
   await expect(responsibilities.locator('.preventive b')).toHaveText('0');
@@ -516,6 +516,50 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   const historicalNoFileButton = page.getByRole('button', { name: 'Sin archivo', exact: true }).first();
   await expect(historicalNoFileButton).toBeVisible();
   await expect(historicalNoFileButton).toBeDisabled();
+});
+
+test('09f ficha completa funciona como expediente integral de acreditación', async ({ page }) => {
+  await protectedPage(page, 'contratista', { renewalScenario: true, workerDocumentScenario: 'renewal_review' });
+  await page.goto('/contratista?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver ficha completa', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Contratista Piloto A' })).toBeVisible();
+  await expect(page.getByText('Expediente de acreditación', { exact: true })).toBeVisible();
+  await expect(page.getByText('Servicios / contratos', { exact: true })).toBeVisible();
+  await expect(page.getByText('Períodos documentales', { exact: true })).toBeVisible();
+  await expect(page.getByText('Versiones documentales', { exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: /Historial/ }).click();
+  await expect(page.getByText('Servicios y contratos', { exact: true })).toBeVisible();
+  await expect(page.getByText(/SRV-01 · Servicio Piloto/)).toBeVisible();
+  await expect(page.getByText('Períodos de trabajadores', { exact: true })).toBeVisible();
+  await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Obligaciones por período', { exact: true })).toBeVisible();
+  await expect(page.getByText('Trazabilidad documental', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Empresa · F30 \/ F31 SII/).first()).toBeVisible();
+  await expect(page.getByText(/Trabajador Piloto · Certificado ODI/).first()).toBeVisible();
+  await expect(page.getByText('v3', { exact: true })).toBeVisible();
+  await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
+});
+
+test('09g expediente histórico conserva períodos y bloquea acciones operativas', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista?proyecto=proyecto_historico');
+
+  await page.getByRole('button', { name: 'Ver historial', exact: true }).first().click();
+  await expect(page.getByText('Expediente histórico de acreditación', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Renovar', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toHaveCount(0);
+
+  await page.getByRole('tab', { name: /Trabajadores/ }).click();
+  await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Plazo fijo · hasta 2025-12-31/)).toBeVisible();
+  await expect(page.getByText('Histórico', { exact: true }).first()).toBeVisible();
+
+  await page.getByRole('tab', { name: /Historial/ }).click();
+  await expect(page.getByText('Períodos de trabajadores', { exact: true })).toBeVisible();
+  await expect(page.getByText(/10 ene 2025 → 20 dic 2025/)).toBeVisible();
 });
 
 test('10 Contratista puede abrir Proyectos', async ({ page }) => {
