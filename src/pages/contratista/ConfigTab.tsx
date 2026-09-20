@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, KeyRound, LogOut, UserRound, Users } from 'lucide-react';
+import { Bell, Building2, KeyRound, LogOut, Mail, UserRound, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { SupabaseUserSession as UserSession } from '../../data/supabaseAuth';
 import { Contratista, Mandante, PreferenciasNotificacionesContratista, Proyecto } from '../../types';
 import BulkWorkersConfig from './BulkWorkersConfig';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 type ConfigSubTab = 'empresa' | 'notificaciones' | 'carga' | 'cuenta';
 
 const PREFERENCIAS = [
-  ['documentoRechazado', 'Documento rechazado', 'Avísame cuando Acredita rechace un documento de empresa o trabajador y requiera corrección.'],
+  ['documentoRechazado', 'Documento rechazado o vencido', 'Avísame cuando un documento de empresa o trabajador requiera corrección o renovación.'],
   ['documentoPorVencer', 'Documento próximo a vencer', 'Avísame cuando un documento vigente entre en su ventana preventiva de vencimiento.'],
-  ['acreditacionAprobada', 'Acreditación aprobada', 'Avísame cuando un proyecto complete todos sus requisitos obligatorios y quede acreditado.'],
-  ['cambioEstadoTrabajador', 'Cambios en trabajadores', 'Avísame cuando el estado de un trabajador pase a bloqueado o vuelva a quedar habilitado.'],
+  ['documentoActualizado', 'Revisión y aprobación documental', 'Avísame cuando una carga entre a revisión o sea aprobada por Acredita.'],
+  ['acreditacionAprobada', 'Estado de acreditación', 'Avísame cuando una acreditación quede aprobada o pierda cumplimiento por un bloqueo.'],
+  ['cambioEstadoTrabajador', 'Cambios en trabajadores', 'Avísame cuando un trabajador quede bloqueado, habilitado o su contrato esté próximo a vencer.'],
+  ['estadoPago', 'Estado de pagos', 'Avísame cuando un período sea observado, retenido, liberado o pagado.'],
+  ['soporteActualizado', 'Respuestas de soporte', 'Avísame cuando Acredita responda una conversación de soporte.'],
 ] as const;
 
 function iniciales(nombre: string): string {
@@ -32,9 +36,11 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
   const [preferencias, setPreferencias] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardando, setGuardando] = useState(false);
-  const hayCambios = PREFERENCIAS.some(([key]) => preferencias[key] !== guardadas[key]);
+  const hayCambios = PREFERENCIAS.some(([key]) => preferencias[key] !== guardadas[key])
+    || preferencias.correoHabilitado !== guardadas.correoHabilitado
+    || preferencias.correoSoloCriticas !== guardadas.correoSoloCriticas;
   const proyectosActivos = misProyectos.filter(proyecto =>
-    ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')),
+    proyectoOperativoParaContratista(proyecto, contratistaLogueado.id),
   );
 
   useEffect(() => {
@@ -95,12 +101,24 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
               </section>
             </>}
 
-            {activeTab === 'notificaciones' && <section className="cfg-card">
-              <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos operativos quieres recibir como avisos dentro del portal.</p></header>
-              <div className="cfg-card-body"><div className="cfg-pref-list">
-                {PREFERENCIAS.map(([key, titulo, descripcion]) => <div className="cfg-pref-row" key={key}><div><strong>{titulo}</strong><p>{descripcion}</p></div><button type="button" role="switch" aria-checked={preferencias[key]} aria-label={titulo} className={`cfg-switch ${preferencias[key] ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, [key]: !actual[key] }))}><span /></button></div>)}
-              </div><div className="cfg-pref-foot"><span>Los cambios se guardan en tu cuenta y se aplican en cualquier dispositivo.</span><button className="cfg-save" disabled={!hayCambios || guardando} onClick={guardarPreferencias}>{guardando ? 'Guardando…' : 'Guardar preferencias'}</button></div></div>
-            </section>}
+            {activeTab === 'notificaciones' && <div className="space-y-4">
+              <section className="cfg-card">
+                <header><h2>Notificaciones en Acredita</h2><p>Elige qué eventos operativos quieres ver en la campana y en el historial de la cuenta.</p></header>
+                <div className="cfg-card-body"><div className="cfg-pref-list">
+                  {PREFERENCIAS.map(([key, titulo, descripcion]) => <div className="cfg-pref-row" key={key}><div><strong>{titulo}</strong><p>{descripcion}</p></div><button type="button" role="switch" aria-checked={preferencias[key]} aria-label={titulo} className={`cfg-switch ${preferencias[key] ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, [key]: !actual[key] }))}><span /></button></div>)}
+                </div></div>
+              </section>
+
+              <section className="cfg-card">
+                <header><h2><span className="inline-flex items-center gap-2"><Mail size={16} /> Avisos por correo</span></h2><p>Los correos son un canal adicional. El estado oficial siempre permanece dentro de Acredita.</p></header>
+                <div className="cfg-card-body"><div className="cfg-pref-list">
+                  <div className="cfg-pref-row"><div><strong>Recibir correos de Acredita</strong><p>{session?.email ? `Se enviarán a ${session.email}.` : 'Se utilizará el correo asociado a la cuenta.'} Los avisos quedan registrados aunque el correo falle.</p></div><button type="button" role="switch" aria-checked={preferencias.correoHabilitado} aria-label="Recibir correos de Acredita" className={`cfg-switch ${preferencias.correoHabilitado ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, correoHabilitado: !actual.correoHabilitado }))}><span /></button></div>
+                  <div className="cfg-pref-row"><div><strong>Solo alertas críticas y acciones</strong><p>Evita correos por eventos informativos. Mantiene rechazos, vencimientos, bloqueos y pagos retenidos.</p></div><button type="button" role="switch" aria-checked={preferencias.correoSoloCriticas} aria-label="Solo alertas críticas y acciones" disabled={!preferencias.correoHabilitado} className={`cfg-switch ${preferencias.correoSoloCriticas ? 'on' : ''}`} onClick={() => setPreferencias(actual => ({ ...actual, correoSoloCriticas: !actual.correoSoloCriticas }))}><span /></button></div>
+                </div><div className="cfg-note">El envío transaccional requiere que Acredita tenga configurado y verificado su dominio de correo. Si el proveedor está temporalmente fuera de servicio, la alerta queda en cola para reintento.</div></div>
+              </section>
+
+              <div className="cfg-pref-foot"><span>Lectura y resolución son estados distintos: leer un aviso no elimina un bloqueo.</span><button className="cfg-save" disabled={!hayCambios || guardando} onClick={guardarPreferencias}>{guardando ? 'Guardando…' : 'Guardar preferencias'}</button></div>
+            </div>}
 
             {activeTab === 'carga' && <BulkWorkersConfig contratista={contratistaLogueado} proyectos={proyectosActivos} showToast={showToast} />}
 
