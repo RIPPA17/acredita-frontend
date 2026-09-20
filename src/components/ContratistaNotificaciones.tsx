@@ -94,7 +94,17 @@ function NotificationItem({ item, leida, onMarcarLeida, onAbrir }: {
   onMarcarLeida: (id: string) => void;
   onAbrir: (notificacion: NotificacionContratista) => void;
 }) {
-  const situacion = item.situacion === 'resuelta' ? 'Resuelta' : item.nivel === 'critical' ? 'Problema crítico activo' : item.tipo === 'accion' ? 'Requiere acción' : 'Activa';
+  const situacion = item.situacion === 'resuelta'
+    ? 'Resuelta'
+    : item.nivel === 'critical'
+      ? 'Problema crítico activo'
+      : item.tipo === 'accion'
+        ? 'Requiere acción'
+        : item.tipo === 'preventiva'
+          ? 'Preventiva'
+          : item.tipo === 'revision'
+            ? 'En revisión'
+            : 'Informativa';
   return <article
     className={`notif2-item notif2-${item.tipo} ${item.nivel === 'critical' ? 'notif2-critical' : ''} ${item.situacion === 'resuelta' ? 'resolved' : ''} ${leida ? '' : 'unread'}`}
     onClick={() => onMarcarLeida(item.id)}
