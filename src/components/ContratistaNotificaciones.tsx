@@ -89,6 +89,7 @@ export default function ContratistaNotificaciones({ contratistaNombre, notificac
 }
 
 function NotificationItem({ item, leida, onMarcarLeida, onAbrir }: {
+  key?: string;
   item: NotificacionContratista;
   leida: boolean;
   onMarcarLeida: (id: string) => void;
