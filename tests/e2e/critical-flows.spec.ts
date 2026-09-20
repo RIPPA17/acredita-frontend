@@ -545,7 +545,7 @@ test('10d Activos muestran requisitos reales, operadores elegibles e historial d
   await expect(page.getByText('Gestión operacional · EXC-001', { exact: true })).toBeVisible();
   await expect(page.getByText('Revisión técnica', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Solo trabajadores activos, acreditados y con acceso habilitado/)).toBeVisible();
-  await expect(page.getByText(/Trabajador Piloto · 18.123.456-7 · habilitado/)).toBeVisible();
+  await expect(page.locator(`select option[value="${ASSIGNMENT}"]`)).toHaveText('Trabajador Piloto · 18.123.456-7 · habilitado');
 
   await page.getByRole('button', { name: 'Versiones', exact: true }).click();
   await expect(page.getByText(/v2 · revision-tecnica-v2.pdf/)).toBeVisible();
