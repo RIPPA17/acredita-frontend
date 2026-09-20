@@ -286,7 +286,7 @@ export default function ContratistaPortal() {
   const openAddWorkerModal = () => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
     if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
-      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+      showToast('Este proyecto está en modo histórico y solo permite consultar el historial.', 'warning');
       return;
     }
     setEditingWorkerRut(null);
@@ -297,7 +297,7 @@ export default function ContratistaPortal() {
   const openEditWorkerModal = (worker: Trabajador) => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
     if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
-      showToast('Este proyecto está finalizado y no permite editar trabajadores.', 'warning');
+      showToast('Este proyecto está en modo histórico y no permite editar trabajadores.', 'warning');
       return;
     }
     const assignment = getAsignacionProyecto(worker, selectedProyectoId);
@@ -326,7 +326,7 @@ export default function ContratistaPortal() {
   const handleRetireWorker = async (worker: Trabajador) => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
     if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
-      showToast('Este proyecto está finalizado y no permite retirar trabajadores.', 'warning');
+      showToast('Este proyecto está en modo histórico y no permite retirar trabajadores.', 'warning');
       return;
     }
     const list = getContratistas();
@@ -375,7 +375,7 @@ export default function ContratistaPortal() {
     }
     const project = misProyectos.find(item => item.id === selectedProyectoId);
     if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
-      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+      showToast('Este proyecto está en modo histórico y solo permite consultar el historial.', 'warning');
       return;
     }
     if (!newWorkerForm.fechaInicioContrato) {
@@ -595,7 +595,7 @@ export default function ContratistaPortal() {
                 onChange={event => seleccionarProyecto(event.target.value)}
               >
                 {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
-                {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
+                {proyectosHistoricos.length > 0 && <optgroup label="Históricos / relación finalizada">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
               </select>
             </div>
             <small>{proyectoOperativoParaContratista(proyectoActivo, contratistaLogueado.id) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
@@ -635,7 +635,7 @@ export default function ContratistaPortal() {
             onChange={event => seleccionarProyecto(event.target.value)}
           >
             {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
-            {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
+            {proyectosHistoricos.length > 0 && <optgroup label="Históricos / relación finalizada">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
           </select>
           <span>{proyectoOperativoParaContratista(proyectoActivo, contratistaLogueado.id) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
         </div>
