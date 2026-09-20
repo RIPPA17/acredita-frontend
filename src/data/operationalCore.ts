@@ -1,4 +1,4 @@
-import type { CierreDocumental, ObligacionDocumental, ServicioContrato, Trabajador } from '../types';
+import type { CierreDocumental, ObligacionDocumental, Proyecto, ServicioContrato, Trabajador } from '../types';
 import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 
@@ -15,10 +15,25 @@ export function saveServicios(items: ServicioContrato[]): void {
   requestBusinessPersistence('core');
 }
 
-export function getServiciosProyecto(proyectoId: string, contratistaId?: string): ServicioContrato[] {
+export function proyectoOperativoParaContratista(proyecto: Proyecto | undefined, contratistaId: string): boolean {
+  if (!proyecto) return false;
+  const proyectoActivo = ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
+  if (!proyectoActivo) return false;
+  // Las hidrataciones nuevas conservan la relación activa Contratista–Proyecto
+  // separada de la visibilidad histórica. En datos legados sin ese campo,
+  // mantenemos compatibilidad usando la asociación visible existente.
+  if (Array.isArray(proyecto.contratistasActivos)) return proyecto.contratistasActivos.includes(contratistaId);
+  return proyecto.contratistas.includes(contratistaId);
+}
+
+export function getServiciosProyecto(
+  proyectoId: string,
+  contratistaId?: string,
+  incluirInactivos = false,
+): ServicioContrato[] {
   return getServicios().filter(item =>
     item.proyectoId === proyectoId
-    && item.activo
+    && (incluirInactivos || item.activo)
     && (!contratistaId || item.contratistaId === contratistaId)
   );
 }
