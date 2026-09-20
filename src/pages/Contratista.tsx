@@ -588,7 +588,7 @@ export default function ContratistaPortal() {
         {proyectoActivo && (
           <div className="contractor-project-context hidden sm:flex" aria-label="Contexto del proyecto activo">
             <div>
-              <span>Proyecto activo</span>
+              <span>Proyecto</span>
               <select
                 aria-label="Proyecto activo global"
                 value={proyectoActivo.id}
@@ -628,7 +628,7 @@ export default function ContratistaPortal() {
 
       {proyectoActivo && (
         <div className="contractor-project-context-mobile sm:hidden">
-          <label htmlFor="contractor-mobile-project">Proyecto activo</label>
+          <label htmlFor="contractor-mobile-project">Proyecto</label>
           <select
             id="contractor-mobile-project"
             value={proyectoActivo.id}
