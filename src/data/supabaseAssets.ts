@@ -23,10 +23,19 @@ export interface OperationalAsset {
   status: AssetStatus;
   accessAllowed: boolean;
   notes?: string;
+  isActive: boolean;
+  retiredAt?: string;
+  retirementReason?: string;
   totalDocuments: number;
   approvedDocuments: number;
   blockingDocuments: number;
+  pendingDocuments: number;
   nextExpiry?: string;
+  inspectionStatus?: AssetInspection['result'];
+  nextInspectionDate?: string;
+  nextMaintenanceDate?: string;
+  activeOperators: number;
+  serviceOperational: boolean;
 }
 
 export interface AssetDocument {
@@ -42,6 +51,18 @@ export interface AssetDocument {
   rejectionReason?: string;
 }
 
+export interface AssetDocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  storageBucket: string;
+  storagePath: string;
+  uploadedAt: string;
+}
+
 export interface AssetRequirementTemplate {
   id: string;
   type: AssetType;
@@ -50,6 +71,7 @@ export interface AssetRequirementTemplate {
   blocksAccess: boolean;
   required: boolean;
   checklist: string[];
+  active?: boolean;
 }
 
 export interface AssetRequirementStatus extends AssetRequirementTemplate {
@@ -148,10 +170,19 @@ type RegistryRow = {
   status: AssetStatus;
   access_allowed: boolean;
   notes: string | null;
+  is_active: boolean;
   total_documents: number;
   approved_documents: number;
   blocking_documents: number;
   next_expiry: string | null;
+  retired_at: string | null;
+  retirement_reason: string | null;
+  pending_documents: number;
+  inspection_status: AssetInspection['result'] | null;
+  next_inspection_date: string | null;
+  next_maintenance_date: string | null;
+  active_operators: number;
+  service_operational: boolean;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -205,16 +236,30 @@ const mapRow = (row: RegistryRow): OperationalAsset => ({
   status: row.status,
   accessAllowed: row.access_allowed,
   notes: row.notes || undefined,
+  isActive: row.is_active,
+  retiredAt: row.retired_at || undefined,
+  retirementReason: row.retirement_reason || undefined,
   totalDocuments: row.total_documents || 0,
   approvedDocuments: row.approved_documents || 0,
   blockingDocuments: row.blocking_documents || 0,
+  pendingDocuments: row.pending_documents || 0,
   nextExpiry: row.next_expiry || undefined,
+  inspectionStatus: row.inspection_status || undefined,
+  nextInspectionDate: row.next_inspection_date || undefined,
+  nextMaintenanceDate: row.next_maintenance_date || undefined,
+  activeOperators: row.active_operators || 0,
+  serviceOperational: row.service_operational,
 });
 
-export async function listAssets(projectKey: string, contractorKey?: string): Promise<OperationalAsset[]> {
-  const filters = [`project_key=eq.${encodeURIComponent(projectKey)}`, 'is_active=eq.true'];
+export async function listAssets(
+  projectKey: string,
+  contractorKey?: string,
+  includeInactive = false,
+): Promise<OperationalAsset[]> {
+  const filters = [`project_key=eq.${encodeURIComponent(projectKey)}`];
+  if (!includeInactive) filters.push('is_active=eq.true');
   if (contractorKey) filters.push(`contractor_key=eq.${encodeURIComponent(contractorKey)}`);
-  const rows = await request<RegistryRow[]>(`asset_registry?select=*&${filters.join('&')}&order=name.asc`);
+  const rows = await request<RegistryRow[]>(`asset_registry?select=*&${filters.join('&')}&order=is_active.desc,name.asc`);
   return rows.map(mapRow);
 }
 
@@ -247,8 +292,11 @@ export async function saveAsset(input: SaveAssetInput): Promise<void> {
   const accreditationId = await resolveAccreditation(input.projectKey, input.contractorKey);
   let serviceId: string | null = null;
   if (input.serviceKey) {
-    const services = await request<Array<{ id: string }>>(`services?select=id&integration_key=eq.${encodeURIComponent(input.serviceKey)}&limit=1`);
-    serviceId = services[0]?.id || null;
+    const services = await request<Array<{ id: string }>>(
+      `services?select=id&integration_key=eq.${encodeURIComponent(input.serviceKey)}&accreditation_id=eq.${accreditationId}&is_active=eq.true&status=eq.activo&limit=1`,
+    );
+    if (!services[0]) throw new Error('El servicio seleccionado no está activo o no pertenece a esta acreditación.');
+    serviceId = services[0].id;
   }
   const editable = {
     accreditation_id: accreditationId,
@@ -276,12 +324,22 @@ export async function saveAsset(input: SaveAssetInput): Promise<void> {
   }
 }
 
+export async function retireAsset(assetId: string, reason: string): Promise<void> {
+  const cleanReason = reason.trim();
+  if (cleanReason.length < 3) throw new Error('Indica el motivo del retiro del activo.');
+  await request<void>(`assets?id=eq.${assetId}&is_active=eq.true`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ is_active: false, retirement_reason: cleanReason }),
+  });
+}
+
 export async function listAssetRequirementTemplates(projectKey: string): Promise<AssetRequirementTemplate[]> {
   const projectId = await resolveProjectId(projectKey);
   const rows = await request<Array<{
     id: string; asset_type: AssetType; document_type: string; validity_days: number | null;
-    blocks_access: boolean; is_required: boolean; review_checklist: unknown;
-  }>>(`asset_requirement_templates?select=*&project_id=eq.${projectId}&order=asset_type.asc,document_type.asc`);
+    blocks_access: boolean; is_required: boolean; review_checklist: unknown; is_active: boolean;
+  }>>(`asset_requirement_templates?select=*&project_id=eq.${projectId}&is_active=eq.true&order=asset_type.asc,document_type.asc`);
   return rows.map(row => ({
     id: row.id,
     type: row.asset_type,
@@ -290,6 +348,7 @@ export async function listAssetRequirementTemplates(projectKey: string): Promise
     blocksAccess: row.blocks_access,
     required: row.is_required,
     checklist: Array.isArray(row.review_checklist) ? row.review_checklist.map(String) : [],
+    active: row.is_active,
   }));
 }
 
@@ -318,8 +377,14 @@ export async function saveAssetRequirementTemplate(
   }
 }
 
-export async function deleteAssetRequirementTemplate(id: string): Promise<void> {
-  await request<void>(`asset_requirement_templates?id=eq.${id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+export async function retireAssetRequirementTemplate(id: string, reason: string): Promise<void> {
+  const cleanReason = reason.trim();
+  if (cleanReason.length < 3) throw new Error('Indica el motivo del retiro del requisito.');
+  await request<void>(`asset_requirement_templates?id=eq.${id}&is_active=eq.true`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ is_active: false, retirement_reason: cleanReason }),
+  });
 }
 
 export async function listAssetRequirementStatuses(assetId: string): Promise<AssetRequirementStatus[]> {
@@ -383,7 +448,41 @@ async function openStorageObject(bucket: string, path: string): Promise<void> {
 
 export async function openAssetDocument(document: AssetDocument): Promise<void> {
   if (!document.storageBucket || !document.storagePath) throw new Error('El documento no tiene un archivo disponible.');
+  await request<boolean>('rpc/register_asset_document_access', {
+    method: 'POST',
+    body: JSON.stringify({ p_asset_document_id: document.id, p_action: 'view' }),
+  });
   return openStorageObject(document.storageBucket, document.storagePath);
+}
+
+export async function listAssetDocumentVersions(documentId: string): Promise<AssetDocumentVersion[]> {
+  const rows = await request<Array<{
+    id: string; asset_document_id: string; version_number: number; file_name: string;
+    mime_type: string; file_size: number; storage_bucket: string; storage_path: string; uploaded_at: string;
+  }>>(`asset_document_versions?select=*&asset_document_id=eq.${documentId}&order=version_number.desc`);
+  return rows.map(row => ({
+    id: row.id,
+    documentId: row.asset_document_id,
+    versionNumber: row.version_number,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    storageBucket: row.storage_bucket,
+    storagePath: row.storage_path,
+    uploadedAt: row.uploaded_at,
+  }));
+}
+
+export async function openAssetDocumentVersion(version: AssetDocumentVersion): Promise<void> {
+  await request<boolean>('rpc/register_storage_access', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_bucket: version.storageBucket,
+      p_storage_path: version.storagePath,
+      p_action: 'view',
+    }),
+  });
+  return openStorageObject(version.storageBucket, version.storagePath);
 }
 
 export async function uploadAssetDocument(
@@ -555,27 +654,20 @@ export async function listOperatorCandidates(projectKey: string, contractorKey: 
 }
 
 export async function listAssetOperators(assetId: string): Promise<AssetOperatorAssignment[]> {
-  const [rows, candidates] = await Promise.all([
-    request<Array<{
-      id: string; worker_assignment_id: string; valid_from: string; valid_until: string | null;
-      status: AssetOperatorAssignment['status'];
-    }>>(`asset_operator_assignments?select=id,worker_assignment_id,valid_from,valid_until,status&asset_id=eq.${assetId}&order=created_at.desc`),
-    request<Array<{ worker_assignment_id: string; full_name: string; rut: string; job_title: string | null }>>('asset_operator_candidates?select=worker_assignment_id,full_name,rut,job_title'),
-  ]);
-  const byAssignment = new Map(candidates.map(item => [item.worker_assignment_id, item]));
-  return rows.map(row => {
-    const person = byAssignment.get(row.worker_assignment_id);
-    return {
-      id: row.id,
-      workerAssignmentId: row.worker_assignment_id,
-      fullName: person?.full_name || 'Trabajador no disponible',
-      rut: person?.rut || '—',
-      jobTitle: person?.job_title || undefined,
-      validFrom: row.valid_from,
-      validUntil: row.valid_until || undefined,
-      status: row.status,
-    };
-  });
+  const rows = await request<Array<{
+    id: string; worker_assignment_id: string; full_name: string; rut: string; job_title: string | null;
+    valid_from: string; valid_until: string | null; status: AssetOperatorAssignment['status'];
+  }>>(`asset_operator_assignment_details?select=*&asset_id=eq.${assetId}&order=created_at.desc`);
+  return rows.map(row => ({
+    id: row.id,
+    workerAssignmentId: row.worker_assignment_id,
+    fullName: row.full_name,
+    rut: row.rut,
+    jobTitle: row.job_title || undefined,
+    validFrom: row.valid_from,
+    validUntil: row.valid_until || undefined,
+    status: row.status,
+  }));
 }
 
 export async function assignAssetOperator(
