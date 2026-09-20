@@ -19,10 +19,21 @@ const DOCUMENT_COMPANY = '91000000-0000-4000-8000-000000000001';
 const VERSION_COMPANY_V1 = '92000000-0000-4000-8000-000000000001';
 const VERSION_COMPANY_V2 = '92000000-0000-4000-8000-000000000002';
 const VERSION_COMPANY_V3 = '92000000-0000-4000-8000-000000000003';
+const OBLIGATION_WORKER = '93000000-0000-4000-8000-000000000001';
+const DOCUMENT_WORKER = '94000000-0000-4000-8000-000000000001';
+const VERSION_WORKER_V1 = '95000000-0000-4000-8000-000000000001';
+const VERSION_WORKER_V2 = '95000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
-type MockOptions = { paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado'; emptyProject?: boolean; historicalProject?: boolean; renewalScenario?: boolean };
+type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
+type MockOptions = {
+  paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado';
+  emptyProject?: boolean;
+  historicalProject?: boolean;
+  renewalScenario?: boolean;
+  workerDocumentScenario?: WorkerDocumentScenario;
+};
 
 function appSession(role: Role) {
   return {
@@ -38,6 +49,17 @@ function appSession(role: Role) {
 
 function fixtures(role: Role, options: MockOptions) {
   const paymentStatus = options.paymentStatus || 'observado';
+  const workerScenario = options.workerDocumentScenario;
+  const workerComplete = Boolean(options.historicalProject || workerScenario);
+  const workerHasDocument = Boolean(workerScenario && workerScenario !== 'pending');
+  const workerVersions = workerScenario === 'review' ? [
+    { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi.pdf', metadata: { frontend_document_id: 'doc_worker_odi' } },
+  ] : workerScenario === 'rejected' ? [
+    { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'rechazado', issued_at: null, expires_at: null, uploaded_at: '2026-09-18T12:00:00Z', reviewed_at: '2026-09-19T10:00:00Z', rejection_reason: 'Falta firma', rejection_explanation: 'Falta la firma del trabajador en la última página.', rejection_solution: 'Sube nuevamente el ODI firmado.', storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi.pdf', metadata: { frontend_document_id: 'doc_worker_odi', reviewer_name: 'Acredita QA' } },
+  ] : workerScenario === 'renewal_review' ? [
+    { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'aprobado', issued_at: '2025-09-26', expires_at: '2026-09-25', uploaded_at: '2025-09-26T12:00:00Z', reviewed_at: '2025-09-27T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi-v1.pdf', metadata: { frontend_document_id: 'doc_worker_odi', reviewer_name: 'Acredita QA' } },
+    { id: VERSION_WORKER_V2, document_id: DOCUMENT_WORKER, version_number: 2, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v2/odi-renovado.pdf', original_filename: 'odi-renovado.pdf', metadata: { frontend_document_id: 'doc_worker_odi' } },
+  ] : [];
   return {
     profiles: [{ id: PROFILE, full_name: appSession(role).nombre }],
     acredita_memberships: role === 'admin' ? [{ profile_id: PROFILE, role: 'admin_acredita', is_active: true }] : [],
@@ -65,8 +87,8 @@ function fixtures(role: Role, options: MockOptions) {
       rut: '18.123.456-7',
       full_name: 'Trabajador Piloto',
       job_title: 'Operador',
-      contract_type: options.historicalProject ? 'indefinido' : null,
-      contract_start_date: options.historicalProject ? '2026-09-01' : null,
+      contract_type: workerComplete ? 'indefinido' : null,
+      contract_start_date: workerComplete ? '2026-09-01' : null,
       contract_end_date: null,
       contract_work_or_task: null,
       special_labor_regime: null,
@@ -86,8 +108,8 @@ function fixtures(role: Role, options: MockOptions) {
         access_status: 'pendiente',
         assigned_at: '2026-09-01',
         unassigned_at: null,
-        contract_type_snapshot: options.historicalProject ? 'indefinido' : null,
-        contract_start_date_snapshot: options.historicalProject ? '2026-09-01' : null,
+        contract_type_snapshot: workerComplete ? 'indefinido' : null,
+        contract_start_date_snapshot: workerComplete ? '2026-09-01' : null,
         contract_end_date_snapshot: null,
         contract_work_or_task_snapshot: null,
         special_labor_regime_snapshot: null,
@@ -113,13 +135,43 @@ function fixtures(role: Role, options: MockOptions) {
         special_labor_regime_detail_snapshot: null,
       }] : []),
     ],
-    documents: options.renewalScenario ? [{ id: DOCUMENT_COMPANY, accreditation_id: ACCREDITATION, requirement_id: REQ_COMPANY, worker_id: null, obligation_id: null }] : [],
-    document_versions: options.renewalScenario ? [
-      { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
-      { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-25', expires_at: '2026-09-24', uploaded_at: '2026-08-25T12:00:00Z', reviewed_at: '2026-08-26T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
-      { id: VERSION_COMPANY_V3, document_id: DOCUMENT_COMPANY, version_number: 3, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v3/f30-v3.pdf', original_filename: 'f30-v3.pdf', metadata: { frontend_document_id: 'doc_renewal' } },
-    ] : [],
-    obligation_statuses: [],
+    documents: [
+      ...(options.renewalScenario ? [{ id: DOCUMENT_COMPANY, accreditation_id: ACCREDITATION, requirement_id: REQ_COMPANY, worker_id: null, obligation_id: null }] : []),
+      ...(workerHasDocument ? [{ id: DOCUMENT_WORKER, accreditation_id: ACCREDITATION, requirement_id: REQ_WORKER, worker_id: WORKER, obligation_id: OBLIGATION_WORKER }] : []),
+    ],
+    document_versions: [
+      ...(options.renewalScenario ? [
+        { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+        { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-25', expires_at: '2026-09-24', uploaded_at: '2026-08-25T12:00:00Z', reviewed_at: '2026-08-26T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+        { id: VERSION_COMPANY_V3, document_id: DOCUMENT_COMPANY, version_number: 3, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v3/f30-v3.pdf', original_filename: 'f30-v3.pdf', metadata: { frontend_document_id: 'doc_renewal' } },
+      ] : []),
+      ...workerVersions,
+    ],
+    document_obligations: workerScenario ? [{
+      id: OBLIGATION_WORKER,
+      accreditation_id: ACCREDITATION,
+      service_id: SERVICE,
+      worker_assignment_id: ASSIGNMENT,
+      requirement_id: REQ_WORKER,
+      period_start: '2026-09-01',
+      period_end: '2027-08-31',
+      due_date: '2026-09-06',
+      status: 'pendiente',
+      is_active: true,
+    }] : [],
+    obligation_statuses: workerScenario && workerScenario !== 'pending' ? [{
+      obligation_id: OBLIGATION_WORKER,
+      accreditation_id: ACCREDITATION,
+      service_id: SERVICE,
+      worker_assignment_id: ASSIGNMENT,
+      requirement_id: REQ_WORKER,
+      period_start: '2026-09-01',
+      period_end: '2027-08-31',
+      due_date: '2026-09-06',
+      is_active: true,
+      effective_status: workerScenario === 'review' ? 'revision' : workerScenario === 'rejected' ? 'rechazado' : 'por_vencer',
+      version_number: workerScenario === 'renewal_review' ? 1 : 1,
+    }] : [],
     compliance_periods: [],
     accreditation_statuses: [
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
@@ -141,6 +193,7 @@ function fixtures(role: Role, options: MockOptions) {
 async function protectedPage(page: Page, role: Role, options: MockOptions = {}) {
   const data = fixtures(role, options);
   const calls: string[] = [];
+  const mutations: Array<{ method: string; path: string; body: any }> = [];
   await page.addInitScript((session) => {
     window.localStorage.setItem('acredita_session', JSON.stringify(session));
   }, appSession(role));
@@ -165,6 +218,23 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
     if (url.pathname.startsWith('/rest/v1/')) {
       const table = decodeURIComponent(url.pathname.slice('/rest/v1/'.length));
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
+        let body: any = null;
+        try { body = request.postDataJSON(); } catch { body = request.postData(); }
+        mutations.push({ method: request.method(), path: url.pathname, body });
+        if (request.method() === 'POST' && table === 'documents') {
+          return route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify([{ id: DOCUMENT_WORKER, ...body }]),
+          });
+        }
+        if (request.method() === 'POST' && table === 'document_versions') {
+          return route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify([{ id: VERSION_WORKER_V1, ...body }]),
+          });
+        }
         return route.fulfill({ status: 204, body: '' });
       }
       const rows = data[table] || [];
@@ -176,7 +246,7 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
     return route.fulfill({ status: 404, body: '{}' });
   });
 
-  return { calls };
+  return { calls, mutations };
 }
 
 async function openMandanteProject(page: Page) {
@@ -419,6 +489,62 @@ test('12c Alta de trabajador limita ingreso a la vigencia del contrato', async (
   const entry = page.getByLabel('Fecha de ingreso al proyecto');
   await expect(entry).toHaveAttribute('min', '2026-09-10');
   await expect(entry).toHaveAttribute('max', '2026-09-20');
+});
+
+test('12d primera carga de trabajador se vincula a la obligación activa exacta', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'contratista', { workerDocumentScenario: 'pending' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Certificado ODI', { exact: true })).toBeVisible();
+
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Subir', exact: true }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: 'odi-trabajador.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\n% Acredita E2E'),
+  });
+
+  await expect.poll(() => {
+    const post = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/documents');
+    return post?.body?.obligation_id || null;
+  }).toBe(OBLIGATION_WORKER);
+});
+
+test('12e documento obligatorio en revisión queda esperando a Acredita sin pedir otra carga', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'review' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText('Esperando a Acredita', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Hay 1 documento obligatorio en revisión/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Subir', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toHaveCount(0);
+});
+
+test('12f rechazo de trabajador muestra el requisito y motivo exactos para corregir', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'rejected' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Resolver', exact: true }).click();
+  await expect(page.getByText('Motivo: Falta firma', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Certificado ODI: Falta firma/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toBeVisible();
+  await expect(page.getByText('Qué bloquea el ingreso', { exact: true })).toBeVisible();
+});
+
+test('12g renovación anticipada en revisión conserva vigencia y evita cargas duplicadas', async ({ page }) => {
+  await protectedPage(page, 'contratista', { workerDocumentScenario: 'renewal_review' });
+  await page.goto('/contratista/trabajadores?proyecto=proyecto_piloto');
+
+  await page.getByRole('button', { name: 'Ver carpeta' }).click();
+  await expect(page.getByText(/Renovación v2 en revisión/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'En revisión', exact: true })).toBeVisible();
+  await expect(page.getByText('Renovaciones en revisión', { exact: true })).toBeVisible();
+  await expect(page.getByText('Habilitado', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Renovar', exact: true })).toHaveCount(0);
 });
 
 test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {

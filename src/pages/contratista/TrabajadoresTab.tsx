@@ -148,6 +148,9 @@ function buildResumen(trabajador: Trabajador, proyectoId: string, requisitos: Re
 }
 
 function accionDocumento(item: ChecklistItem): { label: string; className: string; actionable: boolean } {
+  const renewal = item.documento?.versionEnTramite;
+  if (renewal?.estado === 'revision') return { label: 'En revisión', className: '', actionable: false };
+  if (renewal?.estado === 'rechazado') return { label: 'Corregir renovación', className: 'tw-action-danger', actionable: true };
   if (item.estado === 'Pendiente') return { label: 'Subir', className: 'tw-action-primary', actionable: true };
   if (item.estado === 'Rechazado' || item.estado === 'Vencido') return { label: 'Corregir', className: 'tw-action-danger', actionable: true };
   if (item.estado === 'Por vencer') return { label: 'Renovar', className: 'tw-action-warning', actionable: true };
@@ -156,6 +159,15 @@ function accionDocumento(item: ChecklistItem): { label: string; className: strin
 
 function motivoDocumento(documento?: Documento): string | undefined {
   return documento?.motivoRechazo || documento?.motivo || documento?.observacion || documento?.explicacionRechazo;
+}
+
+function motivoRenovacion(documento?: Documento): string | undefined {
+  const renewal = documento?.versionEnTramite;
+  return renewal?.motivoRechazo || renewal?.explicacionRechazo;
+}
+
+function solucionRenovacion(documento?: Documento): string | undefined {
+  return documento?.versionEnTramite?.solucionRechazo;
 }
 
 export default function TrabajadoresTab({
@@ -290,11 +302,24 @@ export default function TrabajadoresTab({
       .filter(value => value.dias >= 0 && value.dias < 99999)
       .sort((a, b) => a.dias - b.dias);
     const proximo = candidatosVencimiento[0];
-    const bloqueo = selected.checklist.find(item =>
+    const bloqueos = selected.checklist.filter(item =>
       item.requisito.obligatorio && (item.estado === 'Rechazado' || item.estado === 'Vencido')
     );
-    const motivoReal = motivoDocumento(bloqueo?.documento) ||
-      (selected.estado === 'rechazado' ? getMotivoBloqueoTrabajador(selected.trabajador, selectedProyectoId) : undefined);
+    const pendientesObligatorios = selected.checklist.filter(item =>
+      item.requisito.obligatorio && item.estado === 'Pendiente'
+    );
+    const revisionesObligatorias = selected.checklist.filter(item =>
+      item.requisito.obligatorio && item.estado === 'En revisión'
+    );
+    const renovacionesEnRevision = selected.checklist.filter(item =>
+      item.documento?.versionEnTramite?.estado === 'revision'
+    );
+    const renovacionesRechazadas = selected.checklist.filter(item =>
+      item.documento?.versionEnTramite?.estado === 'rechazado'
+    );
+    const motivoReal = bloqueos.length > 0
+      ? bloqueos.map(item => `${item.requisito.nombre}: ${motivoDocumento(item.documento) || item.estado.toLowerCase()}`).join(' · ')
+      : (selected.estado === 'rechazado' ? getMotivoBloqueoTrabajador(selected.trabajador, selectedProyectoId) : undefined);
 
     return (
       <>
@@ -350,6 +375,15 @@ export default function TrabajadoresTab({
                     <div className="tw-min-0">
                       <div className="tw-check-title">{item.requisito.nombre}</div>
                       <div className="tw-check-meta">{item.requisito.obligatorio ? 'Obligatorio' : 'Opcional'} · {impactoLabel(item.requisito)}</div>
+                      {item.estado === 'Rechazado' && motivoDocumento(item.documento) && (
+                        <div className="mt-1 text-[10.5px] text-red-700">Motivo: {motivoDocumento(item.documento)}</div>
+                      )}
+                      {item.documento?.versionEnTramite?.estado === 'revision' && (
+                        <div className="mt-1 text-[10.5px] text-blue-700">Renovación v{item.documento.versionEnTramite.version} en revisión. La versión vigente se conserva mientras corresponda.</div>
+                      )}
+                      {item.documento?.versionEnTramite?.estado === 'rechazado' && (
+                        <div className="mt-1 text-[10.5px] text-red-700">Renovación rechazada: {motivoRenovacion(item.documento) || 'requiere corrección'}{solucionRenovacion(item.documento) ? ` · ${solucionRenovacion(item.documento)}` : ''}</div>
+                      )}
                     </div>
                     <span className={`tw-badge ${estado.badge}`}>{estado.label}</span>
                     <div className="tw-validity">{item.documento?.vencimiento && item.documento.vencimiento !== '—' ? item.documento.vencimiento : '—'}</div>
@@ -371,12 +405,24 @@ export default function TrabajadoresTab({
             <div className="tw-info"><strong>Historial de asignaciones</strong>{historialAsignaciones.length === 0 ? <p>Sin períodos registrados.</p> : <div className="mt-2 space-y-2">{historialAsignaciones.map(item => <div key={item.id}><p>{item.fechaIngreso || 'Sin fecha'} → {item.fechaSalida || 'Actual'} · {item.estado === 'activa' ? 'Activa' : item.estado === 'baja' ? 'Baja' : 'Inactiva'}{item.cargo ? ` · ${item.cargo}` : ''}</p><p className="text-gray-400">{item.tipoContrato ? `${tipoContratoAsignacionLabel(item)}${item.fechaInicioContrato ? ` · contrato desde ${item.fechaInicioContrato}` : ''}${item.obraFaenaContrato ? ` · ${item.obraFaenaContrato}` : ''}` : 'Contrato del período no registrado (dato legado)'}</p></div>)}</div>}</div>
             {!modoConsulta && selected.estado === 'rechazado' && (
               <>
-                <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || `${bloqueo?.requisito.nombre || 'Un requisito obligatorio'} requiere corrección.`}</p></div>
-                <div className="tw-info"><strong>Qué debes hacer</strong><p>Corrige el requisito indicado. Cuando Acredita apruebe la nueva versión, el trabajador recuperará la habilitación para este proyecto.</p></div>
+                <div className="tw-info tw-info-red"><strong>Qué bloquea el ingreso</strong><p>{motivoReal || 'Uno o más requisitos obligatorios requieren corrección.'}</p></div>
+                <div className="tw-info"><strong>Qué debes hacer</strong><p>Corrige {bloqueos.length === 1 ? 'el requisito indicado' : `los ${bloqueos.length} requisitos bloqueantes`}. Cuando Acredita apruebe las nuevas versiones, el trabajador recuperará la habilitación para este proyecto.</p></div>
               </>
             )}
+            {!modoConsulta && revisionesObligatorias.length > 0 && selected.estado === 'pendiente' && (
+              <div className="tw-info"><strong>Esperando a Acredita</strong><p>{revisionesObligatorias.length === 1 ? 'Hay 1 documento obligatorio en revisión.' : `Hay ${revisionesObligatorias.length} documentos obligatorios en revisión.`} No necesitas volver a cargarlo mientras siga en este estado.</p></div>
+            )}
+            {!modoConsulta && pendientesObligatorios.length > 0 && selected.estado === 'pendiente' && problemasFicha.length === 0 && (
+              <div className="tw-info tw-info-yellow"><strong>Acción requerida</strong><p>Falta cargar: {pendientesObligatorios.map(item => item.requisito.nombre).join(', ')}.</p></div>
+            )}
+            {!modoConsulta && renovacionesEnRevision.length > 0 && (
+              <div className="tw-info"><strong>Renovaciones en revisión</strong><p>{renovacionesEnRevision.map(item => item.requisito.nombre).join(', ')}. La versión aprobada anterior sigue siendo la referencia vigente hasta su vencimiento.</p></div>
+            )}
+            {!modoConsulta && renovacionesRechazadas.length > 0 && (
+              <div className="tw-info tw-info-yellow"><strong>Renovaciones que debes corregir</strong><p>{renovacionesRechazadas.map(item => item.requisito.nombre).join(', ')}. Puedes corregirlas sin perder la vigencia de una versión anterior que todavía esté aprobada.</p></div>
+            )}
             {!modoConsulta && selected.estado === 'por_vencer' && <div className="tw-info tw-info-yellow"><strong>Acceso aún habilitado</strong><p>Puede seguir ingresando mientras el documento esté vigente. Renueva antes de su vencimiento.</p></div>}
-            {!modoConsulta && selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
+            {!modoConsulta && selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : revisionesObligatorias.length > 0 && pendientesObligatorios.length === 0 ? 'La documentación obligatoria ya fue cargada y está esperando revisión de Acredita.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
             {!modoConsulta && selected.estado === 'aprobado' && <div className="tw-info"><strong>Trabajador habilitado</strong><p>Todos los requisitos obligatorios están vigentes para este proyecto.</p></div>}
             {modoConsulta && <div className="tw-info"><strong>Proyecto finalizado · modo consulta</strong><p>Este trabajador y sus períodos se conservan como historial. No se pueden editar, retirar ni cargar nuevos antecedentes desde este proyecto.</p></div>}
           </aside>

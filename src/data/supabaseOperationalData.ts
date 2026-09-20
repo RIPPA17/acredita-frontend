@@ -579,7 +579,7 @@ async function ensureDocument(
     d.accreditation_id === accreditationId
     && d.requirement_id === requirementId
     && d.worker_id === workerId
-    && (!obligationId || d.obligation_id === obligationId)
+    && d.obligation_id === (obligationId || null)
   );
   if (found) return found;
   const created = await insertReturning<BackendDocument>('documents', token, {
@@ -603,6 +603,45 @@ async function syncDocuments(session: SupabaseUserSession, rows: BackendRows): P
   const workerByContractorRut = new Map(rows.workers.map(w => [`${w.contratista_id}:${normalizeRut(w.rut)}`, w]));
   const backendDocuments = [...rows.documents];
   let versions = [...rows.versions];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const resolveCurrentObligationId = (
+    accreditationId: string,
+    requirementId: string,
+    workerId: string | null,
+    explicit?: string,
+  ): string | undefined => {
+    if (explicit) return explicit;
+    if (workerId) {
+      const assignment = rows.assignments
+        .filter(item =>
+          item.accreditation_id === accreditationId
+          && item.worker_id === workerId
+          && item.is_active
+          && item.assignment_status === 'activa'
+        )
+        .sort((a, b) => (b.assigned_at || '').localeCompare(a.assigned_at || ''))[0];
+      if (!assignment) return undefined;
+      return rows.obligations
+        .filter(item =>
+          item.accreditation_id === accreditationId
+          && item.requirement_id === requirementId
+          && item.worker_assignment_id === assignment.id
+          && item.is_active
+          && item.period_start <= today
+        )
+        .sort((a, b) => b.period_start.localeCompare(a.period_start))[0]?.obligation_id;
+    }
+    return rows.obligations
+      .filter(item =>
+        item.accreditation_id === accreditationId
+        && item.requirement_id === requirementId
+        && !item.worker_assignment_id
+        && item.is_active
+        && item.period_start <= today
+      )
+      .sort((a, b) => b.period_start.localeCompare(a.period_start))[0]?.obligation_id;
+  };
 
   const syncOne = async (contractor: Contratista, doc: Documento, worker?: Trabajador) => {
     if (!doc.proyectoId || !hasUploadedVersion(doc)) return;
@@ -616,7 +655,23 @@ async function syncDocuments(session: SupabaseUserSession, rows: BackendRows): P
     if (!requirement) return;
     const backendWorker = worker ? workerByContractorRut.get(`${contractorUuid}:${normalizeRut(worker.rut)}`) : undefined;
     if (worker && !backendWorker) return;
-    const backendDocument = await ensureDocument(token, backendDocuments, accreditation.id, requirement.id, backendWorker?.id || null, doc.obligacionId);
+    const obligationId = resolveCurrentObligationId(
+      accreditation.id,
+      requirement.id,
+      backendWorker?.id || null,
+      doc.obligacionId,
+    );
+    // Un documento de trabajador sin obligación no participa en el estado
+    // derivado y puede contaminar un reingreso. No creamos contenedores huérfanos.
+    if (worker && !obligationId) return;
+    const backendDocument = await ensureDocument(
+      token,
+      backendDocuments,
+      accreditation.id,
+      requirement.id,
+      backendWorker?.id || null,
+      obligationId,
+    );
     await syncVersions(session, doc, backendDocument, versions);
     versions = await selectRows<BackendVersion>('document_versions', token, 'id,document_id,version_number,workflow_status,expires_at,uploaded_at,reviewed_at,rejection_reason,rejection_explanation,rejection_solution,storage_bucket,storage_path,original_filename,metadata');
   };
