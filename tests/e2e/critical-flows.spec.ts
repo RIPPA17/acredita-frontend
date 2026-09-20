@@ -33,6 +33,8 @@ type MockOptions = {
   historicalProject?: boolean;
   renewalScenario?: boolean;
   workerDocumentScenario?: WorkerDocumentScenario;
+  categorizedWorker?: boolean;
+  bulkReentry?: boolean;
 };
 
 function appSession(role: Role) {
@@ -50,7 +52,7 @@ function appSession(role: Role) {
 function fixtures(role: Role, options: MockOptions) {
   const paymentStatus = options.paymentStatus || 'observado';
   const workerScenario = options.workerDocumentScenario;
-  const workerComplete = Boolean(options.historicalProject || workerScenario);
+  const workerComplete = Boolean(options.historicalProject || workerScenario || options.bulkReentry);
   const workerHasDocument = Boolean(workerScenario && workerScenario !== 'pending');
   const workerVersions = workerScenario === 'review' ? [
     { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi.pdf', metadata: { frontend_document_id: 'doc_worker_odi' } },
@@ -77,14 +79,14 @@ function fixtures(role: Role, options: MockOptions) {
     ],
     requirements: [
       { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'req_f30', name: 'F30 / F31 SII', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento previsional', review_checklist: ['Vigencia'], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
-      { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
+      { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: options.categorizedWorker ? ['altura'] : [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
       ...(options.historicalProject ? [{ id: REQ_COMPANY_OLD, project_id: PROJECT_OLD, integration_key: 'req_historico', name: 'Documento Histórico QA', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'por_obra', validity_days: null, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Requisito histórico', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 }] : []),
     ],
     services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
     workers: options.emptyProject ? [] : [{
       id: WORKER,
       contratista_id: CONTRACTOR,
-      rut: '18.123.456-7',
+      rut: options.bulkReentry ? '12.345.678-5' : '18.123.456-7',
       full_name: 'Trabajador Piloto',
       job_title: 'Operador',
       contract_type: workerComplete ? 'indefinido' : null,
@@ -100,16 +102,16 @@ function fixtures(role: Role, options: MockOptions) {
         id: ASSIGNMENT,
         accreditation_id: ACCREDITATION,
         worker_id: WORKER,
-        is_active: true,
+        is_active: !options.bulkReentry,
         service_id: SERVICE,
         job_title: 'Operador',
         categories: ['general'],
-        assignment_status: 'activa',
-        access_status: 'pendiente',
-        assigned_at: '2026-09-01',
-        unassigned_at: null,
+        assignment_status: options.bulkReentry ? 'baja' : 'activa',
+        access_status: options.bulkReentry ? 'bloqueado' : 'pendiente',
+        assigned_at: options.bulkReentry ? '2026-07-01' : '2026-09-01',
+        unassigned_at: options.bulkReentry ? '2026-08-31' : null,
         contract_type_snapshot: workerComplete ? 'indefinido' : null,
-        contract_start_date_snapshot: workerComplete ? '2026-09-01' : null,
+        contract_start_date_snapshot: workerComplete ? '2026-07-01' : null,
         contract_end_date_snapshot: null,
         contract_work_or_task_snapshot: null,
         special_labor_regime_snapshot: null,
@@ -177,7 +179,7 @@ function fixtures(role: Role, options: MockOptions) {
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
     ],
-    worker_accreditation_statuses: options.emptyProject ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
+    worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
     contractor_evaluations: [],
     payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
     support_tickets: [],
@@ -221,6 +223,22 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         let body: any = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
+        if (request.method() === 'POST' && table === 'workers') {
+          const payload = Array.isArray(body) ? body : [body];
+          const workerRows = data.workers as any[];
+          for (const item of payload) {
+            const existing = workerRows.find(row => row.contratista_id === item.contratista_id && String(row.rut).replace(/[^0-9kK]/g, '').toUpperCase() === String(item.rut).replace(/[^0-9kK]/g, '').toUpperCase());
+            if (existing) Object.assign(existing, item);
+            else workerRows.push({ id: '70000000-0000-4000-8000-000000000099', ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
+        if (request.method() === 'POST' && table === 'worker_assignments') {
+          const payload = Array.isArray(body) ? body : [body];
+          const assignmentRows = data.worker_assignments as any[];
+          for (const item of payload) assignmentRows.push({ id: '80000000-0000-4000-8000-000000000099', ...item });
+          return route.fulfill({ status: 204, body: '' });
+        }
         if (request.method() === 'POST' && table === 'documents') {
           return route.fulfill({
             status: 201,
