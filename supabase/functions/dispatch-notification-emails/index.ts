@@ -140,8 +140,9 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const cutoff = encodeURIComponent(new Date().toISOString());
   const pending = await rest<OutboxRow[]>(
-    "notification_email_outbox?select=id,notification_id,recipient_profile_id,occurrence_number,attempts&status=in.(pending,failed)&next_attempt_at=lte.now()&order=created_at.asc&limit=20",
+    `notification_email_outbox?select=id,notification_id,recipient_profile_id,occurrence_number,attempts&status=in.(pending,failed)&next_attempt_at=lte.${cutoff}&order=created_at.asc&limit=20`,
   );
 
   if (!RESEND_API_KEY || !FROM_EMAIL) {
