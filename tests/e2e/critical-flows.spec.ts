@@ -220,6 +220,23 @@ function fixtures(role: Role, options: MockOptions) {
         occurrence_count: 1,
       },
       {
+        notification_key: 'requirement_changed:e2e',
+        event_type: 'requirement_changed',
+        category: 'accion',
+        severity: 'action',
+        status: 'active',
+        title: 'Requisito documental actualizado',
+        body: 'F30 / F31 SII cambió y requiere revisión.',
+        action_label: 'Ver documentos',
+        action_kind: 'documentos',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: 'req_f30',
+        occurred_at: '2026-09-20T16:00:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      },
+      {
         notification_key: 'payment_blocked:e2e-old',
         event_type: 'payment_blocked',
         category: 'accion',
@@ -1006,6 +1023,20 @@ test('13b campana separa lectura de resolución y navega al evento persistente',
   await reopened.getByRole('button', { name: 'Resueltas' }).click();
   await expect(reopened.getByText('Pago retenido', { exact: true })).toBeVisible();
   await expect(reopened.getByText('Resuelta', { exact: true })).toBeVisible();
+});
+
+test('13c notificación documental abre el requisito exacto afectado', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Requisito documental actualizado' });
+  await item.getByRole('button', { name: 'Ver documentos' }).click();
+
+  await expect(page).toHaveURL(/\/contratista\/documentos\?.*proyecto=proyecto_piloto/);
+  await expect(page).toHaveURL(/requisito=req_f30/);
+  await expect(page.getByText('F30 / F31 SII', { exact: true }).first()).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {
