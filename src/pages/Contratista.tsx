@@ -180,7 +180,16 @@ export default function ContratistaPortal() {
   ]);
 
   const persistidasVisibles: NotificacionContratista[] = notificacionesPersistidas
-    .filter(item => item.status === 'resolved' || !eventosDerivados.has(item.eventType))
+    .filter(item => {
+      if (item.status === 'resolved' || !eventosDerivados.has(item.eventType)) return true;
+      const alreadyDerived = actuales.some(actual =>
+        actual.eventType === item.eventType
+        && actual.proyectoId === item.projectKey
+        && (!item.workerRut || actual.trabajadorRut === item.workerRut)
+        && (!item.requirementKey || actual.requisitoId === item.requirementKey)
+      );
+      return !alreadyDerived;
+    })
     .map(item => {
       const proyecto = misProyectos.find(candidate => candidate.id === item.projectKey);
       const worker = item.workerRut
