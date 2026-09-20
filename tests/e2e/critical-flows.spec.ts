@@ -548,7 +548,7 @@ test('09g expediente histórico conserva períodos y bloquea acciones operativas
 
   await page.getByRole('button', { name: 'Ver historial', exact: true }).first().click();
   await expect(page.getByText('Expediente histórico de acreditación', { exact: true })).toBeVisible();
-  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Renovar', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Corregir', exact: true })).toHaveCount(0);
 
