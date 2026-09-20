@@ -9,7 +9,7 @@ import {
   saveContratistas,
 } from '../../data/localStorageDb';
 import { confirmBusinessPersistence } from '../../data/supabasePersistence';
-import { getServiciosProyecto } from '../../data/operationalCore';
+import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
 import { useDataSync } from '../../components/DataSyncContext';
 import { isValidRut } from '../../utils/rut';
 import type {
@@ -127,11 +127,6 @@ function parseSpecialRegime(value: string): RegimenEspecialLaboral | undefined {
     otro: 'otro',
   };
   return values[key];
-}
-
-function projectIsActive(project: Proyecto): boolean {
-  const status = String(project.estado || '').trim().toLocaleLowerCase('es');
-  return status === 'activo' || status === 'active';
 }
 
 function parseCsv(text: string): ParsedWorker[] {
@@ -253,7 +248,10 @@ export default function BulkWorkersConfig({
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const { refreshNow } = useDataSync();
-  const activeProjects = useMemo(() => proyectos.filter(projectIsActive), [proyectos]);
+  const activeProjects = useMemo(
+    () => proyectos.filter(project => proyectoOperativoParaContratista(project, contratista.id)),
+    [proyectos, contratista.id],
+  );
   const [projectId, setProjectId] = useState(activeProjects[0]?.id || '');
   const [serviceId, setServiceId] = useState('');
   const [rows, setRows] = useState<ParsedWorker[]>([]);
