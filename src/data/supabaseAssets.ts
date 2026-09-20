@@ -58,7 +58,7 @@ export interface AssetRequirementTemplate {
   retirementReason?: string;
 }
 
-export interface AssetRequirementStatus extends AssetRequirementTemplate {
+export interface AssetRequirementStatus extends Omit<AssetRequirementTemplate, 'active' | 'retiredAt' | 'retirementReason'> {
   assetId: string;
   documentId?: string;
   documentName?: string;
@@ -327,7 +327,7 @@ export async function listAssetRequirementTemplates(projectKey: string): Promise
 
 export async function saveAssetRequirementTemplate(
   projectKey: string,
-  input: Omit<AssetRequirementTemplate, 'id'> & { id?: string },
+  input: Omit<AssetRequirementTemplate, 'id' | 'active' | 'retiredAt' | 'retirementReason'> & { id?: string },
 ): Promise<void> {
   const projectId = await resolveProjectId(projectKey);
   const body = {
