@@ -36,6 +36,7 @@ type MockOptions = {
   categorizedWorker?: boolean;
   bulkReentry?: boolean;
   inactiveAccreditationOnActiveProject?: boolean;
+  assetLifecycle?: boolean;
 };
 
 function appSession(role: Role) {
@@ -189,6 +190,96 @@ function fixtures(role: Role, options: MockOptions) {
     notification_preferences: [],
     notification_reads: [],
     review_claims: options.renewalScenario && role === 'admin' ? [{ document_key: 'contratista_piloto_a::doc_renewal', document_version_id: VERSION_COMPANY_V3, claimed_by: PROFILE, claimed_at: '2026-09-19T12:00:00Z', expires_at: '2026-09-20T12:00:00Z' }] : [],
+    asset_registry: options.assetLifecycle ? [
+      {
+        id: 'aa000000-0000-4000-8000-000000000001',
+        integration_key: 'asset_camion_activo',
+        project_key: 'proyecto_piloto',
+        contractor_key: 'contratista_piloto_a',
+        service_key: 'servicio_piloto',
+        accreditation_id: ACCREDITATION,
+        service_id: SERVICE,
+        asset_type: 'vehiculo',
+        identifier: 'ABCD12',
+        name: 'Camión activo',
+        brand: 'Volvo',
+        model: 'FM',
+        year: 2024,
+        owner_name: 'Contratista Piloto A',
+        operator_name: null,
+        status: 'habilitado',
+        access_allowed: true,
+        notes: null,
+        is_active: true,
+        retired_at: null,
+        retirement_reason: null,
+        total_documents: 2,
+        approved_documents: 2,
+        blocking_documents: 0,
+        next_expiry: '2026-10-20',
+      },
+      {
+        id: 'aa000000-0000-4000-8000-000000000002',
+        integration_key: 'asset_camion_historico',
+        project_key: 'proyecto_piloto',
+        contractor_key: 'contratista_piloto_a',
+        service_key: 'servicio_piloto',
+        accreditation_id: ACCREDITATION,
+        service_id: SERVICE,
+        asset_type: 'vehiculo',
+        identifier: 'WXYZ34',
+        name: 'Camión retirado',
+        brand: 'Scania',
+        model: 'R',
+        year: 2022,
+        owner_name: 'Contratista Piloto A',
+        operator_name: null,
+        status: 'inactivo',
+        access_allowed: false,
+        notes: null,
+        is_active: false,
+        retired_at: '2026-09-10T12:00:00Z',
+        retirement_reason: 'Fin de arriendo',
+        total_documents: 2,
+        approved_documents: 2,
+        blocking_documents: 0,
+        next_expiry: null,
+      },
+    ] : [],
+    asset_requirement_templates: options.assetLifecycle ? [
+      {
+        id: 'ab000000-0000-4000-8000-000000000001',
+        project_id: PROJECT,
+        asset_type: 'vehiculo',
+        document_type: 'Permiso de circulación',
+        validity_days: 365,
+        blocks_access: true,
+        is_required: true,
+        review_checklist: ['Patente coincide'],
+        is_active: true,
+        retired_at: null,
+        retirement_reason: null,
+      },
+      {
+        id: 'ab000000-0000-4000-8000-000000000002',
+        project_id: PROJECT,
+        asset_type: 'vehiculo',
+        document_type: 'Seguro antiguo',
+        validity_days: 365,
+        blocks_access: true,
+        is_required: true,
+        review_checklist: [],
+        is_active: false,
+        retired_at: '2026-08-01T12:00:00Z',
+        retirement_reason: 'Requisito reemplazado',
+      },
+    ] : [],
+    asset_requirement_statuses: [],
+    asset_documents: [],
+    asset_inspections: [],
+    asset_maintenance: [],
+    asset_operator_candidates: [],
+    asset_operator_assignments: [],
     review_activity: [],
   } as Record<string, unknown[]>;
 }
@@ -469,6 +560,54 @@ test('10c Proyecto activo con relación de contratista finalizada queda en modo 
   const card = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
   await expect(card.getByText('Histórico', { exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
+});
+
+test('10d Activos permite retiro formal y conserva activos históricos', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { assetLifecycle: true });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
+  await expect(page.getByText(/Camión activo/).first()).toBeVisible();
+  await expect(page.getByText(/Camión retirado/).first()).toBeVisible();
+  await expect(page.getByText('Fin de arriendo', { exact: false })).toBeVisible();
+  await expect(page.getByText('Históricos').first()).toBeVisible();
+
+  const activeRow = page.locator('tr').filter({ hasText: 'Camión activo' });
+  const historicRow = page.locator('tr').filter({ hasText: 'Camión retirado' });
+  await expect(activeRow.getByRole('button', { name: /Retirar/ })).toBeVisible();
+  await expect(historicRow.getByRole('button', { name: /Editar ficha/ })).toHaveCount(0);
+  await expect(historicRow.getByRole('button', { name: /Retirar/ })).toHaveCount(0);
+
+  page.once('dialog', dialog => dialog.accept('Fin de contrato del activo'));
+  await activeRow.getByRole('button', { name: /Retirar/ }).click();
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'PATCH'
+    && item.path === '/rest/v1/assets'
+    && item.body?.is_active === false
+    && item.body?.retirement_reason === 'Fin de contrato del activo'
+  )).toBe(true);
+});
+
+test('10e Matriz retira requisitos sin borrarlos', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { assetLifecycle: true });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
+  await expect(page.getByText('Permiso de circulación', { exact: true })).toBeVisible();
+  await expect(page.getByText('Seguro antiguo', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Requisito reemplazado/)).toBeVisible();
+
+  const requirementRow = page.locator('tr').filter({ hasText: 'Permiso de circulación' });
+  page.once('dialog', dialog => dialog.accept('Nueva política documental'));
+  await requirementRow.getByRole('button', { name: 'Retirar requisito' }).click();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'PATCH'
+    && item.path === '/rest/v1/asset_requirement_templates'
+    && item.body?.is_active === false
+    && item.body?.retirement_reason === 'Nueva política documental'
+  )).toBe(true);
+  expect(ctx.mutations.some(item => item.method === 'DELETE' && item.path === '/rest/v1/asset_requirement_templates')).toBe(false);
 });
 
 test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }) => {

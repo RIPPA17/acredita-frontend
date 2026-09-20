@@ -23,6 +23,9 @@ export interface OperationalAsset {
   status: AssetStatus;
   accessAllowed: boolean;
   notes?: string;
+  active: boolean;
+  retiredAt?: string;
+  retirementReason?: string;
   totalDocuments: number;
   approvedDocuments: number;
   blockingDocuments: number;
@@ -50,9 +53,12 @@ export interface AssetRequirementTemplate {
   blocksAccess: boolean;
   required: boolean;
   checklist: string[];
+  active: boolean;
+  retiredAt?: string;
+  retirementReason?: string;
 }
 
-export interface AssetRequirementStatus extends AssetRequirementTemplate {
+export interface AssetRequirementStatus extends Omit<AssetRequirementTemplate, 'active' | 'retiredAt' | 'retirementReason'> {
   assetId: string;
   documentId?: string;
   documentName?: string;
@@ -148,6 +154,9 @@ type RegistryRow = {
   status: AssetStatus;
   access_allowed: boolean;
   notes: string | null;
+  is_active: boolean;
+  retired_at: string | null;
+  retirement_reason: string | null;
   total_documents: number;
   approved_documents: number;
   blocking_documents: number;
@@ -205,16 +214,24 @@ const mapRow = (row: RegistryRow): OperationalAsset => ({
   status: row.status,
   accessAllowed: row.access_allowed,
   notes: row.notes || undefined,
+  active: row.is_active,
+  retiredAt: row.retired_at || undefined,
+  retirementReason: row.retirement_reason || undefined,
   totalDocuments: row.total_documents || 0,
   approvedDocuments: row.approved_documents || 0,
   blockingDocuments: row.blocking_documents || 0,
   nextExpiry: row.next_expiry || undefined,
 });
 
-export async function listAssets(projectKey: string, contractorKey?: string): Promise<OperationalAsset[]> {
-  const filters = [`project_key=eq.${encodeURIComponent(projectKey)}`, 'is_active=eq.true'];
+export async function listAssets(
+  projectKey: string,
+  contractorKey?: string,
+  includeHistorical = false,
+): Promise<OperationalAsset[]> {
+  const filters = [`project_key=eq.${encodeURIComponent(projectKey)}`];
+  if (!includeHistorical) filters.push('is_active=eq.true');
   if (contractorKey) filters.push(`contractor_key=eq.${encodeURIComponent(contractorKey)}`);
-  const rows = await request<RegistryRow[]>(`asset_registry?select=*&${filters.join('&')}&order=name.asc`);
+  const rows = await request<RegistryRow[]>(`asset_registry?select=*&${filters.join('&')}&order=is_active.desc,name.asc`);
   return rows.map(mapRow);
 }
 
@@ -276,12 +293,24 @@ export async function saveAsset(input: SaveAssetInput): Promise<void> {
   }
 }
 
+export async function retireAsset(id: string, reason: string): Promise<void> {
+  const cleanReason = reason.trim();
+  if (cleanReason.length < 3) throw new Error('Indica un motivo de retiro válido.');
+  await request<void>(`assets?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ is_active: false, retirement_reason: cleanReason }),
+  });
+}
+
+
 export async function listAssetRequirementTemplates(projectKey: string): Promise<AssetRequirementTemplate[]> {
   const projectId = await resolveProjectId(projectKey);
   const rows = await request<Array<{
     id: string; asset_type: AssetType; document_type: string; validity_days: number | null;
     blocks_access: boolean; is_required: boolean; review_checklist: unknown;
-  }>>(`asset_requirement_templates?select=*&project_id=eq.${projectId}&order=asset_type.asc,document_type.asc`);
+    is_active: boolean; retired_at: string | null; retirement_reason: string | null;
+  }>>(`asset_requirement_templates?select=*&project_id=eq.${projectId}&order=is_active.desc,asset_type.asc,document_type.asc`);
   return rows.map(row => ({
     id: row.id,
     type: row.asset_type,
@@ -290,12 +319,15 @@ export async function listAssetRequirementTemplates(projectKey: string): Promise
     blocksAccess: row.blocks_access,
     required: row.is_required,
     checklist: Array.isArray(row.review_checklist) ? row.review_checklist.map(String) : [],
+    active: row.is_active,
+    retiredAt: row.retired_at || undefined,
+    retirementReason: row.retirement_reason || undefined,
   }));
 }
 
 export async function saveAssetRequirementTemplate(
   projectKey: string,
-  input: Omit<AssetRequirementTemplate, 'id'> & { id?: string },
+  input: Omit<AssetRequirementTemplate, 'id' | 'active' | 'retiredAt' | 'retirementReason'> & { id?: string },
 ): Promise<void> {
   const projectId = await resolveProjectId(projectKey);
   const body = {
@@ -318,8 +350,14 @@ export async function saveAssetRequirementTemplate(
   }
 }
 
-export async function deleteAssetRequirementTemplate(id: string): Promise<void> {
-  await request<void>(`asset_requirement_templates?id=eq.${id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+export async function retireAssetRequirementTemplate(id: string, reason: string): Promise<void> {
+  const cleanReason = reason.trim();
+  if (cleanReason.length < 3) throw new Error('Indica un motivo de retiro válido.');
+  await request<void>(`asset_requirement_templates?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ is_active: false, retirement_reason: cleanReason }),
+  });
 }
 
 export async function listAssetRequirementStatuses(assetId: string): Promise<AssetRequirementStatus[]> {

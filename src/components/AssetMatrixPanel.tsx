@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Archive, Plus, RefreshCw } from 'lucide-react';
 import {
-  deleteAssetRequirementTemplate,
+  retireAssetRequirementTemplate,
   listAssetRequirementTemplates,
   saveAssetRequirementTemplate,
   type AssetRequirementTemplate,
@@ -55,15 +55,16 @@ export default function AssetMatrixPanel({
     } finally { setSaving(false); }
   };
 
-  const remove = async (item: AssetRequirementTemplate) => {
-    if (!window.confirm(`Eliminar el requisito “${item.documentType}” para ${typeLabel[item.type].toLowerCase()}?`)) return;
+  const retire = async (item: AssetRequirementTemplate) => {
+    const reason = window.prompt(`Motivo para retirar “${item.documentType}” de la matriz de ${typeLabel[item.type].toLowerCase()}:`);
+    if (!reason?.trim()) return;
     try {
-      await deleteAssetRequirementTemplate(item.id);
+      await retireAssetRequirementTemplate(item.id, reason);
       await load();
       onChanged?.();
-      showToast('Requisito eliminado. Los estados de activos fueron recalculados.', 'warning');
+      showToast('Requisito retirado. Se conserva como histórico y los activos fueron recalculados.', 'warning');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No fue posible eliminar el requisito.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible retirar el requisito.', 'error');
     }
   };
 
@@ -98,8 +99,8 @@ export default function AssetMatrixPanel({
       {loading ? <p className="text-sm text-gray-500">Cargando matriz…</p> : items.length === 0 ? (
         <div className="rounded-lg border p-4 text-sm text-gray-600">Aún no hay matriz configurada. Mientras no existan requisitos obligatorios, ningún activo puede habilitar acceso automáticamente.</div>
       ) : (
-        <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Tipo</th><th>Documento</th><th>Vigencia</th><th>Criterios</th><th></th></tr></thead><tbody>
-          {items.map(item => <tr key={item.id}><td>{typeLabel[item.type]}</td><td><strong>{item.documentType}</strong><small className="block text-gray-500">Obligatorio · bloquea acceso</small></td><td>{item.validityDays ? `${item.validityDays} días` : 'Sin plazo fijo'}</td><td>{item.checklist.length ? item.checklist.join(' · ') : 'Sin checklist adicional'}</td><td><button type="button" onClick={() => void remove(item)} aria-label="Eliminar requisito"><Trash2 /></button></td></tr>)}
+        <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Tipo</th><th>Documento</th><th>Vigencia</th><th>Criterios</th><th>Estado</th><th></th></tr></thead><tbody>
+          {items.map(item => <tr key={item.id}><td>{typeLabel[item.type]}</td><td><strong>{item.documentType}</strong><small className="block text-gray-500">Obligatorio · bloquea acceso</small></td><td>{item.validityDays ? `${item.validityDays} días` : 'Sin plazo fijo'}</td><td>{item.checklist.length ? item.checklist.join(' · ') : 'Sin checklist adicional'}</td><td>{item.active ? <strong className="text-green-700">Activo</strong> : <span className="text-gray-500">Histórico{item.retiredAt ? ` · ${item.retiredAt.slice(0, 10)}` : ''}{item.retirementReason ? <small className="block">{item.retirementReason}</small> : null}</span>}</td><td>{item.active && <button type="button" onClick={() => void retire(item)} aria-label="Retirar requisito" title="Retirar requisito"><Archive /></button>}</td></tr>)}
         </tbody></table></div>
       )}
     </section>
