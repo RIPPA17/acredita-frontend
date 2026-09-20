@@ -1003,11 +1003,11 @@ test('13b campana separa lectura de resolución y navega al evento persistente',
   await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
   const panel = page.getByLabel('Notificaciones del contratista');
   await expect(panel.getByText('Nueva respuesta de soporte', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Activa', { exact: true }).first()).toBeVisible();
+  await expect(panel.getByText('Informativa', { exact: true }).first()).toBeVisible();
 
   const supportItem = panel.locator('.notif2-item').filter({ hasText: 'Nueva respuesta de soporte' });
   await supportItem.click();
-  await expect(supportItem.getByText('Activa', { exact: true })).toBeVisible();
+  await expect(supportItem.getByText('Informativa', { exact: true })).toBeVisible();
   await expect.poll(() => ctx.mutations.some(item =>
     item.method === 'POST'
     && item.path === '/rest/v1/notification_reads'
