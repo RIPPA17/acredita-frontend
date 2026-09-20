@@ -261,7 +261,7 @@ export default function SubirTab({
 
   const seleccionarArchivo = (item: Row) => {
     if (modoConsulta) {
-      showToast('Este proyecto está finalizado y solo permite consultar su historial.', 'warning');
+      showToast('Este proyecto está en modo histórico y solo permite consultar su historial.', 'warning');
       return;
     }
     const correctingRenewal = item.doc?.versionEnTramite?.estado === 'rechazado';
@@ -338,7 +338,7 @@ export default function SubirTab({
       </section>
 
       <section className="doc-floating">
-        {modoConsulta && <div className="doc-historical-notice"><strong>Proyecto finalizado · modo consulta</strong><span>Puedes revisar requisitos, archivos y versiones históricas, pero no subir, corregir ni renovar documentos.</span></div>}
+        {modoConsulta && <div className="doc-historical-notice"><strong>Proyecto histórico · modo consulta</strong><span>Puedes revisar requisitos, archivos y versiones históricas, pero no subir, corregir ni renovar documentos.</span></div>}
         <div className="doc-summary">
           <div className="doc-metric action">
             <div className="doc-metric-label">Requieren acción</div>
@@ -364,7 +364,7 @@ export default function SubirTab({
 
         <div className="doc-notice">
           <div className="doc-notice-icon">!</div>
-          <div><b>{modoConsulta ? 'Modo consulta:' : 'Cómo funciona:'}</b> {modoConsulta ? 'este proyecto ya finalizó. Los estados se conservan como historial y las acciones de carga están deshabilitadas.' : 'cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".'}</div>
+          <div><b>{modoConsulta ? 'Modo consulta:' : 'Cómo funciona:'}</b> {modoConsulta ? 'este proyecto o la participación del contratista ya no está operativa. Los estados se conservan como historial y las acciones de carga están deshabilitadas.' : 'cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".'}</div>
         </div>
 
         <div className="doc-workspace">
