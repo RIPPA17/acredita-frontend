@@ -24,7 +24,7 @@ import ConfigTab from './contratista/ConfigTab';
 import OperationsTab from './contratista/OperationsTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
-import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
+import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, loadStoredNotifications, markNotificationKeysRead, saveNotificationPreferences, type StoredNotification } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getAsignacionProyecto, getServiciosProyecto, proyectoOperativoParaContratista } from '../data/operationalCore';
 
@@ -116,6 +116,7 @@ export default function ContratistaPortal() {
     trabajadores: [],
   };
   const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
+  const [notificacionesPersistidas, setNotificacionesPersistidas] = useState<StoredNotification[]>([]);
   const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
   const misProyectos = allProyectos
     .filter(p => p.contratistas.includes(contratistaLogueado.id))
@@ -130,23 +131,104 @@ export default function ContratistaPortal() {
     Promise.all([
       loadNotificationPreferences(session.profileId, session),
       loadReadNotificationKeys(session.profileId, session),
-    ]).then(([preferencias, leidas]) => {
+      loadStoredNotifications(session.profileId, session),
+    ]).then(([preferencias, leidas, persistidas]) => {
       if (cancelled) return;
       setPreferenciasNotificaciones(preferencias);
       setNotificacionesLeidas(leidas);
+      setNotificacionesPersistidas(persistidas);
     }).catch(() => {
-      if (!cancelled) setNotificacionesLeidas(new Set());
+      if (!cancelled) {
+        setNotificacionesLeidas(new Set());
+        setNotificacionesPersistidas([]);
+      }
     });
     return () => { cancelled = true; };
   }, [session?.profileId]);
 
-  const notificaciones = buildNotificacionesContratista({
+  React.useEffect(() => {
+    if (!showNotif || !session?.profileId) return;
+    let cancelled = false;
+    Promise.all([
+      loadStoredNotifications(session.profileId, session),
+      loadReadNotificationKeys(session.profileId, session),
+    ]).then(([persistidas, leidas]) => {
+      if (cancelled) return;
+      setNotificacionesPersistidas(persistidas);
+      setNotificacionesLeidas(leidas);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [showNotif, session?.profileId, dataRevision, dataSyncRevision]);
+
+  const actuales = buildNotificacionesContratista({
     contratista: contratistaLogueado,
     proyectos: misProyectos,
     requisitos: getRequisitos(),
     preferencias: preferenciasNotificaciones,
   });
-  const notificacionesSinLeer = notificaciones.filter(item => !notificacionesLeidas.has(item.id)).length;
+
+  const eventosDerivados = new Set([
+    'document_rejected',
+    'document_expired',
+    'document_expiring',
+    'document_in_review',
+    'accreditation_approved',
+    'worker_blocked',
+    'worker_enabled',
+    'worker_contract_expiring',
+    'worker_contract_expired',
+  ]);
+
+  const persistidasVisibles: NotificacionContratista[] = notificacionesPersistidas
+    .filter(item => item.status === 'resolved' || !eventosDerivados.has(item.eventType))
+    .map(item => {
+      const proyecto = misProyectos.find(candidate => candidate.id === item.projectKey);
+      const worker = item.workerRut
+        ? (contratistaLogueado.trabajadores || []).find(candidate => candidate.rut === item.workerRut)
+        : undefined;
+      const tipo = item.category === 'informativa' ? 'informativa' : item.category;
+      const prioridad = item.status === 'resolved'
+        ? 9
+        : item.severity === 'critical'
+          ? 0
+          : item.severity === 'action'
+            ? 1
+            : item.severity === 'preventive'
+              ? 2
+              : tipo === 'revision'
+                ? 3
+                : 5;
+      const destino = item.actionKind === 'trabajador' && worker
+        ? { tipo: 'trabajador' as const, trabajador: worker }
+        : item.actionKind === 'operacion' || item.actionKind === 'soporte'
+          ? { tipo: 'operacion' as const }
+          : item.actionKind === 'proyecto'
+            ? { tipo: 'proyecto' as const }
+            : item.actionKind === 'acreditacion'
+              ? { tipo: 'acreditacion' as const }
+              : { tipo: 'documentos' as const };
+      return {
+        id: item.key,
+        tipo,
+        proyectoId: proyecto?.id || item.projectKey || selectedProyectoId || misProyectos[0]?.id || '',
+        proyectoNombre: proyecto?.nombre || 'Proyecto',
+        titulo: item.title,
+        descripcion: item.body,
+        fecha: new Date(item.occurredAt).toLocaleString('es-CL'),
+        cta: item.actionLabel,
+        destino,
+        prioridad,
+        eventType: item.eventType,
+        nivel: item.severity,
+        situacion: item.status === 'resolved' ? 'resuelta' as const : 'activa' as const,
+        persistida: true,
+      };
+    });
+
+  const notificaciones = [...actuales, ...persistidasVisibles]
+    .filter(item => Boolean(item.proyectoId))
+    .sort((a, b) => a.prioridad - b.prioridad || (b.fecha || '').localeCompare(a.fecha || '') || a.titulo.localeCompare(b.titulo, 'es'));
+  const notificacionesSinLeer = notificaciones.filter(item => item.situacion !== 'resuelta' && !notificacionesLeidas.has(item.id)).length;
 
   const marcarLeidas = (ids: string[]) => {
     setNotificacionesLeidas(actual => {
@@ -167,12 +249,16 @@ export default function ContratistaPortal() {
 
   const navegarNotificacion = (notificacion: NotificacionContratista) => {
     marcarLeidas([notificacion.id]);
-    seleccionarProyecto(notificacion.proyectoId);
+    if (notificacion.proyectoId) seleccionarProyecto(notificacion.proyectoId);
     if (notificacion.destino.tipo === 'trabajador' && notificacion.destino.trabajador) {
       setSelectedWorkerForDocs(notificacion.destino.trabajador);
       setActiveTab('trabajadores');
     } else if (notificacion.destino.tipo === 'acreditacion') {
       setShowFichaAcreditacion(true);
+    } else if (notificacion.destino.tipo === 'operacion') {
+      setActiveTab('operacion');
+    } else if (notificacion.destino.tipo === 'proyecto') {
+      setActiveTab('proyectos');
     } else {
       setActiveTab('subir');
     }
@@ -615,7 +701,7 @@ export default function ContratistaPortal() {
 
             {showNotif && <div className="fixed inset-0 z-[299]" onClick={() => setShowNotif(false)} />}
             
-            {showNotif && <ContratistaNotificaciones contratistaNombre={contratistaLogueado.nombre} notificaciones={notificaciones} leidas={notificacionesLeidas} onMarcarLeida={id => marcarLeidas([id])} onMarcarTodas={() => marcarLeidas(notificaciones.map(item => item.id))} onAbrir={navegarNotificacion} />}
+            {showNotif && <ContratistaNotificaciones contratistaNombre={contratistaLogueado.nombre} notificaciones={notificaciones} leidas={notificacionesLeidas} onMarcarLeida={id => marcarLeidas([id])} onMarcarTodas={() => marcarLeidas(notificaciones.filter(item => item.situacion !== 'resuelta').map(item => item.id))} onAbrir={navegarNotificacion} />}
           </div>
           <button type="button" onClick={() => setActiveTab('config')} className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition" aria-label="Abrir configuración de cuenta" title="Configuración de cuenta">
             <div className="w-8 h-8 rounded-full bg-brown text-[var(--brown-text,white)] flex items-center justify-center text-[13.2px] font-semibold">
