@@ -348,6 +348,7 @@ export default function OperationsTab({
   const [expandedTicket, setExpandedTicket] = useState<string>();
   const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'normal' });
   const [savingTicket, setSavingTicket] = useState(false);
+  const requestedPlanId = new URLSearchParams(window.location.search).get('plan') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
@@ -369,6 +370,19 @@ export default function OperationsTab({
   };
 
   useEffect(() => { void load(); }, [project?.id]);
+
+  useEffect(() => {
+    if (!requestedPlanId || !project) return;
+    let cancelled = false;
+    getActionPlanContext(requestedPlanId)
+      .then(context => {
+        if (cancelled || !context) return;
+        setMode('evaluaciones');
+        setExpandedEvaluation(context.evaluationId);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [requestedPlanId, project?.id]);
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault();
@@ -437,7 +451,7 @@ export default function OperationsTab({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <strong className="text-navy">Evaluación {item.period_start} — {item.period_end}</strong>
-                    <div className="mt-1 text-sm text-gray-500">Puntaje total: {item.total_score}% · Riesgo {item.risk_level || 'sin clasificar'} · {item.status}</div>
+                    <div className="mt-1 text-sm text-gray-500">Puntaje total: {item.total_score}% · Riesgo {item.risk_level || 'sin clasificar'} · {item.status === 'cerrada' ? 'cerrada' : 'publicada'}</div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
                       <span className="rounded bg-cream2 px-2 py-1">Seguridad {item.safety_score}%</span>
                       <span className="rounded bg-cream2 px-2 py-1">Calidad {item.quality_score}%</span>
@@ -450,7 +464,8 @@ export default function OperationsTab({
                     {expandedEvaluation === item.id ? 'Ocultar planes' : 'Planes de acción'}
                   </button>
                 </div>
-                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} readOnly={readOnly} showToast={showToast} /></div>}
+                {item.status === 'cerrada' && <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600"><strong>Evaluación cerrada.</strong> Sus resultados y planes quedan conservados como historial.</div>}
+                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} readOnly={readOnly || item.status === 'cerrada'} focusPlanId={requestedPlanId} showToast={showToast} /></div>}
               </article>
             ))}
             {data.evaluations.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">Todavía no hay evaluaciones publicadas para este proyecto.</div>}
