@@ -309,6 +309,23 @@ function fixtures(role: Role, options: MockOptions) {
         resolved_at: null,
         occurrence_count: 1,
       },
+      ...(options.evaluationWorkflow ? [{
+        notification_key: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
+        event_type: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
+        category: 'revision',
+        severity: 'info',
+        status: 'active',
+        title: 'Plan de acción enviado a revisión',
+        body: 'Cerrar hallazgo de seguridad fue enviado a validación.',
+        action_label: 'Ver plan',
+        action_kind: 'operacion',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: null,
+        occurred_at: '2026-09-20T17:00:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      }] : []),
       {
         notification_key: 'payment_blocked:e2e-old',
         event_type: 'payment_blocked',
@@ -1146,6 +1163,20 @@ test('13c notificación documental abre el requisito exacto afectado', async ({ 
   await expect(page).toHaveURL(/\/contratista\/documentos\?.*proyecto=proyecto_piloto/);
   await expect(page).toHaveURL(/requisito=req_f30/);
   await expect(page.getByText('F30 / F31 SII', { exact: true }).first()).toBeVisible();
+});
+
+test('13d notificación de plan abre el plan de acción exacto', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true, evaluationWorkflow: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Plan de acción enviado a revisión' });
+  await item.getByRole('button', { name: 'Ver plan' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*plan=${ACTION_PLAN_REVIEW}`));
+  await expect(page.locator(`#action-plan-${ACTION_PLAN_REVIEW}`)).toBeVisible();
+  await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {
