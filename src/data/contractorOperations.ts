@@ -3,7 +3,7 @@ import type { ActionPlanRecord } from './supabaseOperations';
 
 export async function updateContractorActionPlan(
   planId: string,
-  status: Extract<ActionPlanRecord['status'], 'en_progreso' | 'completado'>,
+  status: Extract<ActionPlanRecord['status'], 'en_progreso' | 'en_revision'>,
   evidence?: string,
 ): Promise<void> {
   const session = await getSupabaseSessionForRequest();
