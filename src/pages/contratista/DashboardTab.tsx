@@ -325,7 +325,7 @@ export default function DashboardTab({
     <div className="inicio2-page">
       <section className="inicio2-hero">
         <div className="inicio2-hero-inner"><div><div className="inicio2-eyebrow">Portal contratista</div><h1>Inicio</h1><p>Revisa en segundos el estado de tu acreditación, los bloqueos que requieren atención y los próximos vencimientos de tu proyecto.</p></div>
-          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto activo</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativoParaContratista(proyecto, contratistaLogueado.id) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
+          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativoParaContratista(proyecto, contratistaLogueado.id) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
         </div>
       </section>
 
