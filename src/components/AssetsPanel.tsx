@@ -53,8 +53,11 @@ export default function AssetsPanel({
 
   const load = async () => {
     setLoading(true);
-    try { setAssets(await listAssets(project.id, contractorKey, true)); }
-    catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible cargar vehículos y equipos.', 'error'); }
+    try {
+      const next = await listAssets(project.id, contractorKey, true);
+      setAssets(next);
+      setSelectedAsset(current => current ? next.find(item => item.id === current.id) || current : undefined);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible cargar vehículos y equipos.', 'error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, [project.id, contractorKey]);
