@@ -24,6 +24,12 @@ const DOCUMENT_WORKER = '94000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V1 = '95000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V2 = '95000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
+const ASSET = 'b0000000-0000-4000-8000-000000000001';
+const ASSET_TEMPLATE_1 = 'b1000000-0000-4000-8000-000000000001';
+const ASSET_TEMPLATE_2 = 'b1000000-0000-4000-8000-000000000002';
+const ASSET_DOCUMENT = 'b2000000-0000-4000-8000-000000000001';
+const ASSET_VERSION_1 = 'b3000000-0000-4000-8000-000000000001';
+const ASSET_VERSION_2 = 'b3000000-0000-4000-8000-000000000002';
 
 type Role = 'admin' | 'mandante' | 'contratista';
 type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
@@ -36,6 +42,7 @@ type MockOptions = {
   categorizedWorker?: boolean;
   bulkReentry?: boolean;
   inactiveAccreditationOnActiveProject?: boolean;
+  assetLifecycle?: boolean;
 };
 
 function appSession(role: Role) {
@@ -83,7 +90,41 @@ function fixtures(role: Role, options: MockOptions) {
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: options.categorizedWorker ? ['altura'] : [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
       ...(options.historicalProject ? [{ id: REQ_COMPANY_OLD, project_id: PROJECT_OLD, integration_key: 'req_historico', name: 'Documento Histórico QA', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'por_obra', validity_days: null, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Requisito histórico', review_checklist: [], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 }] : []),
     ],
-    services: [{ id: SERVICE, accreditation_id: ACCREDITATION, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
+    services: [{ id: SERVICE, accreditation_id: ACCREDITATION, contratista_id: CONTRACTOR, integration_key: 'servicio_piloto', code: 'SRV-01', name: 'Servicio Piloto', category: 'Operación', contractor_contact: 'Jefe Contrato', mandante_contact: 'Administrador Contrato', starts_at: '2026-09-01', ends_at: null, status: 'activo', is_active: true }],
+    asset_registry: options.assetLifecycle ? [{
+      id: ASSET, integration_key: 'asset_excavadora_qa', project_key: 'proyecto_piloto', contractor_key: 'contratista_piloto_a',
+      service_key: 'servicio_piloto', accreditation_id: ACCREDITATION, service_id: SERVICE, asset_type: 'maquinaria',
+      identifier: 'EXC-001', name: 'Excavadora QA', brand: 'CAT', model: '320', year: 2025, owner_name: 'Contratista Piloto A',
+      operator_name: null, status: 'en_revision', access_allowed: false, notes: null, is_active: true,
+      total_documents: 2, approved_documents: 0, blocking_documents: 0, next_expiry: null,
+      retired_at: null, retired_by: null, retirement_reason: null, pending_documents: 2,
+      inspection_status: null, next_inspection_date: null, next_maintenance_date: null, active_operators: 0,
+      service_operational: true,
+    }] : [],
+    asset_requirement_templates: options.assetLifecycle ? [
+      { id: ASSET_TEMPLATE_1, project_id: PROJECT, asset_type: 'maquinaria', document_type: 'Revisión técnica', validity_days: 365, blocks_access: true, is_required: true, review_checklist: ['Documento vigente'], is_active: true },
+      { id: ASSET_TEMPLATE_2, project_id: PROJECT, asset_type: 'maquinaria', document_type: 'Permiso circulación', validity_days: 365, blocks_access: true, is_required: true, review_checklist: ['Identificación coincide'], is_active: true },
+    ] : [],
+    asset_requirement_statuses: options.assetLifecycle ? [
+      { asset_id: ASSET, project_key: 'proyecto_piloto', contractor_key: 'contratista_piloto_a', asset_type: 'maquinaria', template_id: ASSET_TEMPLATE_1, document_type: 'Revisión técnica', validity_days: 365, blocks_access: true, is_required: true, review_checklist: ['Documento vigente'], document_id: ASSET_DOCUMENT, document_name: 'revision-tecnica.pdf', issued_at: '2026-09-01', expires_at: '2027-09-01', rejection_reason: null, effective_status: 'en_revision', satisfied: false },
+      { asset_id: ASSET, project_key: 'proyecto_piloto', contractor_key: 'contratista_piloto_a', asset_type: 'maquinaria', template_id: ASSET_TEMPLATE_2, document_type: 'Permiso circulación', validity_days: 365, blocks_access: true, is_required: true, review_checklist: ['Identificación coincide'], document_id: null, document_name: null, issued_at: null, expires_at: null, rejection_reason: null, effective_status: 'pendiente', satisfied: false },
+    ] : [],
+    asset_documents: options.assetLifecycle ? [{
+      id: ASSET_DOCUMENT, asset_id: ASSET, document_type: 'Revisión técnica', document_name: 'revision-tecnica.pdf',
+      storage_bucket: 'asset-documents', storage_path: `${ASSET}/revision-tecnica.pdf`, status: 'en_revision',
+      issued_at: '2026-09-01', expires_at: '2027-09-01', rejection_reason: null,
+    }] : [],
+    asset_document_versions: options.assetLifecycle ? [
+      { id: ASSET_VERSION_2, asset_document_id: ASSET_DOCUMENT, version_number: 2, file_name: 'revision-tecnica-v2.pdf', mime_type: 'application/pdf', file_size: 204800, storage_bucket: 'asset-documents', storage_path: `${ASSET}/revision-tecnica-v2.pdf`, uploaded_at: '2026-09-20T12:00:00Z' },
+      { id: ASSET_VERSION_1, asset_document_id: ASSET_DOCUMENT, version_number: 1, file_name: 'revision-tecnica-v1.pdf', mime_type: 'application/pdf', file_size: 102400, storage_bucket: 'asset-documents', storage_path: `${ASSET}/revision-tecnica-v1.pdf`, uploaded_at: '2026-09-10T12:00:00Z' },
+    ] : [],
+    asset_inspections: [],
+    asset_maintenance: [],
+    asset_operator_candidates: options.assetLifecycle ? [{
+      worker_assignment_id: ASSIGNMENT, accreditation_id: ACCREDITATION, project_key: 'proyecto_piloto', contractor_key: 'contratista_piloto_a',
+      worker_id: WORKER, full_name: 'Trabajador Piloto', rut: '18.123.456-7', job_title: 'Operador', access_status: 'habilitado',
+    }] : [],
+    asset_operator_assignment_details: [],
     workers: options.emptyProject ? [] : [{
       id: WORKER,
       contratista_id: CONTRACTOR,
@@ -224,6 +265,22 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         let body: any = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
+        if (request.method() === 'PATCH' && table === 'assets' && options.assetLifecycle) {
+          const rows = data.asset_registry as any[];
+          const id = url.searchParams.get('id')?.replace(/^eq\./, '');
+          const current = rows.find(row => row.id === id);
+          if (current && body?.is_active === false) {
+            Object.assign(current, {
+              is_active: false,
+              status: 'inactivo',
+              access_allowed: false,
+              retirement_reason: body.retirement_reason,
+              retired_at: '2026-09-20T15:00:00Z',
+              active_operators: 0,
+            });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
         if (request.method() === 'POST' && table === 'workers') {
           const payload = Array.isArray(body) ? body : [body];
           const workerRows = data.workers as any[];
