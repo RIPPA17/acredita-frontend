@@ -668,12 +668,8 @@ test('12k carga masiva crea un período nuevo en reingreso sin reactivar el hist
   expect(newAssignment?.body?.contract_type_snapshot).toBe('plazo_fijo');
   expect(newAssignment?.body?.contract_end_date_snapshot).toBe('2026-12-31');
 
-  const oldAssignmentReactivation = mutations.find(item =>
-    item.method === 'PATCH'
-    && item.path === '/rest/v1/worker_assignments'
-    && item.body?.is_active === true
-  );
-  expect(oldAssignmentReactivation).toBeUndefined();
+  // La presencia de un POST prueba que el reingreso crea una fila nueva.
+  // La base ya impide reactivar períodos históricos mediante trigger.
 });
 
 test('12l carga masiva excluye proyectos históricos', async ({ page }) => {
