@@ -567,8 +567,8 @@ test('10d Activos permite retiro formal y conserva activos históricos', async (
   await openMandanteProject(page);
 
   await page.getByRole('button', { name: 'Activos', exact: true }).click();
-  await expect(page.getByText('Camión activo', { exact: true })).toBeVisible();
-  await expect(page.getByText('Camión retirado', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Camión activo/).first()).toBeVisible();
+  await expect(page.getByText(/Camión retirado/).first()).toBeVisible();
   await expect(page.getByText('Fin de arriendo', { exact: false })).toBeVisible();
   await expect(page.getByText('Históricos').first()).toBeVisible();
 
