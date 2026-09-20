@@ -1,14 +1,36 @@
 import { getSupabaseSessionForRequest, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './supabaseAuth';
 import { resolveAccreditation } from './supabaseAssets';
 
+export type EvaluationStatus = 'borrador' | 'publicada' | 'cerrada';
 export interface EvaluationRecord {
-  id: string; accreditation_id: string; period_start: string; period_end: string; status: string;
+  id: string; accreditation_id: string; period_start: string; period_end: string; status: EvaluationStatus;
   safety_score: number; quality_score: number; labor_score: number; compliance_score: number;
   total_score: number; risk_level: string; observations?: string;
+  evaluated_by?: string; published_at?: string; published_by?: string;
+  closed_at?: string; closed_by?: string; reopened_at?: string; reopened_by?: string; reopen_reason?: string;
+  created_at?: string; updated_at?: string;
 }
+export type ActionPlanStatus = 'pendiente' | 'en_progreso' | 'en_revision' | 'completado' | 'cancelado';
 export interface ActionPlanRecord {
   id: string; evaluation_id: string; title: string; description: string; owner_name?: string;
-  due_date?: string; status: 'pendiente' | 'en_progreso' | 'completado' | 'cancelado'; evidence?: string; completed_at?: string;
+  due_date?: string; status: ActionPlanStatus; evidence?: string; completed_at?: string;
+  submitted_at?: string; reviewed_at?: string; reviewed_by?: string; review_comment?: string;
+  created_at?: string; updated_at?: string;
+}
+export interface EvaluationEventRecord {
+  id: string; evaluation_id: string; event_type: 'creada' | 'actualizada' | 'publicada' | 'cerrada' | 'reabierta';
+  from_status?: string; to_status?: string; reason?: string; snapshot: Record<string, unknown>;
+  actor_profile_id?: string; created_at: string;
+}
+export interface ActionPlanEventRecord {
+  id: string; action_plan_id: string;
+  event_type: 'creado' | 'actualizado' | 'iniciado' | 'enviado_revision' | 'aprobado' | 'devuelto' | 'cancelado' | 'reabierto';
+  from_status?: string; to_status?: string; comment?: string; evidence_snapshot?: string;
+  actor_profile_id?: string; created_at: string;
+}
+export interface OperationAttachmentRecord {
+  id: string; action_plan_id?: string; file_name: string; mime_type: string; file_size: number;
+  storage_bucket: string; storage_path: string; uploaded_by: string; created_at: string;
 }
 export interface PaymentRecord {
   id: string; accreditation_id: string; period_start: string; period_end: string; amount?: number; currency: string;
@@ -64,38 +86,65 @@ export async function resolveProjectId(projectKey: string): Promise<string> {
 export async function loadOperations(projectKey: string) {
   const projectId = await resolveProjectId(projectKey);
   const accreditations = await request<Array<{ id: string }>>(`accreditations?select=id&project_id=eq.${projectId}`);
-  const ids = new Set(accreditations.map(item => item.id));
-  const [allEvaluations, allPayments, tickets] = await Promise.all([
-    request<EvaluationRecord[]>('contractor_evaluations?select=*&order=period_end.desc'),
-    request<PaymentRecord[]>('payment_cases?select=*&order=period_end.desc'),
+  const ids = accreditations.map(item => item.id);
+  const filter = ids.length ? `&accreditation_id=in.(${ids.join(',')})` : '';
+  const [evaluations, payments, tickets] = await Promise.all([
+    ids.length ? request<EvaluationRecord[]>(`contractor_evaluations?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
+    ids.length ? request<PaymentRecord[]>(`payment_cases?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     request<TicketRecord[]>(`support_tickets?select=*&project_id=eq.${projectId}&order=created_at.desc`),
   ]);
-  return {
-    evaluations: allEvaluations.filter(item => ids.has(item.accreditation_id)),
-    payments: allPayments.filter(item => ids.has(item.accreditation_id)),
-    tickets,
-  };
+  return { evaluations, payments, tickets };
 }
 
-export async function createEvaluation(projectKey: string, contractorKey: string, input: {
+export type EvaluationInput = {
   start: string; end: string; safety: number; quality: number; labor: number; compliance: number; observations?: string;
-}) {
+};
+
+export async function createEvaluation(projectKey: string, contractorKey: string, input: EvaluationInput): Promise<EvaluationRecord> {
+  const session = await getSupabaseSessionForRequest();
+  if (!session) throw new Error('Tu sesión expiró.');
   const accreditation_id = await resolveAccreditation(projectKey, contractorKey);
-  await request<void>('contractor_evaluations', {
-    method: 'POST', headers: { Prefer: 'return=minimal' },
+  const rows = await request<EvaluationRecord[]>('contractor_evaluations', {
+    method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
-      accreditation_id, period_start: input.start, period_end: input.end, status: 'publicada',
+      accreditation_id, period_start: input.start, period_end: input.end, status: 'borrador',
       safety_score: input.safety, quality_score: input.quality, labor_score: input.labor,
       compliance_score: input.compliance, observations: input.observations || null,
+      evaluated_by: session.profileId,
     }),
   });
+  if (!rows[0]) throw new Error('No fue posible crear la evaluación.');
+  return rows[0];
+}
+
+export async function updateEvaluationDraft(id: string, input: EvaluationInput): Promise<void> {
+  await request<void>(`contractor_evaluations?id=eq.${id}&status=eq.borrador`, {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      period_start: input.start, period_end: input.end,
+      safety_score: input.safety, quality_score: input.quality,
+      labor_score: input.labor, compliance_score: input.compliance,
+      observations: input.observations || null,
+    }),
+  });
+}
+
+export async function setEvaluationStatus(id: string, status: Extract<EvaluationStatus, 'publicada' | 'cerrada'>, reason?: string): Promise<void> {
+  await request<void>('rpc/set_contractor_evaluation_status', {
+    method: 'POST',
+    body: JSON.stringify({ p_evaluation_id: id, p_status: status, p_reason: reason?.trim() || null }),
+  });
+}
+
+export async function listEvaluationEvents(evaluationId: string): Promise<EvaluationEventRecord[]> {
+  return request<EvaluationEventRecord[]>(`contractor_evaluation_events?select=*&evaluation_id=eq.${evaluationId}&order=created_at.desc`);
 }
 
 export async function listActionPlans(evaluationId: string): Promise<ActionPlanRecord[]> {
   return request<ActionPlanRecord[]>(`evaluation_action_plans?select=*&evaluation_id=eq.${evaluationId}&order=due_date.asc.nullslast,created_at.asc`);
 }
 
-export async function createActionPlan(evaluationId: string, input: { title: string; description: string; ownerName?: string; dueDate?: string }) {
+export async function createActionPlan(evaluationId: string, input: { title: string; description: string; ownerName: string; dueDate: string }) {
   const session = await getSupabaseSessionForRequest();
   if (!session) throw new Error('Tu sesión expiró.');
   await request<void>('evaluation_action_plans', {
@@ -104,19 +153,87 @@ export async function createActionPlan(evaluationId: string, input: { title: str
       evaluation_id: evaluationId,
       title: input.title.trim(),
       description: input.description.trim(),
-      owner_name: input.ownerName || null,
-      due_date: input.dueDate || null,
+      owner_name: input.ownerName.trim(),
+      due_date: input.dueDate,
       status: 'pendiente',
       created_by: session.profileId,
     }),
   });
 }
 
-export async function updateActionPlan(id: string, status: ActionPlanRecord['status'], evidence?: string) {
-  await request<void>(`evaluation_action_plans?id=eq.${id}`, {
-    method: 'PATCH', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ status, evidence: evidence || null, completed_at: status === 'completado' ? new Date().toISOString() : null }),
+export async function reviewActionPlan(id: string, decision: 'aprobar' | 'devolver' | 'cancelar' | 'reabrir', comment?: string): Promise<void> {
+  await request<void>('rpc/review_evaluation_action_plan', {
+    method: 'POST',
+    body: JSON.stringify({ p_plan_id: id, p_decision: decision, p_comment: comment?.trim() || null }),
   });
+}
+
+export async function listActionPlanEvents(actionPlanId: string): Promise<ActionPlanEventRecord[]> {
+  return request<ActionPlanEventRecord[]>(`evaluation_action_plan_events?select=*&action_plan_id=eq.${actionPlanId}&order=created_at.desc`);
+}
+
+export async function getActionPlanContext(actionPlanId: string): Promise<{ evaluationId: string } | undefined> {
+  const rows = await request<Array<{ evaluation_id: string }>>(`evaluation_action_plans?select=evaluation_id&id=eq.${actionPlanId}&limit=1`);
+  return rows[0] ? { evaluationId: rows[0].evaluation_id } : undefined;
+}
+
+export async function listActionPlanAttachments(actionPlanId: string): Promise<OperationAttachmentRecord[]> {
+  return request<OperationAttachmentRecord[]>(`operation_attachments?select=*&action_plan_id=eq.${actionPlanId}&order=created_at.asc`);
+}
+
+export async function uploadActionPlanAttachment(actionPlanId: string, file: File): Promise<void> {
+  const allowed = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ];
+  if (!allowed.includes(file.type) || file.size < 1 || file.size > 20 * 1024 * 1024) {
+    throw new Error('Usa PDF, JPG, PNG o XLSX de hasta 20 MB.');
+  }
+  const session = await getSupabaseSessionForRequest();
+  if (!session) throw new Error('Tu sesión expiró.');
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${session.profileId}/action-plans/${actionPlanId}/${crypto.randomUUID()}-${safe}`;
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  const uploaded = await fetch(`${SUPABASE_URL}/storage/v1/object/operation-files/${encodedPath}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session._supabase.accessToken}`,
+      'Content-Type': file.type,
+    },
+    body: file,
+  });
+  if (!uploaded.ok) {
+    const body = await uploaded.json().catch(() => ({}));
+    throw new Error(body?.message || 'No fue posible subir la evidencia.');
+  }
+  await request<void>('operation_attachments', {
+    method: 'POST', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      action_plan_id: actionPlanId,
+      file_name: file.name,
+      mime_type: file.type,
+      file_size: file.size,
+      storage_bucket: 'operation-files',
+      storage_path: path,
+      uploaded_by: session.profileId,
+    }),
+  });
+}
+
+export async function openOperationAttachment(item: OperationAttachmentRecord): Promise<void> {
+  const session = await getSupabaseSessionForRequest();
+  if (!session) throw new Error('Tu sesión expiró.');
+  const encodedPath = item.storage_path.split('/').map(encodeURIComponent).join('/');
+  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/authenticated/${encodeURIComponent(item.storage_bucket)}/${encodedPath}`, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${session._supabase.accessToken}` },
+  });
+  if (!response.ok) throw new Error('No fue posible abrir la evidencia.');
+  const url = URL.createObjectURL(await response.blob());
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export async function createPayment(projectKey: string, contractorKey: string, input: {
