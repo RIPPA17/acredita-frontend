@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Archive, Banknote, ClipboardCheck, Headphones, History, Pencil, Plug, Plus, RefreshCw, RotateCcw, Send, X } from 'lucide-react';
+import { Archive, Banknote, ClipboardCheck, Headphones, Pencil, Plug, Plus, RefreshCw, RotateCcw, Send, X } from 'lucide-react';
 import type { Contratista, Proyecto } from '../types';
 import {
   createEvaluation,
@@ -265,25 +265,30 @@ export default function OperationsCenter({
 
     {mode === 'integracion' ? <IntegrationsPanel projectKey={project.id} showToast={showToast} /> : <div className="mt-5 mandante-proyectos-table-wrap">
       <table><thead><tr><th>Tipo</th><th>Período / asunto</th><th>Resultado</th><th>Estado y acciones</th></tr></thead><tbody>
-        {mode === 'evaluacion' && data.evaluations.map(item => <tr key={item.id}>
-          <td>Evaluación</td>
-          <td>{item.period_start} — {item.period_end}{item.observations && <small className="block text-gray-500">{item.observations}</small>}</td>
-          <td>{item.total_score}% · Riesgo {item.risk_level}</td>
-          <td>
-            <strong className="block capitalize">{evaluationLabel[item.status]}</strong>
-            <div className="mt-1 flex flex-wrap gap-2">
-              <button type="button" onClick={() => openDetail(`eval:${item.id}`)}>{expanded === `eval:${item.id}` ? 'Ocultar detalle' : 'Detalle y planes'}</button>
-              {!readOnlyProject && item.status === 'borrador' && <button type="button" onClick={() => editDraft(item)}><Pencil size={13}/>Editar</button>}
-              {!readOnlyProject && item.status === 'borrador' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'publicada')}><Send size={13}/>Publicar</button>}
-              {!readOnlyProject && item.status === 'publicada' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'cerrada')}><Archive size={13}/>Cerrar</button>}
-              {!readOnlyProject && item.status === 'cerrada' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'publicada')}><RotateCcw size={13}/>Reabrir</button>}
-            </div>
-            {expanded === `eval:${item.id}` && <div className="mt-4 min-w-[520px]">
-              <EvaluationActionPlans evaluationId={item.id} evaluationStatus={item.status} readOnly={readOnlyProject} showToast={showToast} onChanged={() => void load()} />
-              <EvaluationHistory evaluationId={item.id} showToast={showToast} />
-            </div>}
-          </td>
-        </tr>)}
+        {mode === 'evaluacion' && data.evaluations.map(item => {
+          const evaluationReadOnly = readOnlyProject || item.accreditation_active === false;
+          const contractorName = contractors.find(candidate => candidate.id === item.contratista_id)?.nombre || 'Contratista';
+          return <tr key={item.id}>
+            <td>Evaluación<small className="block text-gray-500">{contractorName}</small></td>
+            <td>{item.period_start} — {item.period_end}{item.observations && <small className="block text-gray-500">{item.observations}</small>}</td>
+            <td>{item.total_score}% · Riesgo {item.risk_level}</td>
+            <td>
+              <strong className="block capitalize">{evaluationLabel[item.status]}</strong>
+              {item.accreditation_active === false && <small className="block text-gray-500">Relación histórica · solo consulta</small>}
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button type="button" onClick={() => openDetail(`eval:${item.id}`)}>{expanded === `eval:${item.id}` ? 'Ocultar detalle' : 'Detalle y planes'}</button>
+                {!evaluationReadOnly && item.status === 'borrador' && <button type="button" onClick={() => editDraft(item)}><Pencil size={13}/>Editar</button>}
+                {!evaluationReadOnly && item.status === 'borrador' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'publicada')}><Send size={13}/>Publicar</button>}
+                {!evaluationReadOnly && item.status === 'publicada' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'cerrada')}><Archive size={13}/>Cerrar</button>}
+                {!evaluationReadOnly && item.status === 'cerrada' && <button type="button" disabled={evaluationSavingId===item.id} onClick={() => void changeEvaluation(item,'publicada')}><RotateCcw size={13}/>Reabrir</button>}
+              </div>
+              {expanded === `eval:${item.id}` && <div className="mt-4 min-w-[520px]">
+                <EvaluationActionPlans evaluationId={item.id} evaluationStatus={item.status} readOnly={evaluationReadOnly} showToast={showToast} onChanged={() => void load()} />
+                <EvaluationHistory evaluationId={item.id} showToast={showToast} />
+              </div>}
+            </td>
+          </tr>;
+        })}
         {mode === 'pago' && data.payments.map(item => <tr key={item.id}><td>Pago</td><td>{item.period_start} — {item.period_end}{item.invoice_number && <small className="block text-gray-500">Ref. {item.invoice_number}</small>}</td><td>{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.block_reason && <small className="block text-red-700">{item.block_reason}</small>}</td><td><strong className="block capitalize">{item.status}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`pay:${item.id}`)}>Aprobaciones</button>{!readOnlyProject && item.status === 'liberado' && <button type="button" onClick={() => void confirmPaid(item.id)}>Marcar pagado</button>}</div>{expanded === `pay:${item.id}` && <PaymentApprovals paymentId={item.id} showToast={showToast} onChanged={() => void load()} />}</td></tr>)}
         {mode === 'ticket' && data.tickets.map(item => <tr key={item.id}><td>{item.category}</td><td>{item.subject}<small className="block text-gray-500">{item.resolution || item.description}</small></td><td>{item.priority}</td><td><strong className="block capitalize">{item.status.replace('_', ' ')}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`ticket:${item.id}`)}>Conversación</button>{!readOnlyProject && <><button type="button" onClick={() => void changeTicket(item.id, 'en_progreso')}>Tomar</button><button type="button" onClick={() => void changeTicket(item.id, 'resuelto')}>Resolver</button><button type="button" onClick={() => void changeTicket(item.id, 'cerrado')}>Cerrar</button></>}</div>{expanded === `ticket:${item.id}` && <TicketConversation ticketId={item.id} showToast={showToast} />}</td></tr>)}
       </tbody></table>
