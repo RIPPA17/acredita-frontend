@@ -1,23 +1,33 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   Banknote,
-  CheckCircle2,
   ClipboardCheck,
+  Clock3,
+  FileText,
   Headphones,
+  History,
   MessageSquare,
   PlayCircle,
   RefreshCw,
   Send,
+  Upload,
 } from 'lucide-react';
 import type { Contratista, Proyecto } from '../../types';
 import {
   createTicket,
+  getActionPlanContext,
+  listActionPlanAttachments,
+  listActionPlanEvents,
   listActionPlans,
   listTicketMessages,
   loadOperations,
+  openOperationAttachment,
   sendTicketMessage,
+  uploadActionPlanAttachment,
+  type ActionPlanEventRecord,
   type ActionPlanRecord,
   type EvaluationRecord,
+  type OperationAttachmentRecord,
   type PaymentRecord,
   type TicketMessageRecord,
   type TicketRecord,
@@ -50,22 +60,31 @@ const ticketLabel: Record<string, string> = {
 const planLabel: Record<ActionPlanRecord['status'], string> = {
   pendiente: 'Pendiente',
   en_progreso: 'En progreso',
+  en_revision: 'En revisión',
   completado: 'Completado',
   cancelado: 'Cancelado',
 };
 
+const planOverdue = (item: ActionPlanRecord) =>
+  Boolean(item.due_date && item.due_date < new Date().toISOString().slice(0, 10) && !['completado', 'cancelado'].includes(item.status));
+
 function ContractorActionPlans({
   evaluationId,
   readOnly = false,
+  focusPlanId,
   showToast,
 }: {
   evaluationId: string;
   readOnly?: boolean;
+  focusPlanId?: string;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [items, setItems] = useState<ActionPlanRecord[]>([]);
+  const [events, setEvents] = useState<Record<string, ActionPlanEventRecord[]>>({});
+  const [attachments, setAttachments] = useState<Record<string, OperationAttachmentRecord[]>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string>();
+  const [uploadingId, setUploadingId] = useState<string>();
   const [evidence, setEvidence] = useState<Record<string, string>>({});
 
   const load = async () => {
@@ -80,6 +99,13 @@ function ContractorActionPlans({
         });
         return copy;
       });
+      const details = await Promise.all(next.map(async item => ({
+        id: item.id,
+        events: await listActionPlanEvents(item.id),
+        attachments: await listActionPlanAttachments(item.id),
+      })));
+      setEvents(Object.fromEntries(details.map(item => [item.id, item.events])));
+      setAttachments(Object.fromEntries(details.map(item => [item.id, item.attachments])));
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible cargar los planes de acción.', 'error');
     } finally {
@@ -89,27 +115,28 @@ function ContractorActionPlans({
 
   useEffect(() => { void load(); }, [evaluationId]);
 
-  const change = async (item: ActionPlanRecord, status: 'en_progreso' | 'completado') => {
+  useEffect(() => {
+    if (!focusPlanId || loading) return;
+    const target = document.getElementById(`action-plan-${focusPlanId}`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusPlanId, loading, items.length]);
+
+  const start = async (item: ActionPlanRecord) => {
     if (readOnly) return;
-    const comment = evidence[item.id]?.trim() || '';
-    if (status === 'completado' && comment.length < 3) {
-      showToast('Agrega evidencia o un comentario de cierre antes de completar el plan.', 'warning');
-      return;
-    }
     setSavingId(item.id);
     try {
-      await updateContractorActionPlan(item.id, status, comment || undefined);
+      await updateContractorActionPlan(item.id, 'en_progreso', evidence[item.id]?.trim() || undefined);
       await load();
-      showToast(status === 'completado' ? 'Plan de acción completado con evidencia.' : 'Plan de acción marcado en progreso.');
+      showToast('Plan de acción iniciado.');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No fue posible actualizar el plan de acción.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible iniciar el plan.', 'error');
     } finally {
       setSavingId(undefined);
     }
   };
 
   const saveEvidence = async (item: ActionPlanRecord) => {
-    if (readOnly) return;
+    if (readOnly || item.status !== 'en_progreso') return;
     const comment = evidence[item.id]?.trim() || '';
     if (!comment) {
       showToast('Escribe una evidencia o comentario antes de guardar.', 'warning');
@@ -119,71 +146,127 @@ function ContractorActionPlans({
     try {
       await updateContractorActionPlan(item.id, 'en_progreso', comment);
       await load();
-      showToast('Evidencia guardada.');
+      showToast('Avance guardado.');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No fue posible guardar la evidencia.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible guardar el avance.', 'error');
     } finally {
       setSavingId(undefined);
     }
   };
 
+  const submitForReview = async (item: ActionPlanRecord) => {
+    if (readOnly || !['pendiente', 'en_progreso'].includes(item.status)) return;
+    const comment = evidence[item.id]?.trim() || '';
+    const fileCount = (attachments[item.id] || []).length;
+    if (comment.length < 3 && fileCount === 0) {
+      showToast('Agrega un comentario o archivo de evidencia antes de enviar a revisión.', 'warning');
+      return;
+    }
+    setSavingId(item.id);
+    try {
+      await updateContractorActionPlan(item.id, 'en_revision', comment || undefined);
+      await load();
+      showToast('Evidencia enviada a revisión. Mandante/Acredita debe validar el cierre.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible enviar el plan a revisión.', 'error');
+    } finally {
+      setSavingId(undefined);
+    }
+  };
+
+  const uploadEvidence = async (item: ActionPlanRecord, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || readOnly || !['pendiente', 'en_progreso'].includes(item.status)) return;
+    setUploadingId(item.id);
+    try {
+      await uploadActionPlanAttachment(item.id, file);
+      await load();
+      showToast('Archivo de evidencia adjuntado.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible adjuntar la evidencia.', 'error');
+    } finally {
+      setUploadingId(undefined);
+    }
+  };
+
+  const openAttachment = async (item: OperationAttachmentRecord) => {
+    try { await openOperationAttachment(item); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible abrir la evidencia.', 'error'); }
+  };
+
   if (loading) return <div className="rounded-lg border p-3 text-sm text-gray-500">Cargando planes de acción…</div>;
   if (items.length === 0) return <div className="rounded-lg border p-3 text-sm text-gray-500">Esta evaluación no tiene planes de acción asociados.</div>;
 
-  return (
-    <div className="space-y-3">
-      {items.map(item => {
-        const editable = !readOnly && (item.status === 'pendiente' || item.status === 'en_progreso');
-        return (
-          <div key={item.id} className="rounded-xl border border-cream3 bg-white p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong className="text-navy">{item.title}</strong>
-                  <span className="rounded-full bg-cream2 px-2 py-0.5 text-[11px] font-semibold text-gray-600">{planLabel[item.status]}</span>
-                </div>
-                <p className="mt-1 text-sm text-gray-600">{item.description}</p>
-                <small className="mt-1 block text-gray-500">
-                  {item.owner_name ? `Responsable: ${item.owner_name}` : 'Sin responsable definido'}
-                  {item.due_date ? ` · vence ${item.due_date}` : ''}
-                </small>
-              </div>
-              {!readOnly && item.status === 'pendiente' && (
-                <button type="button" className="btn btn-secondary" disabled={savingId === item.id} onClick={() => void change(item, 'en_progreso')}>
-                  <PlayCircle size={15} /> Iniciar
-                </button>
-              )}
+  return <div className="space-y-3">
+    {items.map(item => {
+      const editable = !readOnly && ['pendiente', 'en_progreso'].includes(item.status);
+      const overdue = planOverdue(item);
+      const focused = focusPlanId === item.id;
+      return <div id={`action-plan-${item.id}`} key={item.id} className={`rounded-xl border bg-white p-4 ${focused ? 'ring-2 ring-brown/40' : 'border-cream3'}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <strong className="text-navy">{item.title}</strong>
+              <span className="rounded-full bg-cream2 px-2 py-0.5 text-[11px] font-semibold text-gray-600">{planLabel[item.status]}</span>
+              {overdue && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700"><Clock3 size={11}/>Vencido</span>}
             </div>
-
-            {editable && (
-              <div className="mt-3 rounded-lg bg-cream2/60 p-3">
-                <label className="block text-xs font-semibold text-gray-600">Evidencia o comentario de avance</label>
-                <textarea
-                  value={evidence[item.id] || ''}
-                  maxLength={4000}
-                  onChange={event => setEvidence(current => ({ ...current, [item.id]: event.target.value }))}
-                  className="form-input mt-1 min-h-[84px] w-full"
-                  placeholder="Describe la acción realizada, adjunta una referencia o deja el comentario de cierre…"
-                />
-                <div className="mt-2 flex flex-wrap justify-end gap-2">
-                  <button type="button" className="btn btn-secondary" disabled={savingId === item.id || !(evidence[item.id] || '').trim()} onClick={() => void saveEvidence(item)}>Guardar evidencia</button>
-                  <button type="button" className="btn btn-primary" disabled={savingId === item.id || (evidence[item.id] || '').trim().length < 3} onClick={() => void change(item, 'completado')}>
-                    <CheckCircle2 size={15} /> Completar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {!editable && item.evidence && (
-              <div className="mt-3 rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-800">
-                <strong>Evidencia:</strong> {item.evidence}
-              </div>
-            )}
+            <p className="mt-1 text-sm text-gray-600">{item.description}</p>
+            <small className="mt-1 block text-gray-500">
+              {item.owner_name ? `Responsable: ${item.owner_name}` : 'Sin responsable definido'}
+              {item.due_date ? ` · vence ${item.due_date}` : ''}
+            </small>
           </div>
-        );
-      })}
-    </div>
-  );
+          {!readOnly && item.status === 'pendiente' && <button type="button" className="btn btn-secondary" disabled={savingId === item.id} onClick={() => void start(item)}><PlayCircle size={15}/>Iniciar</button>}
+        </div>
+
+        {item.review_comment && <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"><strong>Observación del revisor:</strong> {item.review_comment}</div>}
+
+        {editable && <div className="mt-3 rounded-lg bg-cream2/60 p-3">
+          <label className="block text-xs font-semibold text-gray-600">Evidencia o comentario de avance</label>
+          <textarea
+            value={evidence[item.id] || ''}
+            maxLength={4000}
+            onChange={event => setEvidence(current => ({ ...current, [item.id]: event.target.value }))}
+            className="form-input mt-1 min-h-[84px] w-full"
+            placeholder="Describe la acción realizada, cambios aplicados o referencia de la evidencia…"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <label className="btn btn-secondary cursor-pointer">
+              <Upload size={15}/> {uploadingId === item.id ? 'Subiendo…' : 'Adjuntar evidencia'}
+              <input
+                type="file"
+                className="sr-only"
+                disabled={uploadingId === item.id}
+                accept=".pdf,.jpg,.jpeg,.png,.xlsx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={event => void uploadEvidence(item, event)}
+              />
+            </label>
+            {item.status === 'en_progreso' && <button type="button" className="btn btn-secondary" disabled={savingId === item.id || !(evidence[item.id] || '').trim()} onClick={() => void saveEvidence(item)}>Guardar avance</button>}
+            <button type="button" className="btn btn-primary" disabled={savingId === item.id || uploadingId === item.id} onClick={() => void submitForReview(item)}><Send size={15}/>Enviar a revisión</button>
+          </div>
+        </div>}
+
+        {(attachments[item.id] || []).length > 0 && <div className="mt-3 flex flex-wrap gap-2">
+          {(attachments[item.id] || []).map(file => <button key={file.id} type="button" className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs text-navy" onClick={() => void openAttachment(file)}><FileText size={12}/>{file.file_name}</button>)}
+        </div>}
+
+        {!editable && item.evidence && <div className="mt-3 rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-800"><strong>Evidencia:</strong> {item.evidence}</div>}
+        {item.status === 'en_revision' && <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800"><strong>Esperando validación.</strong> Mandante/Acredita debe aprobar o devolver la evidencia; el Contratista no puede cerrar el plan por sí mismo.</div>}
+        {item.status === 'completado' && <div className="mt-3 rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-800"><strong>Cierre validado.</strong>{item.reviewed_at ? ` Revisado ${new Date(item.reviewed_at).toLocaleString('es-CL')}.` : ''}</div>}
+        {item.status === 'cancelado' && <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600"><strong>Plan cancelado.</strong>{item.review_comment ? ` ${item.review_comment}` : ''}</div>}
+
+        {(events[item.id] || []).length > 0 && <details className="mt-3">
+          <summary className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-600"><History size={13}/>Historial · {(events[item.id] || []).length}</summary>
+          <div className="mt-2 space-y-1">
+            {(events[item.id] || []).map(event => <div key={event.id} className="rounded bg-gray-50 px-2 py-1 text-xs text-gray-600">
+              <strong className="capitalize">{event.event_type.replaceAll('_',' ')}</strong> · {new Date(event.created_at).toLocaleString('es-CL')}{event.comment ? ` · ${event.comment}` : ''}
+            </div>)}
+          </div>
+        </details>}
+      </div>;
+    })}
+  </div>;
 }
 
 function ContractorTicketConversation({
@@ -265,6 +348,9 @@ export default function OperationsTab({
   const [expandedTicket, setExpandedTicket] = useState<string>();
   const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'normal' });
   const [savingTicket, setSavingTicket] = useState(false);
+  const operationParams = new URLSearchParams(window.location.search);
+  const requestedPlanId = operationParams.get('plan') || undefined;
+  const requestedEvaluationId = operationParams.get('evaluacion') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
@@ -286,6 +372,26 @@ export default function OperationsTab({
   };
 
   useEffect(() => { void load(); }, [project?.id]);
+
+  useEffect(() => {
+    if (requestedEvaluationId && project) {
+      setMode('evaluaciones');
+      setExpandedEvaluation(requestedEvaluationId);
+    }
+  }, [requestedEvaluationId, project?.id]);
+
+  useEffect(() => {
+    if (!requestedPlanId || !project) return;
+    let cancelled = false;
+    getActionPlanContext(requestedPlanId)
+      .then(context => {
+        if (cancelled || !context) return;
+        setMode('evaluaciones');
+        setExpandedEvaluation(context.evaluationId);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [requestedPlanId, project?.id]);
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault();
@@ -354,7 +460,7 @@ export default function OperationsTab({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <strong className="text-navy">Evaluación {item.period_start} — {item.period_end}</strong>
-                    <div className="mt-1 text-sm text-gray-500">Puntaje total: {item.total_score}% · Riesgo {item.risk_level || 'sin clasificar'} · {item.status}</div>
+                    <div className="mt-1 text-sm text-gray-500">Puntaje total: {item.total_score}% · Riesgo {item.risk_level || 'sin clasificar'} · {item.status === 'cerrada' ? 'cerrada' : 'publicada'}</div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
                       <span className="rounded bg-cream2 px-2 py-1">Seguridad {item.safety_score}%</span>
                       <span className="rounded bg-cream2 px-2 py-1">Calidad {item.quality_score}%</span>
@@ -367,7 +473,8 @@ export default function OperationsTab({
                     {expandedEvaluation === item.id ? 'Ocultar planes' : 'Planes de acción'}
                   </button>
                 </div>
-                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} readOnly={readOnly} showToast={showToast} /></div>}
+                {item.status === 'cerrada' && <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600"><strong>Evaluación cerrada.</strong> Sus resultados y planes quedan conservados como historial.</div>}
+                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} readOnly={readOnly || item.status === 'cerrada'} focusPlanId={requestedPlanId} showToast={showToast} /></div>}
               </article>
             ))}
             {data.evaluations.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">Todavía no hay evaluaciones publicadas para este proyecto.</div>}

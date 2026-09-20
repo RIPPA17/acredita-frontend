@@ -27,7 +27,7 @@ function session() {
   };
 }
 
-function fixtures() {
+function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
   return {
     profiles: [{ id: PROFILE, full_name: 'Contratista Operaciones QA' }],
     acredita_memberships: [],
@@ -68,9 +68,35 @@ function fixtures() {
       description: 'Adjuntar evidencia de la medida correctiva.',
       owner_name: 'Jefe de terreno',
       due_date: '2026-09-30',
-      status: 'pendiente',
-      evidence: null,
-      completed_at: null,
+      status: options.planStatus || 'pendiente',
+      evidence: options.planStatus === 'en_revision' || options.planStatus === 'completado' ? 'Evidencia enviada por contratista.' : null,
+      review_comment: options.reviewComment || null,
+      submitted_at: options.planStatus === 'en_revision' ? '2026-09-20T12:00:00Z' : null,
+      reviewed_at: options.planStatus === 'completado' ? '2026-09-20T15:00:00Z' : null,
+      completed_at: options.planStatus === 'completado' ? '2026-09-20T15:00:00Z' : null,
+    }],
+    evaluation_action_plan_events: [{
+      id: '72000000-0000-4000-8000-000000000001',
+      action_plan_id: PLAN,
+      event_type: 'creado',
+      from_status: null,
+      to_status: 'pendiente',
+      comment: null,
+      evidence_snapshot: null,
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-18T12:00:00Z',
+    }],
+    operation_attachments: [],
+    contractor_evaluation_events: [{
+      id: '62000000-0000-4000-8000-000000000001',
+      evaluation_id: EVALUATION,
+      event_type: 'publicada',
+      from_status: 'borrador',
+      to_status: 'publicada',
+      reason: null,
+      snapshot: {},
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-18T11:00:00Z',
     }],
     payment_cases: [{
       id: PAYMENT,
@@ -106,8 +132,8 @@ function fixtures() {
   } as Record<string, unknown[]>;
 }
 
-async function mockContractor(page: Page) {
-  const data = fixtures();
+async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
+  const data = fixtures(options);
   const calls: Array<{ method: string; path: string; body?: string | null }> = [];
 
   await page.addInitScript(value => {
@@ -151,7 +177,7 @@ async function openOperations(page: Page) {
   await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
 }
 
-test('Contratista consulta evaluación y actualiza solo avance/evidencia', async ({ page }) => {
+test('Contratista inicia plan, adjunta evidencia y lo envía a revisión sin autoaprobarlo', async ({ page }) => {
   const calls = await mockContractor(page);
   await openOperations(page);
 
@@ -160,13 +186,55 @@ test('Contratista consulta evaluación y actualiza solo avance/evidencia', async
   await page.getByRole('button', { name: 'Planes de acción' }).click();
   await expect(page.getByText('Cerrar hallazgo de seguridad')).toBeVisible();
 
-  const evidence = page.getByPlaceholder('Describe la acción realizada, adjunta una referencia o deja el comentario de cierre…');
-  await evidence.fill('Se instaló barrera y se adjunta respaldo fotográfico.');
-  await page.getByRole('button', { name: 'Guardar evidencia' }).click();
+  await page.getByRole('button', { name: 'Iniciar' }).click();
+  await expect.poll(() => calls.some(call =>
+    call.method === 'POST'
+    && call.path === '/rest/v1/rpc/update_contractor_action_plan'
+    && (call.body || '').includes('en_progreso')
+  )).toBeTruthy();
 
-  await expect.poll(() => calls.some(call => call.method === 'POST' && call.path === '/rest/v1/rpc/update_contractor_action_plan' && (call.body || '').includes('en_progreso'))).toBeTruthy();
-  await expect(page.getByRole('button', { name: 'Aprobaciones' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Aprobar' })).toHaveCount(0);
+  const evidence = page.getByPlaceholder('Describe la acción realizada, cambios aplicados o referencia de la evidencia…');
+  await evidence.fill('Se instaló barrera y se adjunta respaldo fotográfico.');
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles({
+    name: 'evidencia.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 e2e'),
+  });
+  await expect.poll(() => calls.some(call =>
+    call.method === 'POST' && call.path === '/rest/v1/operation_attachments'
+  )).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Enviar a revisión' }).click();
+  await expect.poll(() => calls.some(call =>
+    call.method === 'POST'
+    && call.path === '/rest/v1/rpc/update_contractor_action_plan'
+    && (call.body || '').includes('en_revision')
+  )).toBeTruthy();
+
+  await expect(page.getByRole('button', { name: /Completar/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Aprobar cierre/ })).toHaveCount(0);
+});
+
+test('Contratista ve plan en revisión como solo espera de validación', async ({ page }) => {
+  await mockContractor(page, { planStatus: 'en_revision' });
+  await openOperations(page);
+  await page.getByRole('button', { name: 'Planes de acción' }).click();
+
+  await expect(page.getByText('Esperando validación.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enviar a revisión' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Iniciar' })).toHaveCount(0);
+  await expect(page.getByText('Historial · 1', { exact: true })).toBeVisible();
+});
+
+test('Enlace profundo abre directamente el plan de acción indicado', async ({ page }) => {
+  await mockContractor(page);
+  await page.goto(`/contratista/operacion?proyecto=proyecto_ops_qa&plan=${PLAN}`);
+
+  await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
+  await expect(page.locator(`#action-plan-${PLAN}`)).toBeVisible();
+  await expect(page.getByText('Cerrar hallazgo de seguridad')).toBeVisible();
 });
 
 test('Contratista ve estado de pago y conversa con soporte sin controles administrativos', async ({ page }) => {

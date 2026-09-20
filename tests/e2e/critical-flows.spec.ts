@@ -24,6 +24,9 @@ const DOCUMENT_WORKER = '94000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V1 = '95000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V2 = '95000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
+const EVALUATION_DRAFT = 'b0000000-0000-4000-8000-000000000001';
+const EVALUATION_REVIEW = 'b0000000-0000-4000-8000-000000000002';
+const ACTION_PLAN_REVIEW = 'c0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
 type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
@@ -38,6 +41,7 @@ type MockOptions = {
   inactiveAccreditationOnActiveProject?: boolean;
   assetLifecycle?: boolean;
   notificationScenario?: boolean;
+  evaluationWorkflow?: boolean;
 };
 
 function appSession(role: Role) {
@@ -183,7 +187,76 @@ function fixtures(role: Role, options: MockOptions) {
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
     ],
     worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
-    contractor_evaluations: [],
+    contractor_evaluations: options.evaluationWorkflow ? [
+      {
+        id: EVALUATION_DRAFT,
+        accreditation_id: ACCREDITATION,
+        period_start: '2026-07-01',
+        period_end: '2026-07-31',
+        status: 'borrador',
+        safety_score: 75,
+        quality_score: 80,
+        labor_score: 78,
+        compliance_score: 82,
+        total_score: 78.75,
+        risk_level: 'medio',
+        observations: 'Borrador pendiente de publicación.',
+        created_at: '2026-09-18T10:00:00Z',
+      },
+      {
+        id: EVALUATION_REVIEW,
+        accreditation_id: ACCREDITATION,
+        period_start: '2026-08-01',
+        period_end: '2026-08-31',
+        status: 'publicada',
+        safety_score: 82,
+        quality_score: 88,
+        labor_score: 79,
+        compliance_score: 84,
+        total_score: 83.25,
+        risk_level: 'bajo',
+        observations: 'Plan correctivo enviado a revisión.',
+        published_at: '2026-09-18T12:00:00Z',
+        created_at: '2026-09-18T11:00:00Z',
+      },
+    ] : [],
+    evaluation_action_plans: options.evaluationWorkflow ? [{
+      id: ACTION_PLAN_REVIEW,
+      evaluation_id: EVALUATION_REVIEW,
+      title: 'Cerrar hallazgo de seguridad',
+      description: 'Validar respaldo de medida correctiva.',
+      owner_name: 'Jefe de terreno',
+      due_date: '2026-09-30',
+      status: 'en_revision',
+      evidence: 'Barrera instalada y capacitación ejecutada.',
+      submitted_at: '2026-09-20T12:00:00Z',
+      review_comment: null,
+      created_by: PROFILE,
+      created_at: '2026-09-18T12:10:00Z',
+    }] : [],
+    evaluation_action_plan_events: options.evaluationWorkflow ? [{
+      id: 'c1000000-0000-4000-8000-000000000001',
+      action_plan_id: ACTION_PLAN_REVIEW,
+      event_type: 'enviado_revision',
+      from_status: 'en_progreso',
+      to_status: 'en_revision',
+      comment: null,
+      evidence_snapshot: 'Barrera instalada y capacitación ejecutada.',
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-20T12:00:00Z',
+    }] : [],
+    contractor_evaluation_events: options.evaluationWorkflow ? [{
+      id: 'b1000000-0000-4000-8000-000000000001',
+      evaluation_id: EVALUATION_REVIEW,
+      event_type: 'publicada',
+      from_status: 'borrador',
+      to_status: 'publicada',
+      reason: null,
+      snapshot: {},
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-18T12:00:00Z',
+    }] : [],
+    operation_attachments: [],
     payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
     support_tickets: [],
     integration_configs: [],
@@ -236,6 +309,23 @@ function fixtures(role: Role, options: MockOptions) {
         resolved_at: null,
         occurrence_count: 1,
       },
+      ...(options.evaluationWorkflow ? [{
+        notification_key: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
+        event_type: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
+        category: 'revision',
+        severity: 'info',
+        status: 'active',
+        title: 'Plan de acción enviado a revisión',
+        body: 'Cerrar hallazgo de seguridad fue enviado a validación.',
+        action_label: 'Ver plan',
+        action_kind: 'operacion',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: null,
+        occurred_at: '2026-09-20T17:00:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      }] : []),
       {
         notification_key: 'payment_blocked:e2e-old',
         event_type: 'payment_blocked',
@@ -368,10 +458,15 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
     if (url.pathname.startsWith('/auth/v1/token')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'e2e-access', refresh_token: 'e2e-refresh', expires_in: 3600, user: { id: PROFILE, email: `${role}@e2e.invalid` } }) });
     }
-    if (url.pathname === '/rest/v1/rpc/mark_payment_paid') {
-      return route.fulfill({ status: 204, body: '' });
-    }
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
+      if (request.method() !== 'GET' && request.method() !== 'HEAD') {
+        let body: any = null;
+        try { body = request.postDataJSON(); } catch { body = request.postData(); }
+        mutations.push({ method: request.method(), path: url.pathname, body });
+      }
+      if (url.pathname === '/rest/v1/rpc/mark_payment_paid') {
+        return route.fulfill({ status: 204, body: '' });
+      }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
     }
     if (url.pathname.startsWith('/rest/v1/')) {
@@ -669,6 +764,37 @@ test('10c Proyecto activo con relación de contratista finalizada queda en modo 
   const card = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
   await expect(card.getByText('Histórico', { exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
+});
+
+test('10z Mandante publica evaluación y valida cierre de plan enviado por Contratista', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { evaluationWorkflow: true });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await expect(page.getByText('Operación avanzada', { exact: true })).toBeVisible();
+
+  const draftRow = page.locator('tr').filter({ hasText: '2026-07-01 — 2026-07-31' });
+  await expect(draftRow.getByText('Borrador', { exact: true })).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await draftRow.getByRole('button', { name: /Publicar/ }).click();
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_evaluation_status'
+    && item.body?.p_evaluation_id === EVALUATION_DRAFT
+    && item.body?.p_status === 'publicada'
+  )).toBe(true);
+
+  const publishedRow = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
+  await publishedRow.getByRole('button', { name: 'Detalle y planes' }).click();
+  await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
+  await expect(page.getByText('En revisión', { exact: true })).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept('Evidencia conforme'));
+  await page.getByRole('button', { name: 'Aprobar cierre' }).click();
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.path === '/rest/v1/rpc/review_evaluation_action_plan'
+    && item.body?.p_plan_id === ACTION_PLAN_REVIEW
+    && item.body?.p_decision === 'aprobar'
+  )).toBe(true);
 });
 
 test('10d Activos permite retiro formal y conserva activos históricos', async ({ page }) => {
@@ -1037,6 +1163,20 @@ test('13c notificación documental abre el requisito exacto afectado', async ({ 
   await expect(page).toHaveURL(/\/contratista\/documentos\?.*proyecto=proyecto_piloto/);
   await expect(page).toHaveURL(/requisito=req_f30/);
   await expect(page.getByText('F30 / F31 SII', { exact: true }).first()).toBeVisible();
+});
+
+test('13d notificación de plan abre el plan de acción exacto', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true, evaluationWorkflow: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Plan de acción enviado a revisión' });
+  await item.getByRole('button', { name: 'Ver plan' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*plan=${ACTION_PLAN_REVIEW}`));
+  await expect(page.locator(`#action-plan-${ACTION_PLAN_REVIEW}`)).toBeVisible();
+  await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {
