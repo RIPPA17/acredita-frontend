@@ -348,7 +348,9 @@ export default function OperationsTab({
   const [expandedTicket, setExpandedTicket] = useState<string>();
   const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'normal' });
   const [savingTicket, setSavingTicket] = useState(false);
-  const requestedPlanId = new URLSearchParams(window.location.search).get('plan') || undefined;
+  const operationParams = new URLSearchParams(window.location.search);
+  const requestedPlanId = operationParams.get('plan') || undefined;
+  const requestedEvaluationId = operationParams.get('evaluacion') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
@@ -370,6 +372,13 @@ export default function OperationsTab({
   };
 
   useEffect(() => { void load(); }, [project?.id]);
+
+  useEffect(() => {
+    if (requestedEvaluationId && project) {
+      setMode('evaluaciones');
+      setExpandedEvaluation(requestedEvaluationId);
+    }
+  }, [requestedEvaluationId, project?.id]);
 
   useEffect(() => {
     if (!requestedPlanId || !project) return;
