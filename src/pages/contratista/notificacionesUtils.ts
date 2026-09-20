@@ -1,10 +1,13 @@
 import { calcularEstadoTrabajador, contratoTrabajadorVencido, esTrabajadorAsignado, getProblemasFichaTrabajador, obtenerDiasRestantes } from '../../data/localStorageDb';
 import { Contratista, PreferenciasNotificacionesContratista, Proyecto, Requisito, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 import { buildRequisitosEmpresa, buildRequisitosTrabajador, motivoRechazo, RequisitoConDoc } from './inicio/inicioUtils';
 
-export type TipoNotificacionContratista = 'accion' | 'preventiva' | 'revision' | 'positiva';
-export type DestinoNotificacion = { tipo: 'documentos' | 'trabajador' | 'acreditacion'; trabajador?: Trabajador };
+export type TipoNotificacionContratista = 'accion' | 'preventiva' | 'revision' | 'positiva' | 'informativa';
+export type NivelNotificacionContratista = 'critical' | 'action' | 'preventive' | 'info';
+export type SituacionNotificacionContratista = 'activa' | 'resuelta';
+export type DestinoNotificacion = { tipo: 'documentos' | 'trabajador' | 'acreditacion' | 'operacion' | 'proyecto'; trabajador?: Trabajador };
 
 export interface NotificacionContratista {
   id: string;
@@ -17,6 +20,10 @@ export interface NotificacionContratista {
   cta: string;
   destino: DestinoNotificacion;
   prioridad: number;
+  eventType?: string;
+  nivel?: NivelNotificacionContratista;
+  situacion?: SituacionNotificacionContratista;
+  persistida?: boolean;
 }
 
 interface Params {
@@ -28,12 +35,9 @@ interface Params {
 
 const versionId = (item: RequisitoConDoc) => `v${item.doc?.versionEnTramite?.version || item.doc?.version || 1}`;
 const fechaItem = (item: RequisitoConDoc) => item.doc?.fechaRevisado || item.doc?.subido;
-const proyectoOperativo = (proyecto: Proyecto): boolean =>
-  ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
-
 export function buildNotificacionesContratista({ contratista, proyectos, requisitos, preferencias }: Params): NotificacionContratista[] {
   const result: NotificacionContratista[] = [];
-  const proyectosOperativos = proyectos.filter(proyectoOperativo);
+  const proyectosOperativos = proyectos.filter(proyecto => proyectoOperativoParaContratista(proyecto, contratista.id));
   const rows = buildAcreditacionRows([contratista], proyectosOperativos, []);
 
   proyectosOperativos.forEach(proyecto => {
@@ -156,5 +160,34 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
     });
   });
 
-  return result.sort((a, b) => a.prioridad - b.prioridad || a.proyectoNombre.localeCompare(b.proyectoNombre) || a.id.localeCompare(b.id));
+  return result
+    .map(item => {
+      const prefix = item.id.split(':')[0];
+      const eventType = prefix === 'rechazado' || prefix === 'renovacion-rechazada'
+        ? 'document_rejected'
+        : prefix === 'vencido'
+          ? 'document_expired'
+          : prefix === 'por-vencer'
+            ? 'document_expiring'
+            : prefix === 'revision'
+              ? 'document_in_review'
+              : prefix === 'acreditacion-aprobada'
+                ? 'accreditation_approved'
+                : prefix === 'trabajador-habilitado'
+                  ? 'worker_enabled'
+                  : prefix === 'contrato-vencido'
+                    ? 'worker_contract_expired'
+                    : prefix === 'contrato-por-vencer'
+                      ? 'worker_contract_expiring'
+                      : prefix === 'ficha-incompleta'
+                        ? 'worker_blocked'
+                        : prefix;
+      const nivel: NivelNotificacionContratista = item.tipo === 'accion'
+        ? 'action'
+        : item.tipo === 'preventiva'
+          ? 'preventive'
+          : 'info';
+      return { ...item, eventType, nivel, situacion: 'activa' as const };
+    })
+    .sort((a, b) => a.prioridad - b.prioridad || a.proyectoNombre.localeCompare(b.proyectoNombre) || a.id.localeCompare(b.id));
 }
