@@ -178,7 +178,7 @@ export default function AssetDetailPanel({
     <div className="fixed inset-0 bg-black/50 z-[610] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-[980px] max-h-[calc(100vh-24px)] overflow-y-auto" onClick={event => event.stopPropagation()}>
         <header className="flex justify-between items-start p-5 border-b">
-          <div><h3 className="font-semibold text-navy text-lg">{readOnly ? 'Historial del activo' : 'Gestión operacional'} · {asset.identifier}</h3><p className="text-xs text-gray-500">{asset.name} · Estado registrado: {asset.status} · Acceso {readOnly ? 'histórico' : asset.accessAllowed ? 'habilitado' : 'no habilitado'}</p></div>
+          <div><h3 className="font-semibold text-navy text-lg">{readOnly ? 'Historial del activo' : 'Gestión operacional'} · {asset.identifier}</h3><p className="text-xs text-gray-500">{asset.name} · Estado registrado: {asset.status} · Acceso {readOnly ? 'histórico' : asset.accessAllowed ? 'habilitado' : 'no habilitado'}</p>{!asset.active && <p className="mt-1 text-xs text-gray-500">Retirado{asset.retiredAt ? ` el ${asset.retiredAt.slice(0, 10)}` : ''}{asset.retirementReason ? ` · ${asset.retirementReason}` : ''}</p>}</div>
           <div className="flex gap-2"><button type="button" onClick={() => void load()} aria-label="Actualizar"><RefreshCw /></button><button type="button" onClick={onClose} aria-label="Cerrar"><X /></button></div>
         </header>
 
