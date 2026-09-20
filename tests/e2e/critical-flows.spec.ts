@@ -528,6 +528,57 @@ test('10c Proyecto activo con relación de contratista finalizada queda en modo 
   await expect(card.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
 });
 
+test('10d Activos muestran requisitos reales, operadores elegibles e historial de versiones', async ({ page }) => {
+  await protectedPage(page, 'contratista', { assetLifecycle: true });
+  await page.goto('/contratista/proyectos?proyecto=proyecto_piloto');
+
+  const card = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
+  await card.getByRole('button', { name: 'Ver proyecto', exact: true }).click();
+  await page.getByRole('button', { name: 'Vehículos y equipos', exact: true }).click();
+
+  const assetRow = page.getByRole('row').filter({ hasText: 'Excavadora QA' });
+  await expect(assetRow).toContainText('0/2 obligatorios aprobados');
+  await expect(assetRow).toContainText('2 requisitos pendientes');
+  await expect(assetRow).toContainText('No habilitado');
+
+  await assetRow.getByRole('button', { name: 'Gestionar', exact: true }).click();
+  await expect(page.getByText('Gestión operacional · EXC-001', { exact: true })).toBeVisible();
+  await expect(page.getByText('Revisión técnica', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Solo trabajadores activos, acreditados y con acceso habilitado/)).toBeVisible();
+  await expect(page.getByText(/Trabajador Piloto · 18.123.456-7 · habilitado/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Versiones', exact: true }).click();
+  await expect(page.getByText(/v2 · revision-tecnica-v2.pdf/)).toBeVisible();
+  await expect(page.getByText(/v1 · revision-tecnica-v1.pdf/)).toBeVisible();
+});
+
+test('10e Retirar un activo conserva su ficha como historial y registra motivo', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'contratista', { assetLifecycle: true });
+  await page.goto('/contratista/proyectos?proyecto=proyecto_piloto');
+
+  const card = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
+  await card.getByRole('button', { name: 'Ver proyecto', exact: true }).click();
+  await page.getByRole('button', { name: 'Vehículos y equipos', exact: true }).click();
+
+  page.once('dialog', dialog => dialog.accept('Fin de faena QA'));
+  const activeRow = page.getByRole('row').filter({ hasText: 'Excavadora QA' });
+  await activeRow.getByRole('button', { name: /Retirar/ }).click();
+
+  const historicalRow = page.getByRole('row').filter({ hasText: 'Excavadora QA' });
+  await expect(historicalRow).toContainText('Fin de faena QA');
+  await expect(historicalRow).toContainText('Histórico');
+  await expect(historicalRow.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
+  await expect(historicalRow.getByRole('button', { name: 'Editar ficha' })).toHaveCount(0);
+  await expect(historicalRow.getByRole('button', { name: /Retirar/ })).toHaveCount(0);
+
+  expect(mutations.some(item =>
+    item.method === 'PATCH'
+    && item.path === '/rest/v1/assets'
+    && item.body?.is_active === false
+    && item.body?.retirement_reason === 'Fin de faena QA'
+  )).toBeTruthy();
+});
+
 test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
