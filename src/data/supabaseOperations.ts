@@ -9,6 +9,8 @@ export interface EvaluationRecord {
   evaluated_by?: string; published_at?: string; published_by?: string;
   closed_at?: string; closed_by?: string; reopened_at?: string; reopened_by?: string; reopen_reason?: string;
   created_at?: string; updated_at?: string;
+  contratista_id?: string;
+  accreditation_active?: boolean;
 }
 export type ActionPlanStatus = 'pendiente' | 'en_progreso' | 'en_revision' | 'completado' | 'cancelado';
 export interface ActionPlanRecord {
@@ -85,14 +87,20 @@ export async function resolveProjectId(projectKey: string): Promise<string> {
 
 export async function loadOperations(projectKey: string) {
   const projectId = await resolveProjectId(projectKey);
-  const accreditations = await request<Array<{ id: string }>>(`accreditations?select=id&project_id=eq.${projectId}`);
+  const accreditations = await request<Array<{ id: string; contratista_id: string; is_active: boolean }>>(`accreditations?select=id,contratista_id,is_active&project_id=eq.${projectId}`);
   const ids = accreditations.map(item => item.id);
+  const accreditationMap = new Map(accreditations.map(item => [item.id, item]));
   const filter = ids.length ? `&accreditation_id=in.(${ids.join(',')})` : '';
-  const [evaluations, payments, tickets] = await Promise.all([
+  const [rawEvaluations, payments, tickets] = await Promise.all([
     ids.length ? request<EvaluationRecord[]>(`contractor_evaluations?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     ids.length ? request<PaymentRecord[]>(`payment_cases?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     request<TicketRecord[]>(`support_tickets?select=*&project_id=eq.${projectId}&order=created_at.desc`),
   ]);
+  const evaluations = rawEvaluations.map(item => ({
+    ...item,
+    contratista_id: accreditationMap.get(item.accreditation_id)?.contratista_id,
+    accreditation_active: accreditationMap.get(item.accreditation_id)?.is_active === true,
+  }));
   return { evaluations, payments, tickets };
 }
 
