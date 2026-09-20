@@ -232,7 +232,7 @@ function downloadTemplate() {
   const rows = [
     'Nombre;RUT;Cargo;Servicio;Categorias;FechaIngreso;TipoContrato;FechaInicioContrato;FechaTerminoContrato;ObraFaenaContrato;RegimenEspecial;DetalleRegimenEspecial',
     'Juan Pérez;12.345.678-5;Operador;SRV-01;General;2026-09-20;indefinido;2026-09-01;;;;',
-    'María Soto;17.654.321-5;Técnica;SRV-01;altura|electrico;2026-09-20;plazo_fijo;2026-09-01;2026-12-31;;;',
+    'María Soto;17.654.321-3;Técnica;SRV-01;altura|electrico;2026-09-20;plazo_fijo;2026-09-01;2026-12-31;;;',
   ];
   const blob = new Blob(['\ufeff' + rows.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
