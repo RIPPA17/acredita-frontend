@@ -33,6 +33,9 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
   const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardando, setGuardando] = useState(false);
   const hayCambios = PREFERENCIAS.some(([key]) => preferencias[key] !== guardadas[key]);
+  const proyectosActivos = misProyectos.filter(proyecto =>
+    ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')),
+  );
 
   useEffect(() => {
     setPreferencias(preferenciasNotificaciones);
@@ -64,7 +67,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
         <div className="cfg-account-strip">
           <div className="cfg-company"><div className="cfg-company-icon">{iniciales(contratistaLogueado.nombre)}</div><div><strong>{contratistaLogueado.nombre}</strong><small>RUT {contratistaLogueado.rut}</small></div></div>
           <div className="cfg-stat"><span>Portal</span><b>Contratista</b></div>
-          <div className="cfg-stat"><span>Proyectos activos</span><b>{misProyectos.length}</b></div>
+          <div className="cfg-stat"><span>Proyectos activos</span><b>{proyectosActivos.length}</b></div>
           <div className="cfg-stat"><span>Estado de cuenta</span><div><span className="cfg-status">Activa</span></div></div>
         </div>
 
@@ -99,7 +102,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
               </div><div className="cfg-pref-foot"><span>Los cambios se guardan en tu cuenta y se aplican en cualquier dispositivo.</span><button className="cfg-save" disabled={!hayCambios || guardando} onClick={guardarPreferencias}>{guardando ? 'Guardando…' : 'Guardar preferencias'}</button></div></div>
             </section>}
 
-            {activeTab === 'carga' && <BulkWorkersConfig contratista={contratistaLogueado} proyectos={misProyectos} showToast={showToast} />}
+            {activeTab === 'carga' && <BulkWorkersConfig contratista={contratistaLogueado} proyectos={proyectosActivos} showToast={showToast} />}
 
             {activeTab === 'cuenta' && <section className="cfg-card">
               <header><h2>Cuenta y sesión</h2><p>Gestiona el acceso a tu cuenta y la sesión actual.</p></header>

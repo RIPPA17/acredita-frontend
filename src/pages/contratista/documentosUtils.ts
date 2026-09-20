@@ -53,8 +53,10 @@ function idDocumento(
   proyectoId: string,
   requisitoId: string,
   trabajadorRut?: string,
+  contextoId?: string,
 ): string {
-  return `doc_${slug(contratistaId)}_${slug(proyectoId)}_${slug(requisitoId)}_${slug(trabajadorRut || 'empresa')}`;
+  const contexto = contextoId ? `_${slug(contextoId)}` : '';
+  return `doc_${slug(contratistaId)}_${slug(proyectoId)}_${slug(requisitoId)}_${slug(trabajadorRut || 'empresa')}${contexto}`;
 }
 
 export function crearDocumentosPendientesProyecto(
@@ -62,9 +64,10 @@ export function crearDocumentosPendientesProyecto(
   contratistaId: string,
   proyectoId: string,
   trabajadorRut: string,
+  contextoId?: string,
 ): Documento[] {
   return requisitos.map(requisito => ({
-    id: idDocumento(contratistaId, proyectoId, requisito.id, trabajadorRut),
+    id: idDocumento(contratistaId, proyectoId, requisito.id, trabajadorRut, contextoId),
     nombre: requisito.nombre,
     categoria: requisito.categoria,
     estado: 'pendiente',
