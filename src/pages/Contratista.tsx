@@ -210,7 +210,7 @@ export default function ContratistaPortal() {
       return {
         id: item.key,
         tipo,
-        proyectoId: proyecto?.id || item.projectKey || selectedProyectoId || misProyectos[0]?.id || '',
+        proyectoId: proyecto?.id || item.projectKey || misProyectos[0]?.id || '',
         proyectoNombre: proyecto?.nombre || 'Proyecto',
         titulo: item.title,
         descripcion: item.body,
