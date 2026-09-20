@@ -26,6 +26,7 @@ import {
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
@@ -53,9 +54,6 @@ interface AccionInicio {
 
 const estadoVisual = (estado: string): EstadoVisual =>
   estado === 'Acreditado' ? 'ok' : estado === 'Bloqueado' ? 'danger' : 'warning';
-
-const proyectoOperativo = (proyecto: Proyecto): boolean =>
-  ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
 
 const textoEstadoDocumento = (item: RequisitoConDoc): string => {
   if (item.estado === 'Rechazado') return item.doc?.motivoRechazo || item.doc?.motivo || 'Documento rechazado por Acredita.';
@@ -128,7 +126,7 @@ export default function DashboardTab({
   }
 
   const proyectoActual = misProyectos.find(proyecto => proyecto.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyectoActual);
+  const modoConsulta = !proyectoOperativoParaContratista(proyectoActual, contratistaLogueado.id);
   const mandanteActual = allMandantes.find(mandante => mandante.id === proyectoActual.mandanteId);
   const row = buildAcreditacionRows([contratistaLogueado], misProyectos, allMandantes).find(item => item.proyectoId === proyectoActual.id);
   const requisitos = getRequisitos();
@@ -327,7 +325,7 @@ export default function DashboardTab({
     <div className="inicio2-page">
       <section className="inicio2-hero">
         <div className="inicio2-hero-inner"><div><div className="inicio2-eyebrow">Portal contratista</div><h1>Inicio</h1><p>Revisa en segundos el estado de tu acreditación, los bloqueos que requieren atención y los próximos vencimientos de tu proyecto.</p></div>
-          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto activo</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativo(proyecto) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
+          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto activo</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativoParaContratista(proyecto, contratistaLogueado.id) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
         </div>
       </section>
 
