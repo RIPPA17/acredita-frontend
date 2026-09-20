@@ -566,7 +566,7 @@ test('10d Activos permite retiro formal y conserva activos históricos', async (
   const ctx = await protectedPage(page, 'mandante', { assetLifecycle: true });
   await openMandanteProject(page);
 
-  await page.getByRole('button', { name: 'Vehículos y equipos', exact: true }).click();
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
   await expect(page.getByText('Camión activo', { exact: true })).toBeVisible();
   await expect(page.getByText('Camión retirado', { exact: true })).toBeVisible();
   await expect(page.getByText('Fin de arriendo', { exact: false })).toBeVisible();
@@ -592,7 +592,7 @@ test('10e Matriz retira requisitos sin borrarlos', async ({ page }) => {
   const ctx = await protectedPage(page, 'mandante', { assetLifecycle: true });
   await openMandanteProject(page);
 
-  await page.getByRole('button', { name: 'Vehículos y equipos', exact: true }).click();
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
   await expect(page.getByText('Permiso de circulación', { exact: true })).toBeVisible();
   await expect(page.getByText('Seguro antiguo', { exact: true })).toBeVisible();
   await expect(page.getByText(/Requisito reemplazado/)).toBeVisible();
