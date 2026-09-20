@@ -26,6 +26,8 @@ export interface NotificacionContratista {
   persistida?: boolean;
   requisitoId?: string;
   trabajadorRut?: string;
+  actionPlanId?: string;
+  evaluationId?: string;
 }
 
 interface Params {
