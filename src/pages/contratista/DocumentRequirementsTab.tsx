@@ -16,7 +16,7 @@ import {
   RequisitoConDoc,
 } from './inicio/inicioUtils';
 import { getEstadoDocumentoEfectivo } from './documentosUtils';
-import { getObligacionesDocumentales } from '../../data/operationalCore';
+import { getObligacionesDocumentales, proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 // Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
 // reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
@@ -41,9 +41,6 @@ const DOC_PRIORITY: Record<DocEstado, number> = {
 
 type Scope = 'todos' | 'empresa' | 'trabajadores';
 type StatusFilter = 'todos' | 'accion' | 'revision' | 'por_vencer' | 'aprobado';
-
-const proyectoOperativo = (proyecto: Proyecto | undefined): boolean =>
-  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
 
 interface Row extends RequisitoConDoc {
   key: string;
@@ -160,7 +157,7 @@ export default function SubirTab({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const proyectoActual = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyectoActual);
+  const modoConsulta = !proyectoOperativoParaContratista(proyectoActual, contratistaLogueado.id);
   const requisitosAll = getRequisitos();
 
   const trabajadoresAsignados = proyectoActual
