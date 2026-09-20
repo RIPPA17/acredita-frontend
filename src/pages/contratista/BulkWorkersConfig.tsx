@@ -278,7 +278,7 @@ export default function BulkWorkersConfig({
     () => getRequisitos().filter(req => req.proyectoId === projectId && req.destino === 'trabajador' && req.activo !== false),
     [projectId],
   );
-  const categories = useMemo(() => Array.from(new Set(
+  const categories = useMemo<string[]>(() => Array.from(new Set<string>(
     requirements.flatMap(req => req.categoriasAplicables || []).map(value => value.trim()).filter(Boolean),
   )), [requirements]);
   const specificCategories = categories.filter(value => normalizeLookup(value) !== 'general');
@@ -291,7 +291,7 @@ export default function BulkWorkersConfig({
   }
 
   const validateRows = (source: ParsedWorker[], currentContractor: Contratista): ValidatedWorker[] => {
-    const categoryMap = new Map(categories.map(category => [normalizeLookup(category), category]));
+    const categoryMap = new Map<string, string>(categories.map(category => [normalizeLookup(category), category]));
     return source.map(row => {
       const errors = [...row.baseErrors];
       const warnings: string[] = [];
@@ -309,7 +309,7 @@ export default function BulkWorkersConfig({
       if (service.error) errors.push(service.error);
       if (serviceRequired && !rawService) errors.push('Falta servicio o contrato');
 
-      let rowCategories = [...row.categorias];
+      let rowCategories: string[] = [...row.categorias];
       if (specificCategories.length > 0) {
         if (rowCategories.length === 0) errors.push('Falta categoría');
         rowCategories = rowCategories.map(category => {
@@ -480,7 +480,9 @@ export default function BulkWorkersConfig({
           existing.obraFaenaContrato = row.tipoContrato === 'obra_faena' ? row.obraFaenaContrato.trim() : undefined;
           existing.regimenEspecial = row.regimenEspecial;
           existing.detalleRegimenEspecial = row.regimenEspecial === 'otro' ? row.detalleRegimenEspecial.trim() : undefined;
-          existing.documentos = [...(existing.documentos || []), ...documents];
+          // En un reingreso, el período nuevo debe ganar cualquier búsqueda local
+          // mientras Supabase genera las obligaciones definitivas de la asignación.
+          existing.documentos = [...documents, ...(existing.documentos || [])];
           existing.asignaciones = [...(existing.asignaciones || []), assignment];
           existing.estado = calcularEstadoTrabajador(existing, projectId);
           assigned += 1;
