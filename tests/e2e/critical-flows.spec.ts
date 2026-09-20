@@ -37,6 +37,7 @@ type MockOptions = {
   bulkReentry?: boolean;
   inactiveAccreditationOnActiveProject?: boolean;
   assetLifecycle?: boolean;
+  notificationScenario?: boolean;
 };
 
 function appSession(role: Role) {
@@ -187,8 +188,72 @@ function fixtures(role: Role, options: MockOptions) {
     support_tickets: [],
     integration_configs: [],
     business_sync_control: [{ revision: 10 }],
-    notification_preferences: [],
+    notification_preferences: options.notificationScenario ? [{
+      profile_id: PROFILE,
+      document_rejected: true,
+      document_expiring: true,
+      document_updates: true,
+      accreditation_approved: true,
+      worker_status: false,
+      payment_status: true,
+      support_updates: true,
+      email_enabled: false,
+      email_critical_only: true,
+    }] : [],
     notification_reads: [],
+    notifications: options.notificationScenario ? [
+      {
+        notification_key: 'support_reply:e2e',
+        event_type: 'support_reply',
+        category: 'informativa',
+        severity: 'info',
+        status: 'active',
+        title: 'Nueva respuesta de soporte',
+        body: 'Acredita respondió tu consulta sobre el proyecto.',
+        action_label: 'Ver conversación',
+        action_kind: 'soporte',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: null,
+        occurred_at: '2026-09-20T15:30:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      },
+      {
+        notification_key: 'requirement_changed:e2e',
+        event_type: 'requirement_changed',
+        category: 'accion',
+        severity: 'action',
+        status: 'active',
+        title: 'Requisito documental actualizado',
+        body: 'F30 / F31 SII cambió y requiere revisión.',
+        action_label: 'Ver documentos',
+        action_kind: 'documentos',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: 'req_f30',
+        occurred_at: '2026-09-20T16:00:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      },
+      {
+        notification_key: 'payment_blocked:e2e-old',
+        event_type: 'payment_blocked',
+        category: 'accion',
+        severity: 'critical',
+        status: 'resolved',
+        title: 'Pago retenido',
+        body: 'El pago estuvo retenido por documentación y luego fue liberado.',
+        action_label: 'Ver pago',
+        action_kind: 'operacion',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: null,
+        occurred_at: '2026-09-18T12:00:00Z',
+        resolved_at: '2026-09-19T12:00:00Z',
+        occurrence_count: 1,
+      },
+    ] : [],
     review_claims: options.renewalScenario && role === 'admin' ? [{ document_key: 'contratista_piloto_a::doc_renewal', document_version_id: VERSION_COMPANY_V3, claimed_by: PROFILE, claimed_at: '2026-09-19T12:00:00Z', expires_at: '2026-09-20T12:00:00Z' }] : [],
     asset_registry: options.assetLifecycle ? [
       {
@@ -904,12 +969,74 @@ test('12l carga masiva excluye proyectos históricos', async ({ page }) => {
   await expect(selector).not.toContainText('Proyecto Histórico QA');
 });
 
-test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
-  await protectedPage(page, 'contratista');
+test('13 Contratista configura notificaciones internas y correo sin perder sesión', async ({ page }) => {
+  const ctx = await protectedPage(page, 'contratista', { notificationScenario: true });
   await page.goto('/contratista');
   await page.getByText('Configuración', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Notificaciones', exact: true }).click();
-  await expect(page.locator('body')).toContainText('Documento rechazado');
+
+  await expect(page.getByText('Documento rechazado o vencido', { exact: true })).toBeVisible();
+  await expect(page.getByText('Estado de pagos', { exact: true })).toBeVisible();
+  await expect(page.getByText('Respuestas de soporte', { exact: true })).toBeVisible();
+  await expect(page.getByText('Avisos por correo', { exact: false })).toBeVisible();
+
+  await page.getByRole('switch', { name: 'Recibir correos de Acredita' }).click();
+  const criticalOnly = page.getByRole('switch', { name: 'Solo alertas críticas y acciones' });
+  await expect(criticalOnly).toBeEnabled();
+  await criticalOnly.click();
+  await page.getByRole('button', { name: 'Guardar preferencias' }).click();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/rest/v1/notification_preferences'
+    && item.body?.email_enabled === true
+    && item.body?.email_critical_only === false
+    && item.body?.payment_status === true
+    && item.body?.support_updates === true
+  )).toBe(true);
+});
+
+test('13b campana separa lectura de resolución y navega al evento persistente', async ({ page }) => {
+  const ctx = await protectedPage(page, 'contratista', { notificationScenario: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  await expect(panel.getByText('Nueva respuesta de soporte', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Informativa', { exact: true }).first()).toBeVisible();
+
+  const supportItem = panel.locator('.notif2-item').filter({ hasText: 'Nueva respuesta de soporte' });
+  await supportItem.click();
+  await expect(supportItem.getByText('Informativa', { exact: true })).toBeVisible();
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/rest/v1/notification_reads'
+    && Array.isArray(item.body)
+    && item.body.some((row: any) => row.notification_key === 'support_reply:e2e')
+  )).toBe(true);
+
+  await supportItem.getByRole('button', { name: 'Ver conversación' }).click();
+  await expect(page).toHaveURL(/\/contratista\/operacion/);
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const reopened = page.getByLabel('Notificaciones del contratista');
+  await reopened.getByRole('button', { name: 'Resueltas' }).click();
+  await expect(reopened.getByText('Pago retenido', { exact: true })).toBeVisible();
+  await expect(reopened.getByText('Resuelta', { exact: true })).toBeVisible();
+});
+
+test('13c notificación documental abre el requisito exacto afectado', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Requisito documental actualizado' });
+  await item.getByRole('button', { name: 'Ver documentos' }).click();
+
+  await expect(page).toHaveURL(/\/contratista\/documentos\?.*proyecto=proyecto_piloto/);
+  await expect(page).toHaveURL(/requisito=req_f30/);
+  await expect(page.getByText('F30 / F31 SII', { exact: true }).first()).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {

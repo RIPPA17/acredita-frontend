@@ -206,8 +206,13 @@ export interface Contratista {
 export interface PreferenciasNotificacionesContratista {
   documentoRechazado: boolean;
   documentoPorVencer: boolean;
+  documentoActualizado: boolean;
   acreditacionAprobada: boolean;
   cambioEstadoTrabajador: boolean;
+  estadoPago: boolean;
+  soporteActualizado: boolean;
+  correoHabilitado: boolean;
+  correoSoloCriticas: boolean;
 }
 
 export interface Verificador {

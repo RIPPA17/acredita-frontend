@@ -1,10 +1,13 @@
 import { calcularEstadoTrabajador, contratoTrabajadorVencido, esTrabajadorAsignado, getProblemasFichaTrabajador, obtenerDiasRestantes } from '../../data/localStorageDb';
 import { Contratista, PreferenciasNotificacionesContratista, Proyecto, Requisito, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 import { buildRequisitosEmpresa, buildRequisitosTrabajador, motivoRechazo, RequisitoConDoc } from './inicio/inicioUtils';
 
-export type TipoNotificacionContratista = 'accion' | 'preventiva' | 'revision' | 'positiva';
-export type DestinoNotificacion = { tipo: 'documentos' | 'trabajador' | 'acreditacion'; trabajador?: Trabajador };
+export type TipoNotificacionContratista = 'accion' | 'preventiva' | 'revision' | 'positiva' | 'informativa';
+export type NivelNotificacionContratista = 'critical' | 'action' | 'preventive' | 'info';
+export type SituacionNotificacionContratista = 'activa' | 'resuelta';
+export type DestinoNotificacion = { tipo: 'documentos' | 'trabajador' | 'acreditacion' | 'operacion' | 'proyecto'; trabajador?: Trabajador };
 
 export interface NotificacionContratista {
   id: string;
@@ -17,6 +20,12 @@ export interface NotificacionContratista {
   cta: string;
   destino: DestinoNotificacion;
   prioridad: number;
+  eventType?: string;
+  nivel?: NivelNotificacionContratista;
+  situacion?: SituacionNotificacionContratista;
+  persistida?: boolean;
+  requisitoId?: string;
+  trabajadorRut?: string;
 }
 
 interface Params {
@@ -28,12 +37,9 @@ interface Params {
 
 const versionId = (item: RequisitoConDoc) => `v${item.doc?.versionEnTramite?.version || item.doc?.version || 1}`;
 const fechaItem = (item: RequisitoConDoc) => item.doc?.fechaRevisado || item.doc?.subido;
-const proyectoOperativo = (proyecto: Proyecto): boolean =>
-  ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
-
 export function buildNotificacionesContratista({ contratista, proyectos, requisitos, preferencias }: Params): NotificacionContratista[] {
   const result: NotificacionContratista[] = [];
-  const proyectosOperativos = proyectos.filter(proyectoOperativo);
+  const proyectosOperativos = proyectos.filter(proyecto => proyectoOperativoParaContratista(proyecto, contratista.id));
   const rows = buildAcreditacionRows([contratista], proyectosOperativos, []);
 
   proyectosOperativos.forEach(proyecto => {
@@ -54,6 +60,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
           fecha: renewalRejected ? item.doc?.versionEnTramite?.fecha : fechaItem(item),
           cta: renewalRejected ? 'Corregir renovación' : item.estado === 'Vencido' ? 'Renovar' : 'Corregir',
           destino: { tipo: 'documentos' },
+          requisitoId: item.requisito.id,
           prioridad: renewalRejected ? 2 : 0,
         });
       });
@@ -67,7 +74,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
             ? `${item.doc?.versionEnTramite?.explicacionRechazo || item.doc?.versionEnTramite?.motivoRechazo || 'Debes corregir la renovación.'} La versión vigente anterior mantiene la habilitación hasta su vencimiento.`
             : `${item.requisito.nombre} ${item.estado === 'Vencido' ? 'está vencido' : 'fue rechazado'}. El trabajador no puede ingresar a faena hasta corregir el requisito.`,
           fecha: renewalRejected ? item.doc?.versionEnTramite?.fecha : fechaItem(item),
-          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: item.worker }, prioridad: renewalRejected ? 2 : 1,
+          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: item.worker }, requisitoId: item.requisito.id, trabajadorRut: item.worker.rut, prioridad: renewalRejected ? 2 : 1,
         });
       });
     }
@@ -80,7 +87,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
           tipo: 'preventiva', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
           titulo: item.worker ? `${item.requisito.nombre} de ${item.worker.nombre} vence en ${dias} días` : `${item.requisito.nombre} vence en ${dias} días`,
           descripcion: item.worker ? `El documento sigue vigente y ${item.worker.nombre} mantiene acceso habilitado hasta su vencimiento.` : 'El documento de empresa sigue vigente hasta su vencimiento.',
-          fecha: item.doc!.vencimiento, cta: 'Renovar', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, prioridad: 2,
+          fecha: item.doc!.vencimiento, cta: 'Renovar', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, requisitoId: item.requisito.id, trabajadorRut: item.worker?.rut, prioridad: 2,
         });
       });
     }
@@ -94,7 +101,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
         descripcion: renewal
           ? `La versión ${renewal.version} está siendo revisada. La versión ${item.doc?.version || 1} sigue vigente${item.doc?.vencimiento && item.doc.vencimiento !== '—' ? ` hasta ${item.doc.vencimiento}` : ''}; no necesitas volver a subirla.`
           : `La versión ${item.doc?.version || 1} fue enviada correctamente. No necesitas hacer nada mientras Acredita la revisa.`,
-        fecha: renewal?.fecha || fechaItem(item), cta: 'Ver', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, prioridad: 3,
+        fecha: renewal?.fecha || fechaItem(item), cta: 'Ver', destino: item.worker ? { tipo: 'trabajador', trabajador: item.worker } : { tipo: 'documentos' }, requisitoId: item.requisito.id, trabajadorRut: item.worker?.rut, prioridad: 3,
       });
     });
 
@@ -116,7 +123,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
           tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
           titulo: `${worker.nombre} tiene la ficha incompleta`,
           descripcion: `Falta completar: ${problemasFicha.join(', ')}. Mientras la ficha esté incompleta, el trabajador no puede quedar habilitado.`,
-          cta: 'Completar ficha', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 1,
+          cta: 'Completar ficha', destino: { tipo: 'trabajador', trabajador: worker }, trabajadorRut: worker.rut, prioridad: 1,
         });
       } else if (!contratoTrabajadorVencido(worker) && problemasFicha.length === 0 && requisitosAplicables.length === 0) {
         result.push({
@@ -124,7 +131,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
           tipo: 'revision', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
           titulo: `${worker.nombre} no tiene una matriz documental aplicable`,
           descripcion: 'La ficha laboral está completa, pero la combinación de servicio/categoría no tiene requisitos aplicables. Acredita o el Mandante debe revisar la configuración.',
-          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 3,
+          cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, trabajadorRut: worker.rut, prioridad: 3,
         });
       }
       if (worker.fechaTerminoContrato) {
@@ -135,7 +142,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
             tipo: 'accion', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
             titulo: `${worker.nombre} tiene el contrato vencido`,
             descripcion: `El vínculo laboral terminó el ${worker.fechaTerminoContrato}. El trabajador permanece sin acceso hasta registrar una renovación o un nuevo contrato.`,
-            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 0,
+            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, trabajadorRut: worker.rut, prioridad: 0,
           });
         } else if (diasContrato <= 30) {
           result.push({
@@ -143,7 +150,7 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
             tipo: 'preventiva', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre,
             titulo: diasContrato === 0 ? `El contrato de ${worker.nombre} vence hoy` : `El contrato de ${worker.nombre} vence en ${diasContrato} días`,
             descripcion: 'Actualiza o renueva la relación laboral antes del vencimiento para evitar que el trabajador pierda su habilitación.',
-            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 2,
+            fecha: worker.fechaTerminoContrato, cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, trabajadorRut: worker.rut, prioridad: 2,
           });
         }
       }
@@ -151,10 +158,39 @@ export function buildNotificacionesContratista({ contratista, proyectos, requisi
       if ((estado === 'aprobado' || estado === 'por_vencer') && evidencia) result.push({
         id: `trabajador-habilitado:${proyecto.id}:${worker.rut}:${evidencia.requisito.id}:${versionId(evidencia)}`,
         tipo: 'positiva', proyectoId: proyecto.id, proyectoNombre: proyecto.nombre, titulo: `${worker.nombre} volvió a quedar habilitado`,
-        descripcion: `${evidencia.requisito.nombre} fue corregido y el estado actual permite su acceso a faena.`, fecha: fechaItem(evidencia), cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, prioridad: 4,
+        descripcion: `${evidencia.requisito.nombre} fue corregido y el estado actual permite su acceso a faena.`, fecha: fechaItem(evidencia), cta: 'Ver trabajador', destino: { tipo: 'trabajador', trabajador: worker }, trabajadorRut: worker.rut, prioridad: 4,
       });
     });
   });
 
-  return result.sort((a, b) => a.prioridad - b.prioridad || a.proyectoNombre.localeCompare(b.proyectoNombre) || a.id.localeCompare(b.id));
+  return result
+    .map(item => {
+      const prefix = item.id.split(':')[0];
+      const eventType = prefix === 'rechazado' || prefix === 'renovacion-rechazada'
+        ? 'document_rejected'
+        : prefix === 'vencido'
+          ? 'document_expired'
+          : prefix === 'por-vencer'
+            ? 'document_expiring'
+            : prefix === 'revision'
+              ? 'document_in_review'
+              : prefix === 'acreditacion-aprobada'
+                ? 'accreditation_approved'
+                : prefix === 'trabajador-habilitado'
+                  ? 'worker_enabled'
+                  : prefix === 'contrato-vencido'
+                    ? 'worker_contract_expired'
+                    : prefix === 'contrato-por-vencer'
+                      ? 'worker_contract_expiring'
+                      : prefix === 'ficha-incompleta'
+                        ? 'worker_blocked'
+                        : prefix;
+      const nivel: NivelNotificacionContratista = item.tipo === 'accion'
+        ? 'action'
+        : item.tipo === 'preventiva'
+          ? 'preventive'
+          : 'info';
+      return { ...item, eventType, nivel, situacion: 'activa' as const };
+    })
+    .sort((a, b) => a.prioridad - b.prioridad || a.proyectoNombre.localeCompare(b.proyectoNombre) || a.id.localeCompare(b.id));
 }
