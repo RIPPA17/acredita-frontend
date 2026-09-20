@@ -227,7 +227,7 @@ export default function ContratistaFichaAcreditacion({
           </div>
           <label>
             <span>Cambiar proyecto</span>
-            <select value={proyecto.id} onChange={event => { setTab('empresa'); onProyectoChange(event.target.value); }}>
+            <select aria-label="Cambiar proyecto del expediente" value={proyecto.id} onChange={event => { setTab('empresa'); onProyectoChange(event.target.value); }}>
               {proyectos.map(item => <option value={item.id} key={item.id}>{item.nombre}{proyectoOperativoParaContratista(item, contratista.id) ? '' : ' · Histórico'}</option>)}
             </select>
           </label>
