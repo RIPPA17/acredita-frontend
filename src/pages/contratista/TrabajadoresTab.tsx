@@ -14,7 +14,7 @@ import { AsignacionTrabajador, Contratista, Documento, Mandante, Proyecto, Requi
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
-import { getServiciosProyecto } from '../../data/operationalCore';
+import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
 import {
   documentoVigente,
   getEstadoDocumentoEfectivo,
@@ -56,9 +56,6 @@ const DOC_UI: Record<DocEstado, { label: string; badge: string }> = {
   Vencido: { label: 'Vencido', badge: 'tw-badge-red' },
 };
 
-
-const proyectoOperativo = (proyecto?: Proyecto): boolean =>
-  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
 
 function getAsignacionContextual(trabajador: Trabajador, proyectoId: string, modoConsulta: boolean): AsignacionTrabajador | undefined {
   const delProyecto = (trabajador.asignaciones || [])
@@ -203,7 +200,7 @@ export default function TrabajadoresTab({
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const proyecto = misProyectos.find(item => item.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyecto);
+  const modoConsulta = !proyectoOperativoParaContratista(proyecto, contratistaLogueado.id);
   const requisitos = getRequisitos().filter(item =>
     item.proyectoId === selectedProyectoId && item.destino === 'trabajador' && item.activo !== false
   );
