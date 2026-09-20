@@ -63,7 +63,9 @@ test.describe('superficie pública de lanzamiento', () => {
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
 
     await page.goto('/admin');
-    await expect(page).toHaveTitle('Administración | Acredita');
+    // /admin es privado: sin sesión puede conservar el título de la ruta durante
+    // la resolución de auth o terminar en Login. En ambos casos debe ser noindex.
+    await expect(page).toHaveTitle(/^(Administración|Iniciar sesión) \| Acredita$/);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
   });
 

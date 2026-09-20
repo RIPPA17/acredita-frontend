@@ -26,9 +26,7 @@ import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, markNotificationKeysRead, saveNotificationPreferences } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
-import { getAsignacionProyecto, getServiciosProyecto } from '../data/operationalCore';
-
-const proyectoEstaActivo = (proyecto: Proyecto): boolean => ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
+import { getAsignacionProyecto, getServiciosProyecto, proyectoOperativoParaContratista } from '../data/operationalCore';
 
 export default function ContratistaPortal() {
   const navigate = useNavigate();
@@ -121,10 +119,10 @@ export default function ContratistaPortal() {
   const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
   const misProyectos = allProyectos
     .filter(p => p.contratistas.includes(contratistaLogueado.id))
-    .sort((a, b) => Number(proyectoEstaActivo(b)) - Number(proyectoEstaActivo(a)) || a.nombre.localeCompare(b.nombre, 'es'));
-  const proyectosActivos = misProyectos.filter(proyectoEstaActivo);
-  const proyectosHistoricos = misProyectos.filter(proyecto => !proyectoEstaActivo(proyecto));
-  const proyectosKey = misProyectos.map(proyecto => `${proyecto.id}:${proyecto.estado}`).join('|');
+    .sort((a, b) => Number(proyectoOperativoParaContratista(b, contratistaLogueado.id)) - Number(proyectoOperativoParaContratista(a, contratistaLogueado.id)) || a.nombre.localeCompare(b.nombre, 'es'));
+  const proyectosActivos = misProyectos.filter(proyecto => proyectoOperativoParaContratista(proyecto, contratistaLogueado.id));
+  const proyectosHistoricos = misProyectos.filter(proyecto => !proyectoOperativoParaContratista(proyecto, contratistaLogueado.id));
+  const proyectosKey = misProyectos.map(proyecto => `${proyecto.id}:${proyecto.estado}:${proyectoOperativoParaContratista(proyecto, contratistaLogueado.id)}`).join('|');
 
   React.useEffect(() => {
     if (!session?.profileId) return;
@@ -287,8 +285,8 @@ export default function ContratistaPortal() {
 
   const openAddWorkerModal = () => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
-    if (!project || !proyectoEstaActivo(project)) {
-      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+    if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
+      showToast('Este proyecto está en modo histórico y solo permite consultar el historial.', 'warning');
       return;
     }
     setEditingWorkerRut(null);
@@ -298,8 +296,8 @@ export default function ContratistaPortal() {
 
   const openEditWorkerModal = (worker: Trabajador) => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
-    if (!project || !proyectoEstaActivo(project)) {
-      showToast('Este proyecto está finalizado y no permite editar trabajadores.', 'warning');
+    if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
+      showToast('Este proyecto está en modo histórico y no permite editar trabajadores.', 'warning');
       return;
     }
     const assignment = getAsignacionProyecto(worker, selectedProyectoId);
@@ -327,8 +325,8 @@ export default function ContratistaPortal() {
 
   const handleRetireWorker = async (worker: Trabajador) => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
-    if (!project || !proyectoEstaActivo(project)) {
-      showToast('Este proyecto está finalizado y no permite retirar trabajadores.', 'warning');
+    if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
+      showToast('Este proyecto está en modo histórico y no permite retirar trabajadores.', 'warning');
       return;
     }
     const list = getContratistas();
@@ -376,8 +374,8 @@ export default function ContratistaPortal() {
       return;
     }
     const project = misProyectos.find(item => item.id === selectedProyectoId);
-    if (!project || !proyectoEstaActivo(project)) {
-      showToast('Este proyecto está finalizado y solo permite consultar el historial.', 'warning');
+    if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
+      showToast('Este proyecto está en modo histórico y solo permite consultar el historial.', 'warning');
       return;
     }
     if (!newWorkerForm.fechaInicioContrato) {
@@ -590,17 +588,17 @@ export default function ContratistaPortal() {
         {proyectoActivo && (
           <div className="contractor-project-context hidden sm:flex" aria-label="Contexto del proyecto activo">
             <div>
-              <span>Proyecto activo</span>
+              <span>Proyecto</span>
               <select
                 aria-label="Proyecto activo global"
                 value={proyectoActivo.id}
                 onChange={event => seleccionarProyecto(event.target.value)}
               >
                 {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
-                {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
+                {proyectosHistoricos.length > 0 && <optgroup label="Históricos / relación finalizada">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
               </select>
             </div>
-            <small>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
+            <small>{proyectoOperativoParaContratista(proyectoActivo, contratistaLogueado.id) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</small>
           </div>
         )}
         <div className="flex items-center gap-4">
@@ -630,16 +628,16 @@ export default function ContratistaPortal() {
 
       {proyectoActivo && (
         <div className="contractor-project-context-mobile sm:hidden">
-          <label htmlFor="contractor-mobile-project">Proyecto activo</label>
+          <label htmlFor="contractor-mobile-project">Proyecto</label>
           <select
             id="contractor-mobile-project"
             value={proyectoActivo.id}
             onChange={event => seleccionarProyecto(event.target.value)}
           >
             {proyectosActivos.length > 0 && <optgroup label="Proyectos activos">{proyectosActivos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}</option>)}</optgroup>}
-            {proyectosHistoricos.length > 0 && <optgroup label="Históricos / finalizados">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
+            {proyectosHistoricos.length > 0 && <optgroup label="Históricos / relación finalizada">{proyectosHistoricos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre} · Histórico</option>)}</optgroup>}
           </select>
-          <span>{proyectoEstaActivo(proyectoActivo) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
+          <span>{proyectoOperativoParaContratista(proyectoActivo, contratistaLogueado.id) ? '' : 'Histórico · '}{mandanteProyectoActivo?.nombre || 'Mandante no disponible'}</span>
         </div>
       )}
 
@@ -725,7 +723,7 @@ export default function ContratistaPortal() {
               <div className="sb-org flex justify-between items-center pr-3 pb-3 border-b border-white/10">
                 <div>
                   <div className="sb-org-name">{contratistaLogueado.nombre}</div>
-                  <div className="sb-org-sub">RUT {contratistaLogueado.rut} · {misProyectos.length} proyectos activos</div>
+                  <div className="sb-org-sub">RUT {contratistaLogueado.rut} · {proyectosActivos.length} proyecto{proyectosActivos.length === 1 ? '' : 's'} activo{proyectosActivos.length === 1 ? '' : 's'}</div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white p-1">
                   <X size={20} />

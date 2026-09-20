@@ -252,6 +252,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
     ? rows.accreditations
     : rows.accreditations.filter(row => row.is_active);
   const contractorsByProject = new Map<string, string[]>();
+  const activeContractorsByProject = new Map<string, string[]>();
   visibleAccreditations.forEach(row => {
     const projectKey = projectKeyByUuid.get(row.project_id);
     const contractorKey = contractorKeyByUuid.get(row.contratista_id);
@@ -259,6 +260,11 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
     const current = contractorsByProject.get(projectKey) || [];
     current.push(contractorKey);
     contractorsByProject.set(projectKey, current);
+    if (row.is_active) {
+      const active = activeContractorsByProject.get(projectKey) || [];
+      active.push(contractorKey);
+      activeContractorsByProject.set(projectKey, active);
+    }
   });
 
   const frontendMandantes: Mandante[] = rows.mandantes
@@ -290,6 +296,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         mandanteId: mandanteKeyByUuid.get(row.mandante_id)!,
         estado: frontendStatus(row.status),
         contratistas: contractorsByProject.get(id) || [],
+        contratistasActivos: activeContractorsByProject.get(id) || [],
         ubicacion: row.location || fallback?.ubicacion,
         fechaInicio: row.starts_at || fallback?.fechaInicio,
         fechaTermino: row.ends_at || fallback?.fechaTermino,

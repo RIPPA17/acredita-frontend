@@ -1,6 +1,7 @@
 import DocumentLibraryPanel from '../../components/DocumentLibraryPanel';
 import type { Contratista, Mandante, Proyecto } from '../../types';
 import DocumentRequirementsTab from './DocumentRequirementsTab';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 export default function SubirTab({
   contratistaLogueado,
@@ -20,6 +21,7 @@ export default function SubirTab({
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const project = misProyectos.find(item => item.id === selectedProyectoId) || misProyectos[0];
+  const operativo = proyectoOperativoParaContratista(project, contratistaLogueado.id);
   const requirementsProps = {
     contratistaLogueado,
     misProyectos,
@@ -33,7 +35,7 @@ export default function SubirTab({
   return (
     <>
       <DocumentRequirementsTab {...requirementsProps} />
-      {project && (
+      {project && operativo && (
         <section className="mx-auto w-full max-w-[1440px] px-4 pb-8 sm:px-6 lg:px-8">
           <DocumentLibraryPanel
             projectKey={project.id}

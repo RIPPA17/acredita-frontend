@@ -26,6 +26,7 @@ import {
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 import {
   buildRequisitosEmpresa,
   buildRequisitosTrabajador,
@@ -53,9 +54,6 @@ interface AccionInicio {
 
 const estadoVisual = (estado: string): EstadoVisual =>
   estado === 'Acreditado' ? 'ok' : estado === 'Bloqueado' ? 'danger' : 'warning';
-
-const proyectoOperativo = (proyecto: Proyecto): boolean =>
-  ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es'));
 
 const textoEstadoDocumento = (item: RequisitoConDoc): string => {
   if (item.estado === 'Rechazado') return item.doc?.motivoRechazo || item.doc?.motivo || 'Documento rechazado por Acredita.';
@@ -128,7 +126,7 @@ export default function DashboardTab({
   }
 
   const proyectoActual = misProyectos.find(proyecto => proyecto.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyectoActual);
+  const modoConsulta = !proyectoOperativoParaContratista(proyectoActual, contratistaLogueado.id);
   const mandanteActual = allMandantes.find(mandante => mandante.id === proyectoActual.mandanteId);
   const row = buildAcreditacionRows([contratistaLogueado], misProyectos, allMandantes).find(item => item.proyectoId === proyectoActual.id);
   const requisitos = getRequisitos();
@@ -298,7 +296,7 @@ export default function DashboardTab({
   const abrirFicha = () => setShowFichaAcreditacion(true);
 
   const descripcionEstado = modoConsulta
-    ? 'Este proyecto ya no está operativo. La información permanece disponible como historial y no genera nuevas acciones, cargas ni bloqueos actuales.'
+    ? 'Este proyecto o la participación del contratista ya no está operativa. La información permanece disponible como historial y no genera nuevas acciones, cargas ni bloqueos actuales.'
     : estado === 'Acreditado'
       ? 'Todos los requisitos obligatorios de empresa y trabajadores están aprobados y vigentes.'
       : estado === 'Bloqueado'
@@ -327,13 +325,13 @@ export default function DashboardTab({
     <div className="inicio2-page">
       <section className="inicio2-hero">
         <div className="inicio2-hero-inner"><div><div className="inicio2-eyebrow">Portal contratista</div><h1>Inicio</h1><p>Revisa en segundos el estado de tu acreditación, los bloqueos que requieren atención y los próximos vencimientos de tu proyecto.</p></div>
-          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto activo</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativo(proyecto) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
+          <div className="inicio2-picker"><div><label htmlFor="inicio2-project">Proyecto</label><select id="inicio2-project" value={proyectoActual.id} onChange={event => setSelectedProyectoId(event.target.value)}>{misProyectos.map(proyecto => <option key={proyecto.id} value={proyecto.id}>{proyecto.nombre}{proyectoOperativoParaContratista(proyecto, contratistaLogueado.id) ? '' : ' · Histórico'}</option>)}</select></div><div className="inicio2-project-meta">Mandante<strong>{mandanteActual?.nombre || 'Mandante no disponible'}</strong></div></div>
         </div>
       </section>
 
       <section className="inicio2-floating">
         {showWelcomeAlert && !modoConsulta && <div className="inicio2-welcome"><span><CheckCircle size={16} /> Bienvenido al proyecto. Revisa sus requisitos de acreditación.</span><button type="button" onClick={() => setShowWelcomeAlert(false)} aria-label="Cerrar bienvenida"><X size={15} /></button></div>}
-        {modoConsulta && <div className="inicio2-historical-banner"><Clock3 size={17} /><div><strong>Proyecto finalizado · modo consulta</strong><p>Puedes revisar su historial, documentos y ficha de acreditación, pero este proyecto ya no genera nuevas cargas, renovaciones ni acciones operativas.</p></div></div>}
+        {modoConsulta && <div className="inicio2-historical-banner"><Clock3 size={17} /><div><strong>Proyecto histórico · modo consulta</strong><p>Puedes revisar su historial, documentos y ficha de acreditación, pero este proyecto ya no genera nuevas cargas, renovaciones ni acciones operativas.</p></div></div>}
 
         {proyectoRecienIniciado ? <div className="inicio2-empty inicio2-onboarding"><FileText size={34} /><strong>Comienza la acreditación de {proyectoActual.nombre}</strong><p>Sigue este orden para evitar cargar información fuera de contexto y llegar a la acreditación de forma clara.</p><div className="inicio2-onboarding-steps">
           <button type="button" onClick={() => navegarDocumentos()}><b>1</b><span>Revisar requisitos<small>Conoce qué exige el Mandante.</small></span></button>
@@ -369,7 +367,7 @@ export default function DashboardTab({
           <div className="inicio2-main-grid">
             <section className="inicio2-card"><header><div><h3>Avance de acreditación</h3><p>Progreso real dentro de {proyectoActual.nombre}.</p></div><button type="button" onClick={abrirFicha}>Ver ficha completa</button></header><div className="inicio2-card-body"><div className="inicio2-advance"><div><strong><i />Empresa</strong><span>{empresaOk} de {empresaTotal} obligatorios listos</span></div><div><i style={{ width: `${empresaTotal ? (empresaOk / empresaTotal) * 100 : 0}%` }} /></div></div><div className="inicio2-advance workers"><div><strong><i />Trabajadores</strong><span>{trabajadoresOk} de {trabajadoresTotal} habilitados</span></div><div><i style={{ width: `${trabajadoresTotal ? (trabajadoresOk / trabajadoresTotal) * 100 : 0}%` }} /></div></div><div className="inicio2-minis"><div><span>Aprobados</span><b>{aprobados} trabajadores</b></div><div><span>En proceso</span><b>{enProceso} trabajadores</b></div><div><span>Trabajadores por vencer</span><b>{porVencer} trabajadores</b></div></div></div></section>
 
-            <section className="inicio2-card"><header><div><h3>Requiere atención</h3><p>{modoConsulta ? 'Este proyecto está en modo consulta.' : 'Solo asuntos que puedes resolver ahora.'}</p></div>{!modoConsulta && <button type="button" onClick={() => navegarDocumentos('accion')}>Ver todo</button>}</header><div className="inicio2-card-body inicio2-attention-list">{modoConsulta ? <div className="inicio2-positive"><Clock3 /><strong>Proyecto finalizado</strong><p>No existen acciones operativas que resolver en este proyecto.</p></div> : accionables.length === 0 ? <div className="inicio2-positive"><CheckCircle /><strong>Todo al día</strong><p>No tienes acciones pendientes en este proyecto.</p></div> : accionables.slice(0, 4).map((accion, index) => <div className="inicio2-attention" key={accion.key}><i>{index + 1}</i><div><strong>{accion.owner} · {accion.titulo}</strong><p><b>{accion.impacto}.</b> {accion.descripcion}</p></div><button type="button" onClick={() => irAAccion(accion)}>{accion.cta}</button></div>)}</div></section>
+            <section className="inicio2-card"><header><div><h3>Requiere atención</h3><p>{modoConsulta ? 'Este proyecto está en modo consulta.' : 'Solo asuntos que puedes resolver ahora.'}</p></div>{!modoConsulta && <button type="button" onClick={() => navegarDocumentos('accion')}>Ver todo</button>}</header><div className="inicio2-card-body inicio2-attention-list">{modoConsulta ? <div className="inicio2-positive"><Clock3 /><strong>Proyecto histórico</strong><p>No existen acciones operativas que resolver en este proyecto.</p></div> : accionables.length === 0 ? <div className="inicio2-positive"><CheckCircle /><strong>Todo al día</strong><p>No tienes acciones pendientes en este proyecto.</p></div> : accionables.slice(0, 4).map((accion, index) => <div className="inicio2-attention" key={accion.key}><i>{index + 1}</i><div><strong>{accion.owner} · {accion.titulo}</strong><p><b>{accion.impacto}.</b> {accion.descripcion}</p></div><button type="button" onClick={() => irAAccion(accion)}>{accion.cta}</button></div>)}</div></section>
           </div>
 
           {preventivas.length > 0 && !modoConsulta && <section className="inicio2-waiting preventive"><header><div><Clock3 /><span><strong>Acciones preventivas</strong><small>Elementos vigentes que conviene resolver antes de que generen un bloqueo.</small></span></div><button type="button" onClick={() => navegarDocumentos('por_vencer')}>Ver próximos vencimientos</button></header>{preventivas.slice(0, 3).map(accion => <div className="inicio2-wait-row" key={accion.key}><div><strong>{accion.owner} · {accion.titulo}</strong><p>{accion.descripcion}</p></div><button type="button" onClick={() => irAAccion(accion)}>{accion.cta}</button></div>)}</section>}

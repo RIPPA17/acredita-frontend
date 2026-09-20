@@ -14,7 +14,7 @@ import { AsignacionTrabajador, Contratista, Documento, Mandante, Proyecto, Requi
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
-import { getServiciosProyecto } from '../../data/operationalCore';
+import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
 import {
   documentoVigente,
   getEstadoDocumentoEfectivo,
@@ -56,9 +56,6 @@ const DOC_UI: Record<DocEstado, { label: string; badge: string }> = {
   Vencido: { label: 'Vencido', badge: 'tw-badge-red' },
 };
 
-
-const proyectoOperativo = (proyecto?: Proyecto): boolean =>
-  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
 
 function getAsignacionContextual(trabajador: Trabajador, proyectoId: string, modoConsulta: boolean): AsignacionTrabajador | undefined {
   const delProyecto = (trabajador.asignaciones || [])
@@ -203,7 +200,7 @@ export default function TrabajadoresTab({
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const proyecto = misProyectos.find(item => item.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyecto);
+  const modoConsulta = !proyectoOperativoParaContratista(proyecto, contratistaLogueado.id);
   const requisitos = getRequisitos().filter(item =>
     item.proyectoId === selectedProyectoId && item.destino === 'trabajador' && item.activo !== false
   );
@@ -242,7 +239,7 @@ export default function TrabajadoresTab({
   const ejecutarAccion = async (item: ChecklistItem, trabajador: Trabajador) => {
     const action = accionDocumento(item);
     if (modoConsulta && action.actionable) {
-      showToast('Este proyecto está finalizado y solo permite consultar documentos existentes.', 'warning');
+      showToast('Este proyecto está en modo histórico y solo permite consultar documentos existentes.', 'warning');
       return;
     }
     if (!action.actionable) {
@@ -424,7 +421,7 @@ export default function TrabajadoresTab({
             {!modoConsulta && selected.estado === 'por_vencer' && <div className="tw-info tw-info-yellow"><strong>Acceso aún habilitado</strong><p>Puede seguir ingresando mientras el documento esté vigente. Renueva antes de su vencimiento.</p></div>}
             {!modoConsulta && selected.estado === 'pendiente' && <div className="tw-info"><strong>Estado en proceso</strong><p>{problemasFicha.length > 0 ? `La ficha laboral está incompleta: ${problemasFicha.join(', ')}.` : selected.checklist.length === 0 ? 'No hay requisitos aplicables para la configuración actual; revisa servicio, categoría o matriz documental.' : revisionesObligatorias.length > 0 && pendientesObligatorios.length === 0 ? 'La documentación obligatoria ya fue cargada y está esperando revisión de Acredita.' : 'Falta completar o aprobar documentación obligatoria. Aún no puede ingresar al proyecto.'}</p></div>}
             {!modoConsulta && selected.estado === 'aprobado' && <div className="tw-info"><strong>Trabajador habilitado</strong><p>Todos los requisitos obligatorios están vigentes para este proyecto.</p></div>}
-            {modoConsulta && <div className="tw-info"><strong>Proyecto finalizado · modo consulta</strong><p>Este trabajador y sus períodos se conservan como historial. No se pueden editar, retirar ni cargar nuevos antecedentes desde este proyecto.</p></div>}
+            {modoConsulta && <div className="tw-info"><strong>Proyecto histórico · modo consulta</strong><p>Este trabajador y sus períodos se conservan como historial. No se pueden editar, retirar ni cargar nuevos antecedentes desde este proyecto.</p></div>}
           </aside>
         </div>
       </section>
@@ -470,12 +467,12 @@ export default function TrabajadoresTab({
       </section>
 
       <section className="tw-floating">
-        {modoConsulta && <div className="tw-info mb-3"><strong>Proyecto finalizado · modo consulta</strong><p>Puedes revisar trabajadores y períodos históricos, pero no agregar, editar, retirar ni cargar nuevos documentos.</p></div>}
+        {modoConsulta && <div className="tw-info mb-3"><strong>Proyecto histórico · modo consulta</strong><p>Puedes revisar trabajadores y períodos históricos, pero no agregar, editar, retirar ni cargar nuevos documentos.</p></div>}
         <div className="tw-kpis">
           <div className="tw-kpi"><span>Total trabajadores</span><b>{resumenes.length}</b><small>Asignados al proyecto</small></div>
           <div className="tw-kpi tw-kpi-green"><span>{modoConsulta ? 'Períodos activos al cierre' : 'Habilitados'}</span><b>{modoConsulta ? historialAsignacionesCount(trabajadores, selectedProyectoId, 'activa') : habilitados}</b><small>{modoConsulta ? 'Referencia histórica' : porVencer ? `${porVencer} con vencimiento próximo` : 'Sin alertas próximas'}</small></div>
           <div className="tw-kpi tw-kpi-blue"><span>{modoConsulta ? 'Períodos finalizados' : 'En proceso'}</span><b>{modoConsulta ? historialAsignacionesCount(trabajadores, selectedProyectoId, 'baja') : enProceso}</b><small>{modoConsulta ? 'Bajas conservadas' : 'Documentación pendiente o en revisión'}</small></div>
-          <div className="tw-kpi tw-kpi-red"><span>{modoConsulta ? 'Acceso actual' : 'Bloqueados'}</span><b>{modoConsulta ? '—' : bloqueados}</b><small>{modoConsulta ? 'No aplica a proyecto finalizado' : 'No pueden ingresar a faena'}</small></div>
+          <div className="tw-kpi tw-kpi-red"><span>{modoConsulta ? 'Acceso actual' : 'Bloqueados'}</span><b>{modoConsulta ? '—' : bloqueados}</b><small>{modoConsulta ? 'No aplica en modo histórico' : 'No pueden ingresar a faena'}</small></div>
         </div>
 
         <div className="tw-card tw-directory">

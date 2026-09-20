@@ -26,7 +26,8 @@ export interface Proyecto {
   estado: string; // e.g. "Activo"
   urgenciaBadge?: string; // "b-red" | "b-yellow" | "b-green"
   urgenciaLabel?: string; // e.g. "3 urgentes", "1 normal", "Al día"
-  contratistas: string[]; // IDs de contratistas asociados
+  contratistas: string[]; // IDs de contratistas asociados, incluidos históricos visibles
+  contratistasActivos?: string[]; // IDs con acreditación/relación activa en el proyecto
   ubicacion?: string;
   fechaInicio?: string;
   fechaTermino?: string;

@@ -35,6 +35,7 @@ type MockOptions = {
   workerDocumentScenario?: WorkerDocumentScenario;
   categorizedWorker?: boolean;
   bulkReentry?: boolean;
+  inactiveAccreditationOnActiveProject?: boolean;
 };
 
 function appSession(role: Role) {
@@ -74,7 +75,7 @@ function fixtures(role: Role, options: MockOptions) {
     ],
     contratistas: [{ id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null }],
     accreditations: [
-      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: true },
+      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject },
       ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false }] : []),
     ],
     requirements: [
@@ -367,7 +368,7 @@ test('09c Contratista conserva proyecto en URL, memoria y navegación del navega
   const selector = page.getByLabel('Proyecto activo global');
   await expect(selector).toHaveValue('proyecto_piloto');
   await expect(selector.locator('optgroup[label="Proyectos activos"] option')).toHaveText(['Proyecto Piloto QA']);
-  await expect(selector.locator('optgroup[label="Históricos / finalizados"] option')).toHaveText(['Proyecto Histórico QA · Histórico']);
+  await expect(selector.locator('optgroup[label="Históricos / relación finalizada"] option')).toHaveText(['Proyecto Histórico QA · Histórico']);
 
   await selector.selectOption('proyecto_historico');
   await expect(page).toHaveURL(/proyecto=proyecto_historico/);
@@ -411,7 +412,7 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   await protectedPage(page, 'contratista', { historicalProject: true });
   await page.goto('/contratista?proyecto=proyecto_historico');
 
-  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
   const responsibilities = page.getByLabel('Responsabilidad de pendientes');
   await expect(responsibilities.locator('.mine b')).toHaveText('0');
   await expect(responsibilities.locator('.preventive b')).toHaveText('0');
@@ -419,7 +420,7 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   await expect(page.getByRole('button', { name: /Subir documento/ })).toHaveCount(0);
 
   await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
   await expect(page.getByText('Documento Histórico QA', { exact: true }).first()).toBeVisible();
   const historicalNoFileButton = page.getByRole('button', { name: 'Sin archivo', exact: true }).first();
   await expect(historicalNoFileButton).toBeVisible();
@@ -431,6 +432,43 @@ test('10 Contratista puede abrir Proyectos', async ({ page }) => {
   await page.goto('/contratista');
   await page.getByText('Proyectos', { exact: true }).first().click();
   await expect(page.locator('.mp-project-title').filter({ hasText: 'Proyecto Piloto QA' }).first()).toBeVisible();
+});
+
+test('10b Proyectos separa operación activa de historial y bloquea mutaciones del histórico', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista/proyectos?proyecto=proyecto_piloto');
+
+  const activeCard = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
+  const historicalCard = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Histórico QA' });
+  await expect(activeCard).toBeVisible();
+  await expect(historicalCard).toBeVisible();
+  await expect(historicalCard.getByText('Histórico', { exact: true })).toBeVisible();
+  await expect(historicalCard.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
+  await expect(historicalCard.getByRole('button', { name: 'Resolver bloqueos' })).toHaveCount(0);
+
+  await historicalCard.getByRole('button', { name: 'Ver historial', exact: true }).click();
+  await expect(page.getByText(/Proyecto histórico · modo consulta/)).toBeVisible();
+  await expect(page.getByText('Santiago', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Vehículos y equipos', exact: true }).click();
+  await expect(page.getByText(/activos disponibles solo para consulta/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Nuevo activo/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Editar ficha/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Guardar en biblioteca/ })).toHaveCount(0);
+});
+
+test('10c Proyecto activo con relación de contratista finalizada queda en modo histórico', async ({ page }) => {
+  await protectedPage(page, 'contratista', { inactiveAccreditationOnActiveProject: true });
+  await page.goto('/contratista?proyecto=proyecto_piloto');
+
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Subir documento/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Agregar trabajador/ })).toHaveCount(0);
+
+  await page.getByText('Proyectos', { exact: true }).first().click();
+  const card = page.locator('.mp-project-card').filter({ hasText: 'Proyecto Piloto QA' });
+  await expect(card.getByText('Histórico', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Ver historial', exact: true })).toBeVisible();
 });
 
 test('11 Contratista ve requisitos documentales desde Supabase', async ({ page }) => {
@@ -482,7 +520,7 @@ test('12b Trabajadores históricos son solo consulta y conservan el contrato de 
   await protectedPage(page, 'contratista', { historicalProject: true });
   await page.goto('/contratista/trabajadores?proyecto=proyecto_historico');
 
-  await expect(page.getByText('Proyecto finalizado · modo consulta', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Agregar trabajador/ })).toHaveCount(0);
 
@@ -492,7 +530,7 @@ test('12b Trabajadores históricos son solo consulta y conservan el contrato de 
   await expect(page.getByRole('button', { name: 'Retirar' })).toHaveCount(0);
   await expect(page.getByText(/Plazo fijo · hasta 2025-12-31/).first()).toBeVisible();
   await expect(page.getByText(/contrato desde 2025-01-01/)).toBeVisible();
-  await expect(page.getByText(/Proyecto finalizado · modo consulta/).last()).toBeVisible();
+  await expect(page.getByText(/Proyecto histórico · modo consulta/).last()).toBeVisible();
 });
 
 test('12c Alta de trabajador limita ingreso a la vigencia del contrato', async ({ page }) => {

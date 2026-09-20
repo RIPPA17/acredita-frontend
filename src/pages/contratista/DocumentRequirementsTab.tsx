@@ -16,7 +16,7 @@ import {
   RequisitoConDoc,
 } from './inicio/inicioUtils';
 import { getEstadoDocumentoEfectivo } from './documentosUtils';
-import { getObligacionesDocumentales } from '../../data/operationalCore';
+import { getObligacionesDocumentales, proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 // Misma maqueta del prototipo HTML aprobado (doc-*), con los colores
 // reales de Acredita (ver .doc-page en index.css). Solo la CLAVE (qué
@@ -41,9 +41,6 @@ const DOC_PRIORITY: Record<DocEstado, number> = {
 
 type Scope = 'todos' | 'empresa' | 'trabajadores';
 type StatusFilter = 'todos' | 'accion' | 'revision' | 'por_vencer' | 'aprobado';
-
-const proyectoOperativo = (proyecto: Proyecto | undefined): boolean =>
-  Boolean(proyecto && ['activo', 'active'].includes(String(proyecto.estado || '').trim().toLocaleLowerCase('es')));
 
 interface Row extends RequisitoConDoc {
   key: string;
@@ -160,7 +157,7 @@ export default function SubirTab({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const proyectoActual = misProyectos.find(p => p.id === selectedProyectoId) || misProyectos[0];
-  const modoConsulta = !proyectoOperativo(proyectoActual);
+  const modoConsulta = !proyectoOperativoParaContratista(proyectoActual, contratistaLogueado.id);
   const requisitosAll = getRequisitos();
 
   const trabajadoresAsignados = proyectoActual
@@ -264,7 +261,7 @@ export default function SubirTab({
 
   const seleccionarArchivo = (item: Row) => {
     if (modoConsulta) {
-      showToast('Este proyecto está finalizado y solo permite consultar su historial.', 'warning');
+      showToast('Este proyecto está en modo histórico y solo permite consultar su historial.', 'warning');
       return;
     }
     const correctingRenewal = item.doc?.versionEnTramite?.estado === 'rechazado';
@@ -341,7 +338,7 @@ export default function SubirTab({
       </section>
 
       <section className="doc-floating">
-        {modoConsulta && <div className="doc-historical-notice"><strong>Proyecto finalizado · modo consulta</strong><span>Puedes revisar requisitos, archivos y versiones históricas, pero no subir, corregir ni renovar documentos.</span></div>}
+        {modoConsulta && <div className="doc-historical-notice"><strong>Proyecto histórico · modo consulta</strong><span>Puedes revisar requisitos, archivos y versiones históricas, pero no subir, corregir ni renovar documentos.</span></div>}
         <div className="doc-summary">
           <div className="doc-metric action">
             <div className="doc-metric-label">Requieren acción</div>
@@ -367,7 +364,7 @@ export default function SubirTab({
 
         <div className="doc-notice">
           <div className="doc-notice-icon">!</div>
-          <div><b>{modoConsulta ? 'Modo consulta:' : 'Cómo funciona:'}</b> {modoConsulta ? 'este proyecto ya finalizó. Los estados se conservan como historial y las acciones de carga están deshabilitadas.' : 'cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".'}</div>
+          <div><b>{modoConsulta ? 'Modo consulta:' : 'Cómo funciona:'}</b> {modoConsulta ? 'este proyecto o la participación del contratista ya no está operativa. Los estados se conservan como historial y las acciones de carga están deshabilitadas.' : 'cada carga parte desde un requisito exacto. Así el archivo queda asociado al proyecto, empresa o trabajador correcto y no se transforma en un documento "suelto".'}</div>
         </div>
 
         <div className="doc-workspace">

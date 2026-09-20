@@ -23,6 +23,7 @@ import {
   type TicketRecord,
 } from '../../data/supabaseOperations';
 import { updateContractorActionPlan } from '../../data/contractorOperations';
+import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 type Mode = 'evaluaciones' | 'pagos' | 'soporte';
 
@@ -55,9 +56,11 @@ const planLabel: Record<ActionPlanRecord['status'], string> = {
 
 function ContractorActionPlans({
   evaluationId,
+  readOnly = false,
   showToast,
 }: {
   evaluationId: string;
+  readOnly?: boolean;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [items, setItems] = useState<ActionPlanRecord[]>([]);
@@ -87,6 +90,7 @@ function ContractorActionPlans({
   useEffect(() => { void load(); }, [evaluationId]);
 
   const change = async (item: ActionPlanRecord, status: 'en_progreso' | 'completado') => {
+    if (readOnly) return;
     const comment = evidence[item.id]?.trim() || '';
     if (status === 'completado' && comment.length < 3) {
       showToast('Agrega evidencia o un comentario de cierre antes de completar el plan.', 'warning');
@@ -105,6 +109,7 @@ function ContractorActionPlans({
   };
 
   const saveEvidence = async (item: ActionPlanRecord) => {
+    if (readOnly) return;
     const comment = evidence[item.id]?.trim() || '';
     if (!comment) {
       showToast('Escribe una evidencia o comentario antes de guardar.', 'warning');
@@ -128,7 +133,7 @@ function ContractorActionPlans({
   return (
     <div className="space-y-3">
       {items.map(item => {
-        const editable = item.status === 'pendiente' || item.status === 'en_progreso';
+        const editable = !readOnly && (item.status === 'pendiente' || item.status === 'en_progreso');
         return (
           <div key={item.id} className="rounded-xl border border-cream3 bg-white p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -143,7 +148,7 @@ function ContractorActionPlans({
                   {item.due_date ? ` · vence ${item.due_date}` : ''}
                 </small>
               </div>
-              {item.status === 'pendiente' && (
+              {!readOnly && item.status === 'pendiente' && (
                 <button type="button" className="btn btn-secondary" disabled={savingId === item.id} onClick={() => void change(item, 'en_progreso')}>
                   <PlayCircle size={15} /> Iniciar
                 </button>
@@ -183,9 +188,11 @@ function ContractorActionPlans({
 
 function ContractorTicketConversation({
   ticketId,
+  readOnly = false,
   showToast,
 }: {
   ticketId: string;
+  readOnly?: boolean;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [items, setItems] = useState<TicketMessageRecord[]>([]);
@@ -204,7 +211,7 @@ function ContractorTicketConversation({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!body.trim() || saving) return;
+    if (!body.trim() || saving || readOnly) return;
     setSaving(true);
     try {
       await sendTicketMessage(ticketId, body, false);
@@ -230,10 +237,10 @@ function ContractorTicketConversation({
         ))}
         {items.length === 0 && <p className="text-sm text-gray-500">Sin mensajes todavía.</p>}
       </div>
-      <form onSubmit={submit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+      {!readOnly && <form onSubmit={submit} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <textarea required maxLength={3000} value={body} onChange={event => setBody(event.target.value)} className="form-input min-h-[70px] flex-1" placeholder="Escribe una respuesta para Mandante/Acredita…" />
         <button className="btn btn-primary self-end" disabled={saving || !body.trim()}><Send size={15} /> Enviar</button>
-      </form>
+      </form>}
     </div>
   );
 }
@@ -260,6 +267,7 @@ export default function OperationsTab({
   const [savingTicket, setSavingTicket] = useState(false);
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
+  const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
 
   const load = async () => {
     if (!project) {
@@ -281,7 +289,7 @@ export default function OperationsTab({
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault();
-    if (!project || !ticketForm.subject.trim() || !ticketForm.description.trim() || savingTicket) return;
+    if (!project || readOnly || !ticketForm.subject.trim() || !ticketForm.description.trim() || savingTicket) return;
     setSavingTicket(true);
     try {
       await createTicket(project.id, contratista.id, {
@@ -324,6 +332,8 @@ export default function OperationsTab({
         </div>
       </section>
 
+      {readOnly && <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"><strong>Proyecto histórico · modo consulta.</strong> Puedes revisar evaluaciones, estados de pago y conversaciones existentes, pero no modificar planes de acción ni crear nuevos mensajes o tickets.</div>}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button type="button" onClick={() => setMode('evaluaciones')} className={`rounded-xl border p-4 text-left ${mode === 'evaluaciones' ? 'border-brown bg-orange-50/40' : 'bg-white'}`}>
           <ClipboardCheck size={19} className="text-brown" /><strong className="mt-2 block text-navy">Evaluaciones</strong><span className="text-sm text-gray-500">{data.evaluations.length} registrada{data.evaluations.length === 1 ? '' : 's'}</span>
@@ -357,7 +367,7 @@ export default function OperationsTab({
                     {expandedEvaluation === item.id ? 'Ocultar planes' : 'Planes de acción'}
                   </button>
                 </div>
-                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} showToast={showToast} /></div>}
+                {expandedEvaluation === item.id && <div className="mt-4"><ContractorActionPlans evaluationId={item.id} readOnly={readOnly} showToast={showToast} /></div>}
               </article>
             ))}
             {data.evaluations.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">Todavía no hay evaluaciones publicadas para este proyecto.</div>}
@@ -374,14 +384,14 @@ export default function OperationsTab({
           </section>}
 
           {mode === 'soporte' && <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_1.4fr]">
-            <form onSubmit={submitTicket} className="rounded-xl border border-cream3 bg-white p-4">
+            {!readOnly && <form onSubmit={submitTicket} className="rounded-xl border border-cream3 bg-white p-4">
               <h3 className="font-semibold text-navy">Nuevo ticket</h3>
               <p className="mt-1 text-sm text-gray-500">Solicita ayuda dejando el contexto dentro del proyecto activo.</p>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Asunto<input required maxLength={160} value={ticketForm.subject} onChange={event => setTicketForm(current => ({ ...current, subject: event.target.value }))} className="form-input mt-1 w-full" /></label>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Prioridad<select value={ticketForm.priority} onChange={event => setTicketForm(current => ({ ...current, priority: event.target.value }))} className="form-input mt-1 w-full"><option value="baja">Baja</option><option value="normal">Normal</option><option value="alta">Alta</option></select></label>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Descripción<textarea required maxLength={3000} value={ticketForm.description} onChange={event => setTicketForm(current => ({ ...current, description: event.target.value }))} className="form-input mt-1 min-h-[120px] w-full" /></label>
               <button className="btn btn-primary mt-3 w-full justify-center" disabled={savingTicket || !ticketForm.subject.trim() || !ticketForm.description.trim()}><Headphones size={15} /> {savingTicket ? 'Enviando…' : 'Crear ticket'}</button>
-            </form>
+            </form>}
 
             <section className="space-y-3">
               {data.tickets.map(item => (
@@ -390,7 +400,7 @@ export default function OperationsTab({
                     <div><div className="flex flex-wrap items-center gap-2"><strong className="text-navy">{item.subject}</strong><span className="rounded-full bg-cream2 px-2 py-0.5 text-[11px] font-semibold text-gray-600">{ticketLabel[item.status] || item.status}</span></div><p className="mt-1 text-sm text-gray-600">{item.resolution || item.description}</p><small className="mt-1 block text-gray-500">Prioridad {item.priority} · creado {new Date(item.created_at).toLocaleString('es-CL')}</small></div>
                     <button type="button" className="btn btn-secondary" onClick={() => setExpandedTicket(current => current === item.id ? undefined : item.id)}>{expandedTicket === item.id ? 'Ocultar' : 'Conversación'}</button>
                   </div>
-                  {expandedTicket === item.id && <ContractorTicketConversation ticketId={item.id} showToast={showToast} />}
+                  {expandedTicket === item.id && <ContractorTicketConversation ticketId={item.id} readOnly={readOnly} showToast={showToast} />}
                 </article>
               ))}
               {data.tickets.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">No tienes tickets en este proyecto.</div>}

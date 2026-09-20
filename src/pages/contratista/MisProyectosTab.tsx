@@ -9,7 +9,7 @@ import {
 } from '../../data/localStorageDb';
 import { Contratista, Proyecto, Mandante, Requisito, Trabajador } from '../../types';
 import AssetsPanel from '../../components/AssetsPanel';
-import { getServiciosProyecto } from '../../data/operationalCore';
+import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
 import { buildAcreditacionRows, estadoUILabel, DocEstado, EstadoUI } from '../admin/acreditacionUtils';
 import {
   accionEmpresaLabel,
@@ -90,8 +90,11 @@ const TRABAJADOR_BADGE_CLASS: Record<'aprobado' | 'por_vencer' | 'rechazado' | '
   pendiente: 'mp-badge-gray',
 };
 
+type FiltroProyecto = 'Todos' | EstadoUI | 'Históricos';
+
 interface ProyectoInfo {
   proyecto: Proyecto;
+  operativo: boolean;
   mandante?: Mandante;
   estadoUI: EstadoUI;
   accesoPago: ReturnType<typeof calcularAccesoPago>;
@@ -145,7 +148,8 @@ function DetalleProyecto({
   detalleRef: RefObject<HTMLDivElement>;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
-  const { proyecto: p, mandante, estadoUI, accesoPago, estadoAcceso, proximoVenc, problemaPrincipal, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct } = info;
+  const { proyecto: p, mandante, operativo, estadoUI, accesoPago, estadoAcceso, proximoVenc, problemaPrincipal, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct } = info;
+  const serviciosProyecto = getServiciosProyecto(p.id, contratistaLogueado.id, !operativo);
 
   const trabajadoresAsignados = (contratistaLogueado.trabajadores || []).filter(w =>
     esTrabajadorAsignado(w, p.id, misProyectos)
@@ -169,6 +173,12 @@ function DetalleProyecto({
           </div>
         </div>
 
+        {!operativo && (
+          <div className="mp-alert mp-alert-yellow" style={{ marginBottom: 14 }}>
+            <strong>Proyecto histórico · modo consulta.</strong> La obra puede seguir existiendo, pero la relación de este contratista ya no está operativa. Se conserva el historial sin permitir nuevas cargas ni cambios.
+          </div>
+        )}
+
         <div className="mp-detail-tabs">
           {(['resumen', 'empresa', 'trabajadores', 'activos'] as const).map(t => (
             <button
@@ -186,29 +196,41 @@ function DetalleProyecto({
             <div className="mp-grid mp-grid-4" style={{ marginBottom: 14 }}>
               <div className="mp-mini">
                 <div className="mp-mini-label">Acreditación</div>
-                <div className="mp-mini-value">{estadoUI}</div>
+                <div className="mp-mini-value">{operativo ? estadoUI : `Histórico · ${estadoUI}`}</div>
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Acceso</div>
-                <div className="mp-mini-value" style={{ color: ACCESO_COLOR[estadoAcceso.estado] }}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</div>
+                <div className="mp-mini-value" style={{ color: operativo ? ACCESO_COLOR[estadoAcceso.estado] : '#7a7a6a' }}>{operativo ? ACCESO_LABEL_CORTO[estadoAcceso.estado] : 'No operativo'}</div>
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Pago</div>
-                <div className="mp-mini-value" style={{ color: accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030' }}>{accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</div>
+                <div className="mp-mini-value" style={{ color: operativo ? (accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030') : '#7a7a6a' }}>{operativo ? (accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado') : 'No operativo'}</div>
               </div>
               <div className="mp-mini">
                 <div className="mp-mini-label">Próximo vencimiento</div>
-                <div className="mp-mini-value">{proximoVenc ? `${proximoVenc.dias} día${proximoVenc.dias === 1 ? '' : 's'}` : 'Sin alertas'}</div>
+                <div className="mp-mini-value">{operativo && proximoVenc ? `${proximoVenc.dias} día${proximoVenc.dias === 1 ? '' : 's'}` : 'Sin alertas'}</div>
               </div>
             </div>
 
+            <div className="mp-grid mp-grid-4" style={{ marginBottom: 14 }}>
+              <div className="mp-mini"><div className="mp-mini-label">Ubicación</div><div className="mp-mini-value">{p.ubicacion || 'No informada'}</div></div>
+              <div className="mp-mini"><div className="mp-mini-label">Inicio</div><div className="mp-mini-value">{p.fechaInicio || 'No informado'}</div></div>
+              <div className="mp-mini"><div className="mp-mini-label">Término</div><div className="mp-mini-value">{p.fechaTermino || (operativo ? 'En curso' : 'No informado')}</div></div>
+              <div className="mp-mini"><div className="mp-mini-label">Servicios / contratos</div><div className="mp-mini-value">{serviciosProyecto.length}</div></div>
+            </div>
+            {serviciosProyecto.length > 0 && (
+              <div className="mp-alert mp-alert-green" style={{ marginBottom: 14 }}>
+                <strong>Servicios:</strong> {serviciosProyecto.map(servicio => `${servicio.codigo} · ${servicio.nombre} (${servicio.estado})`).join(' · ')}
+              </div>
+            )}
+
             <div className="mp-grid mp-grid-2">
               <div>
-                <div className="mp-detail-section-title">Qué requiere atención</div>
-                <div className={`mp-alert ${MP_ALERT_CLASS[estadoUI]}`} style={{ marginTop: 10 }}>{problemaPrincipal}</div>
+                <div className="mp-detail-section-title">{operativo ? 'Qué requiere atención' : 'Historial del proyecto'}</div>
+                <div className={`mp-alert ${operativo ? MP_ALERT_CLASS[estadoUI] : 'mp-alert-yellow'}`} style={{ marginTop: 10 }}>{operativo ? problemaPrincipal : 'La relación del contratista con este proyecto está finalizada. La información se conserva solo para consulta y trazabilidad.'}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                  <button className="mp-btn mp-btn-primary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>Ir a documentos</button>
-                  <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id)}>Ver trabajadores</button>
+                  <button className="mp-btn mp-btn-primary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>{operativo ? 'Ir a documentos' : 'Historial documental'}</button>
+                  <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id)}>{operativo ? 'Ver trabajadores' : 'Historial de trabajadores'}</button>
                   {onVerFicha && (
                     <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onVerFicha(p.id)}>Ver ficha de acreditación</button>
                   )}
@@ -248,7 +270,7 @@ function DetalleProyecto({
                         <td>{item.doc?.vencimiento && item.doc.vencimiento !== '-' ? item.doc.vencimiento : '—'}<div style={{ fontSize: 10.5, color: '#7a7a6a' }}>{impactoLabel(item.requisito)}</div></td>
                         <td>
                           <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrADocumentos(p.id)}>
-                            {accionEmpresaLabel(item.estado, !!item.doc)}
+                            {operativo ? accionEmpresaLabel(item.estado, !!item.doc) : 'Ver historial'}
                           </button>
                         </td>
                       </tr>
@@ -283,7 +305,7 @@ function DetalleProyecto({
                         </td>
                         <td>{ok} / {workerItems.length}</td>
                         <td>
-                          <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id, w)}>Ver trabajador</button>
+                          <button className="mp-btn mp-btn-secondary mp-btn-inline" onClick={() => onIrATrabajadores(p.id, w)}>{operativo ? 'Ver trabajador' : 'Ver historial'}</button>
                         </td>
                       </tr>
                     );
@@ -293,7 +315,7 @@ function DetalleProyecto({
             )}
           </div>
         )}
-        {detalleTab === 'activos' && <AssetsPanel project={p} contractors={[contratistaLogueado]} services={getServiciosProyecto(p.id, contratistaLogueado.id)} contractorKey={contratistaLogueado.id} showToast={showToast} />}
+        {detalleTab === 'activos' && <AssetsPanel project={p} contractors={[contratistaLogueado]} services={serviciosProyecto} contractorKey={contratistaLogueado.id} readOnly={!operativo} showToast={showToast} />}
       </div>
     </div>
   );
@@ -320,7 +342,7 @@ export default function MisProyectosTab({
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'Todos' | EstadoUI>('Todos');
+  const [filter, setFilter] = useState<FiltroProyecto>('Todos');
   const [detalleProyectoId, setDetalleProyectoId] = useState<string | null>(null);
   const [detalleTab, setDetalleTab] = useState<'resumen' | 'empresa' | 'trabajadores' | 'activos'>('resumen');
   const detalleRef = useRef<HTMLDivElement>(null);
@@ -334,6 +356,7 @@ export default function MisProyectosTab({
   const proyectosInfo: ProyectoInfo[] = misProyectos.map(p => {
     const row = rowsByProyecto.get(p.id);
     const mandante = allMandantes.find(m => m.id === p.mandanteId);
+    const operativo = proyectoOperativoParaContratista(p, contratistaLogueado.id);
     const estadoUI: EstadoUI = row ? estadoUILabel(row.estado) : 'En proceso';
 
     const trabajadoresProyecto = (contratistaLogueado.trabajadores || []).filter(w =>
@@ -367,6 +390,7 @@ export default function MisProyectosTab({
 
     return {
       proyecto: p,
+      operativo,
       mandante,
       estadoUI,
       accesoPago,
@@ -382,17 +406,16 @@ export default function MisProyectosTab({
     };
   });
 
-  const totalAcreditados = proyectosInfo.filter(i => i.estadoUI === 'Acreditado').length;
-  const totalEnProceso = proyectosInfo.filter(i => i.estadoUI === 'En proceso').length;
-  const totalBloqueados = proyectosInfo.filter(i => i.estadoUI === 'Bloqueado').length;
-
-  // "Activos": solo cuenta lo que el modelo realmente marca como estado
-  // 'Activo'. Sin fallback — si no hay ninguno, el KPI debe mostrar 0.
-  const totalProyectosActivos = misProyectos.filter(p => String(p.estado).toLowerCase() === 'activo').length;
+  const totalAcreditados = proyectosInfo.filter(i => i.operativo && i.estadoUI === 'Acreditado').length;
+  const totalEnProceso = proyectosInfo.filter(i => i.operativo && i.estadoUI === 'En proceso').length;
+  const totalBloqueados = proyectosInfo.filter(i => i.operativo && i.estadoUI === 'Bloqueado').length;
+  const totalHistoricos = proyectosInfo.filter(i => !i.operativo).length;
+  const totalProyectosActivos = proyectosInfo.filter(i => i.operativo).length;
 
   const q = search.toLowerCase().trim();
   const proyectosFiltrados = proyectosInfo.filter(i => {
-    const okFilter = filter === 'Todos' || i.estadoUI === filter;
+    const okFilter = filter === 'Todos'
+      || (filter === 'Históricos' ? !i.operativo : i.operativo && i.estadoUI === filter);
     const okSearch = !q || i.proyecto.nombre.toLowerCase().includes(q) || (i.mandante?.nombre || '').toLowerCase().includes(q);
     return okFilter && okSearch;
   });
@@ -501,6 +524,7 @@ export default function MisProyectosTab({
             ['Acreditado', 'Acreditados', totalAcreditados],
             ['En proceso', 'En proceso', totalEnProceso],
             ['Bloqueado', 'Bloqueados', totalBloqueados],
+            ['Históricos', 'Históricos', totalHistoricos],
           ] as Array<[typeof filter, string, number]>).map(([value, label, count]) => (
             <button
               key={value}
@@ -524,20 +548,20 @@ export default function MisProyectosTab({
         ) : (
           <div className="mp-grid mp-grid-3">
             {proyectosFiltrados.map(info => {
-              const { proyecto: p, mandante, estadoUI, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
-              const pagoColor = accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030';
+              const { proyecto: p, mandante, operativo, estadoUI, estadoAcceso, accesoPago, empresaOk, empresaTotal, trabajadoresOk, trabajadoresTotal, empresaPct, trabajadoresPct, proximoVenc, problemaPrincipal } = info;
+              const pagoColor = !operativo ? '#7a7a6a' : accesoPago.pagoEstado === 'bloqueado' ? '#9a2020' : accesoPago.pagoEstado === 'pendiente' ? '#7a5800' : '#1a6030';
 
               return (
-                <article key={p.id} className={`mp-project-card state-${STATE_KEY[estadoUI]}`}>
+                <article key={p.id} className={`mp-project-card state-${operativo ? STATE_KEY[estadoUI] : 'proceso'}`}>
                   <div className="mp-project-head">
                     <div className="mp-status-row">
                       <div>
                         <div className="mp-project-title">{p.nombre}</div>
                         <div className="mp-project-sub">Mandante: {mandante?.nombre || 'Mandante no disponible'}</div>
                       </div>
-                      <span className={`mp-badge ${MP_BADGE_CLASS[estadoUI]}`}>
+                      <span className={`mp-badge ${operativo ? MP_BADGE_CLASS[estadoUI] : 'mp-badge-gray'}`}>
                         <span className="mp-badge-dot" />
-                        {estadoUI}
+                        {operativo ? estadoUI : 'Histórico'}
                       </span>
                     </div>
                   </div>
@@ -546,11 +570,11 @@ export default function MisProyectosTab({
                     <div className="mp-split">
                       <div className="mp-mini">
                         <div className="mp-mini-label">Acceso</div>
-                        <div className="mp-mini-value" style={{ color: ACCESO_COLOR[estadoAcceso.estado] }}>{ACCESO_LABEL_CORTO[estadoAcceso.estado]}</div>
+                        <div className="mp-mini-value" style={{ color: operativo ? ACCESO_COLOR[estadoAcceso.estado] : '#7a7a6a' }}>{operativo ? ACCESO_LABEL_CORTO[estadoAcceso.estado] : 'No operativo'}</div>
                       </div>
                       <div className="mp-mini">
                         <div className="mp-mini-label">Pago</div>
-                        <div className="mp-mini-value" style={{ color: pagoColor }}>{accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</div>
+                        <div className="mp-mini-value" style={{ color: pagoColor }}>{operativo ? (accesoPago.pagoEstado === 'bloqueado' ? 'Retenido' : accesoPago.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado') : 'No operativo'}</div>
                       </div>
                     </div>
 
@@ -563,25 +587,25 @@ export default function MisProyectosTab({
                       <div className="mp-progress"><div className="mp-progress-fill" style={{ width: `${trabajadoresPct}%`, background: BAR_COLOR_TRABAJADORES[estadoUI] }} /></div>
                     </div>
 
-                    <div className={`mp-alert ${MP_ALERT_CLASS[estadoUI]}`}>
-                      <strong>{ALERT_PREFIX[estadoUI]}</strong> {problemaPrincipal}
+                    <div className={`mp-alert ${operativo ? MP_ALERT_CLASS[estadoUI] : 'mp-alert-yellow'}`}>
+                      <strong>{operativo ? ALERT_PREFIX[estadoUI] : 'Histórico:'}</strong> {operativo ? problemaPrincipal : 'relación finalizada; disponible solo para consulta.'}
                     </div>
 
                     <div className="mp-expiry">
-                      {proximoVenc
+                      {operativo && proximoVenc
                         ? <>Próximo vencimiento: <strong>{proximoVenc.nombre}{proximoVenc.trabajadorNombre ? ` · ${proximoVenc.trabajadorNombre}` : ''} · {proximoVenc.dias} día{proximoVenc.dias === 1 ? '' : 's'}</strong></>
-                        : 'Sin vencimientos próximos'}
+                        : operativo ? 'Sin vencimientos próximos' : 'Sin acciones operativas; historial conservado'}
                     </div>
                   </div>
 
                   <div className="mp-project-foot">
                     <button
-                      className={`mp-btn ${estadoUI === 'Bloqueado' ? 'mp-btn-danger' : 'mp-btn-primary'}`}
+                      className={`mp-btn ${operativo && estadoUI === 'Bloqueado' ? 'mp-btn-danger' : 'mp-btn-primary'}`}
                       onClick={() => abrirDetalleProyecto(p.id)}
                     >
-                      {estadoUI === 'Bloqueado' ? 'Resolver bloqueos' : 'Ver proyecto'}
+                      {!operativo ? 'Ver historial' : estadoUI === 'Bloqueado' ? 'Resolver bloqueos' : 'Ver proyecto'}
                     </button>
-                    <button className="mp-btn mp-btn-secondary" onClick={() => irADocumentos(p.id)}>Documentos</button>
+                    <button className="mp-btn mp-btn-secondary" onClick={() => irADocumentos(p.id)}>{operativo ? 'Documentos' : 'Historial documental'}</button>
                   </div>
                 </article>
               );
