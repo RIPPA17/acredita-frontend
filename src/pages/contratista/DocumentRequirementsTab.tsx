@@ -144,6 +144,8 @@ export default function SubirTab({
   const location = useLocation();
   const initialParams = new URLSearchParams(location.search);
   const requestedStatus = initialParams.get('estado');
+  const requestedRequirement = initialParams.get('requisito');
+  const requestedWorker = initialParams.get('trabajador');
   const [scope, setScope] = useState<Scope>('todos');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
@@ -184,6 +186,21 @@ export default function SubirTab({
         ),
       ]
     : [];
+
+  const allItemsKey = allItems.map(item => item.key).join('|');
+
+  useEffect(() => {
+    if (!requestedRequirement) return;
+    const target = allItems.find(item =>
+      item.requisito.id === requestedRequirement
+      && (!requestedWorker || item.worker?.rut === requestedWorker)
+    );
+    if (!target) return;
+    setSelectedKey(target.key);
+    setScope(target.scope);
+    setSearch('');
+    setStatusFilter('todos');
+  }, [requestedRequirement, requestedWorker, selectedProyectoId, allItemsKey]);
 
   const tieneRenovacionRevision = (item: Row) => item.doc?.versionEnTramite?.estado === 'revision';
   const tieneRenovacionRechazada = (item: Row) => item.doc?.versionEnTramite?.estado === 'rechazado';
