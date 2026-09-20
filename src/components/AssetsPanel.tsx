@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { CarFront, CircleAlert, CircleCheckBig, Construction, Plus, RefreshCw, X } from 'lucide-react';
+import { Archive, CarFront, CircleAlert, CircleCheckBig, Construction, Plus, RefreshCw, X } from 'lucide-react';
 import type { Contratista, Proyecto, ServicioContrato } from '../types';
-import { listAssets, saveAsset, type AssetType, type OperationalAsset } from '../data/supabaseAssets';
+import { listAssets, retireAsset, saveAsset, type AssetType, type OperationalAsset } from '../data/supabaseAssets';
 import AssetMatrixPanel from './AssetMatrixPanel';
 import AssetDetailPanel from './AssetDetailPanel';
 import DocumentLibraryPanel from './DocumentLibraryPanel';
@@ -53,7 +53,7 @@ export default function AssetsPanel({
 
   const load = async () => {
     setLoading(true);
-    try { setAssets(await listAssets(project.id, contractorKey)); }
+    try { setAssets(await listAssets(project.id, contractorKey, true)); }
     catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible cargar vehículos y equipos.', 'error'); }
     finally { setLoading(false); }
   };
@@ -66,7 +66,7 @@ export default function AssetsPanel({
     setOpen(true);
   };
   const startEdit = (asset: OperationalAsset) => {
-    if (readOnly) return;
+    if (readOnly || !asset.isActive) return;
     setEditingId(asset.id);
     setForm({
       contractorKey: asset.contractorKey,
@@ -112,8 +112,24 @@ export default function AssetsPanel({
     } finally { setSaving(false); }
   };
 
-  const enabled = assets.filter(item => item.status === 'habilitado').length;
-  const blocked = assets.filter(item => item.status === 'bloqueado' || item.blockingDocuments > 0).length;
+  const activeAssets = assets.filter(item => item.isActive);
+  const enabled = activeAssets.filter(item => item.status === 'habilitado').length;
+  const blocked = activeAssets.filter(item => item.status === 'bloqueado' || item.blockingDocuments > 0).length;
+  const historical = assets.filter(item => !item.isActive).length;
+
+  const retire = async (asset: OperationalAsset) => {
+    if (readOnly || !asset.isActive) return;
+    const reason = window.prompt(`Motivo para retirar ${asset.identifier} · ${asset.name}:`)?.trim();
+    if (!reason) return;
+    try {
+      await retireAsset(asset.id, reason);
+      setSelectedAsset(undefined);
+      await load();
+      showToast('Activo retirado. Se conserva todo su historial documental y operacional.', 'warning');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible retirar el activo.', 'error');
+    }
+  };
 
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel">
     <div className="mandante-proyectos-section-head"><div><h2>Vehículos, maquinaria y equipos</h2><p>{readOnly ? 'Historial de activos asociados a este proyecto. No se permiten nuevas cargas ni modificaciones.' : 'El acceso ahora se determina automáticamente por la matriz documental, vigencias, inspecciones y trazabilidad operacional.'}</p></div><div className="flex gap-2"><button type="button" onClick={() => void load()} aria-label="Actualizar activos"><RefreshCw /></button>{!readOnly && <button type="button" onClick={startCreate} disabled={contractors.length === 0}><Plus /> Nuevo activo</button>}</div></div>
@@ -122,9 +138,12 @@ export default function AssetsPanel({
 
     {!contractorKey && <AssetMatrixPanel projectKey={project.id} showToast={showToast} onChanged={() => void load()} />}
 
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4"><div className="rounded-lg border p-4"><small>Total registrados</small><strong className="block text-2xl text-navy">{assets.length}</strong></div><div className="rounded-lg border p-4"><small>Habilitados</small><strong className="block text-2xl text-green-700">{enabled}</strong></div><div className="rounded-lg border p-4"><small>Bloqueados</small><strong className="block text-2xl text-red-700">{blocked}</strong></div></div>
+    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 my-4"><div className="rounded-lg border p-4"><small>Activos vigentes</small><strong className="block text-2xl text-navy">{activeAssets.length}</strong></div><div className="rounded-lg border p-4"><small>Habilitados</small><strong className="block text-2xl text-green-700">{enabled}</strong></div><div className="rounded-lg border p-4"><small>Bloqueados</small><strong className="block text-2xl text-red-700">{blocked}</strong></div><div className="rounded-lg border p-4"><small>Históricos</small><strong className="block text-2xl text-gray-600">{historical}</strong></div></div>
 
-    <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Tipo</th><th>Identificación</th><th>Contratista / servicio</th><th>Documentación</th><th>Acceso</th><th>Estado automático</th><th></th></tr></thead><tbody>{assets.map(asset => <tr key={asset.id}><td>{asset.type === 'vehiculo' ? <span className="inline-flex gap-2"><CarFront />Vehículo</span> : <span className="inline-flex gap-2"><Construction />{asset.type === 'maquinaria' ? 'Maquinaria' : 'Equipo'}</span>}</td><td><strong>{asset.identifier}</strong><small className="block">{asset.name}{asset.brand ? ` · ${asset.brand} ${asset.model || ''}` : ''}</small></td><td>{contractorNames.get(asset.contractorKey) || asset.contractorKey}<small className="block">{services.find(item => item.id === asset.serviceKey)?.nombre || 'Sin servicio asignado'}</small></td><td><span>{asset.approvedDocuments}/{asset.totalDocuments} cargados aprobados</span>{asset.nextExpiry && <small className="block text-gray-500">Próximo vencimiento: {asset.nextExpiry}</small>}</td><td>{asset.accessAllowed ? <span className="inline-flex gap-1 text-green-700"><CircleCheckBig />Permitido</span> : <span className="inline-flex gap-1 text-red-700"><CircleAlert />No habilitado</span>}</td><td><b className={`mandante-proyectos-badge ${asset.status === 'habilitado' ? 'green' : asset.status === 'bloqueado' ? 'red' : 'yellow'}`}>{statusLabel[asset.status]}</b></td><td><div className="flex gap-2"><button type="button" onClick={() => setSelectedAsset(asset)}>{readOnly ? 'Ver historial' : 'Gestionar'}</button>{!readOnly && <button type="button" onClick={() => startEdit(asset)}>Editar ficha</button>}</div></td></tr>)}</tbody></table></div>
+    <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Tipo</th><th>Identificación</th><th>Contratista / servicio</th><th>Documentación</th><th>Acceso</th><th>Estado automático</th><th></th></tr></thead><tbody>{assets.map(asset => {
+      const serviceName = services.find(item => item.id === asset.serviceKey)?.nombre || (asset.serviceKey ? 'Servicio histórico' : 'Sin servicio asignado');
+      return <tr key={asset.id} className={!asset.isActive ? 'opacity-75' : undefined}><td>{asset.type === 'vehiculo' ? <span className="inline-flex gap-2"><CarFront />Vehículo</span> : <span className="inline-flex gap-2"><Construction />{asset.type === 'maquinaria' ? 'Maquinaria' : 'Equipo'}</span>}</td><td><strong>{asset.identifier}</strong><small className="block">{asset.name}{asset.brand ? ` · ${asset.brand} ${asset.model || ''}` : ''}</small>{!asset.isActive && <small className="block text-gray-500">Retirado{asset.retiredAt ? ` · ${new Date(asset.retiredAt).toLocaleDateString('es-CL')}` : ''}{asset.retirementReason ? ` · ${asset.retirementReason}` : ''}</small>}</td><td>{contractorNames.get(asset.contractorKey) || asset.contractorKey}<small className="block">{serviceName}</small>{asset.isActive && !asset.serviceOperational && asset.serviceId && <small className="block text-red-700">Servicio no operativo</small>}</td><td><span>{asset.approvedDocuments}/{asset.totalDocuments} obligatorios aprobados</span>{asset.pendingDocuments > 0 && <small className="block text-gray-500">{asset.pendingDocuments} requisito{asset.pendingDocuments === 1 ? '' : 's'} pendiente{asset.pendingDocuments === 1 ? '' : 's'}</small>}{asset.nextExpiry && <small className="block text-gray-500">Próximo vencimiento: {asset.nextExpiry}</small>}</td><td>{!asset.isActive ? <span className="inline-flex gap-1 text-gray-600"><Archive />Histórico</span> : asset.accessAllowed ? <span className="inline-flex gap-1 text-green-700"><CircleCheckBig />Permitido</span> : <span className="inline-flex gap-1 text-red-700"><CircleAlert />No habilitado</span>}</td><td><b className={`mandante-proyectos-badge ${asset.status === 'habilitado' ? 'green' : asset.status === 'bloqueado' ? 'red' : 'yellow'}`}>{statusLabel[asset.status]}</b>{asset.nextInspectionDate && <small className="block text-gray-500">Inspección: {asset.nextInspectionDate}</small>}{asset.nextMaintenanceDate && <small className="block text-gray-500">Mantención: {asset.nextMaintenanceDate}</small>}</td><td><div className="flex gap-2 flex-wrap"><button type="button" onClick={() => setSelectedAsset(asset)}>{readOnly || !asset.isActive ? 'Ver historial' : 'Gestionar'}</button>{!readOnly && asset.isActive && <button type="button" onClick={() => startEdit(asset)}>Editar ficha</button>}{!readOnly && asset.isActive && <button type="button" onClick={() => void retire(asset)}><Archive /> Retirar</button>}</div></td></tr>;
+    })}</tbody></table></div>
     {!loading && assets.length === 0 && <div className="mandante-proyectos-empty"><Construction /> No hay vehículos, maquinaria o equipos registrados.</div>}
     {loading && <div className="mandante-proyectos-empty">Cargando activos operacionales…</div>}
 
@@ -141,6 +160,6 @@ export default function AssetsPanel({
       <label className="sm:col-span-2 text-sm">Observaciones<textarea value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} className="form-input w-full mt-1 p-2.5 border rounded-lg" /></label>
     </div><footer className="flex justify-end gap-2 p-5 border-t"><button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>Cancelar</button><button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Guardar ficha'}</button></footer></form></div>}
 
-    {selectedAsset && <AssetDetailPanel asset={selectedAsset} projectKey={project.id} contractorMode={Boolean(contractorKey)} readOnly={readOnly} onClose={() => setSelectedAsset(undefined)} onChanged={() => void load()} showToast={showToast} />}
+    {selectedAsset && <AssetDetailPanel asset={selectedAsset} projectKey={project.id} contractorMode={Boolean(contractorKey)} readOnly={readOnly || !selectedAsset.isActive} onClose={() => setSelectedAsset(undefined)} onChanged={() => void load()} showToast={showToast} />}
   </article>;
 }
