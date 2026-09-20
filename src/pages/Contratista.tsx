@@ -222,6 +222,8 @@ export default function ContratistaPortal() {
         nivel: item.severity,
         situacion: item.status === 'resolved' ? 'resuelta' as const : 'activa' as const,
         persistida: true,
+        requisitoId: item.requirementKey,
+        trabajadorRut: item.workerRut,
       };
     });
 
@@ -259,6 +261,12 @@ export default function ContratistaPortal() {
       setActiveTab('operacion');
     } else if (notificacion.destino.tipo === 'proyecto') {
       setActiveTab('proyectos');
+    } else if (notificacion.requisitoId) {
+      const params = new URLSearchParams();
+      params.set('proyecto', notificacion.proyectoId);
+      params.set('requisito', notificacion.requisitoId);
+      if (notificacion.trabajadorRut) params.set('trabajador', notificacion.trabajadorRut);
+      navigate({ pathname: '/contratista/documentos', search: `?${params.toString()}` });
     } else {
       setActiveTab('subir');
     }
