@@ -565,6 +565,128 @@ test('12g renovación anticipada en revisión conserva vigencia y evita cargas d
   await expect(page.getByRole('button', { name: 'Renovar', exact: true })).toHaveCount(0);
 });
 
+
+test('12h carga masiva rechaza la plantilla antigua sin ficha laboral', async ({ page }) => {
+  await protectedPage(page, 'contratista', { emptyProject: true });
+  await page.goto('/contratista');
+  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Carga masiva', exact: true }).click();
+
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: 'trabajadores-antiguo.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('Nombre;RUT;Cargo;Categorias;FechaIngreso\nJuan Pérez;12.345.678-5;Operador;General;2026-09-20\n'),
+  });
+
+  await expect(page.getByText(/El CSV debe incluir: TipoContrato, FechaInicioContrato/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Importar/ })).toHaveCount(0);
+});
+
+test('12i carga masiva exige categorías configuradas y valida la combinación documental', async ({ page }) => {
+  await protectedPage(page, 'contratista', { emptyProject: true, categorizedWorker: true });
+  await page.goto('/contratista');
+  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Carga masiva', exact: true }).click();
+
+  const input = page.locator('input[type="file"][accept*=".csv"]');
+  const header = 'Nombre;RUT;Cargo;Servicio;Categorias;FechaIngreso;TipoContrato;FechaInicioContrato;FechaTerminoContrato;ObraFaenaContrato;RegimenEspecial;DetalleRegimenEspecial\n';
+  await input.setInputFiles({
+    name: 'sin-categoria.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(header + 'Juan Pérez;12.345.678-5;Operador;SRV-01;;2026-09-20;indefinido;2026-09-01;;;;\n'),
+  });
+  await expect(page.getByText('Falta categoría', { exact: true })).toBeVisible();
+
+  await input.setInputFiles({
+    name: 'con-categoria.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(header + 'Juan Pérez;12.345.678-5;Operador;SRV-01;altura;2026-09-20;indefinido;2026-09-01;;;;\n'),
+  });
+  await expect(page.getByText(/Correcta · 1 requisitos aplicables/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Importar 1', exact: true })).toBeEnabled();
+});
+
+test('12j carga masiva persiste contrato servicio categoría y nueva asignación', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'contratista', { emptyProject: true });
+  await page.goto('/contratista');
+  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Carga masiva', exact: true }).click();
+
+  const csv = [
+    'Nombre;RUT;Cargo;Servicio;Categorias;FechaIngreso;TipoContrato;FechaInicioContrato;FechaTerminoContrato;ObraFaenaContrato;RegimenEspecial;DetalleRegimenEspecial',
+    'Juan Pérez;12.345.678-5;Operador;SRV-01;;2026-09-20;indefinido;2026-09-01;;;;',
+  ].join('\n');
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: 'trabajadores-validos.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv),
+  });
+
+  await expect(page.getByText(/Correcta · 1 requisitos aplicables/)).toBeVisible();
+  await page.getByRole('button', { name: 'Importar 1', exact: true }).click();
+
+  await expect.poll(() => {
+    const mutation = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/workers');
+    const payload = Array.isArray(mutation?.body) ? mutation?.body[0] : mutation?.body;
+    return payload?.contract_type || null;
+  }).toBe('indefinido');
+
+  await expect.poll(() => {
+    const mutation = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/worker_assignments');
+    return mutation?.body?.service_id || null;
+  }).toBe(SERVICE);
+
+  const assignmentMutation = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/worker_assignments');
+  expect(assignmentMutation?.body?.categories).toEqual(['General']);
+  expect(assignmentMutation?.body?.assigned_at).toBe('2026-09-20');
+  expect(assignmentMutation?.body?.contract_type_snapshot).toBe('indefinido');
+  expect(assignmentMutation?.body?.contract_start_date_snapshot).toBe('2026-09-01');
+});
+
+test('12k carga masiva crea un período nuevo en reingreso sin reactivar el histórico', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'contratista', { bulkReentry: true });
+  await page.goto('/contratista');
+  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Carga masiva', exact: true }).click();
+
+  const csv = [
+    'Nombre;RUT;Cargo;Servicio;Categorias;FechaIngreso;TipoContrato;FechaInicioContrato;FechaTerminoContrato;ObraFaenaContrato;RegimenEspecial;DetalleRegimenEspecial',
+    'Trabajador Reingreso;12.345.678-5;Operador;SRV-01;;2026-09-20;plazo_fijo;2026-09-20;2026-12-31;;;',
+  ].join('\n');
+  await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+    name: 'reingreso.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv),
+  });
+
+  await expect(page.getByText('Correcta · reingreso', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Importar 1', exact: true }).click();
+
+  await expect.poll(() => mutations.filter(item => item.method === 'POST' && item.path === '/rest/v1/worker_assignments').length).toBeGreaterThan(0);
+  const newAssignment = mutations.find(item => item.method === 'POST' && item.path === '/rest/v1/worker_assignments');
+  expect(newAssignment?.body?.assigned_at).toBe('2026-09-20');
+  expect(newAssignment?.body?.contract_type_snapshot).toBe('plazo_fijo');
+  expect(newAssignment?.body?.contract_end_date_snapshot).toBe('2026-12-31');
+
+  const oldAssignmentReactivation = mutations.find(item =>
+    item.method === 'PATCH'
+    && item.path === '/rest/v1/worker_assignments'
+    && item.body?.is_active === true
+  );
+  expect(oldAssignmentReactivation).toBeUndefined();
+});
+
+test('12l carga masiva excluye proyectos históricos', async ({ page }) => {
+  await protectedPage(page, 'contratista', { historicalProject: true });
+  await page.goto('/contratista');
+  await page.getByText('Configuración', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Carga masiva', exact: true }).click();
+
+  const selector = page.getByLabel('Proyecto para carga masiva');
+  await expect(selector.locator('option')).toHaveText(['Proyecto Piloto QA']);
+  await expect(selector).not.toContainText('Proyecto Histórico QA');
+});
+
 test('13 Contratista puede abrir configuración y notificaciones sin perder sesión', async ({ page }) => {
   await protectedPage(page, 'contratista');
   await page.goto('/contratista');
