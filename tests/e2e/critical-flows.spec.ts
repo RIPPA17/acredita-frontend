@@ -503,7 +503,7 @@ test('09e Proyecto histórico no genera acciones y Documentos queda en modo cons
   await protectedPage(page, 'contratista', { historicalProject: true });
   await page.goto('/contratista?proyecto=proyecto_historico');
 
-  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · modo consulta', { exact: true }).last()).toBeVisible();
   const responsibilities = page.getByLabel('Responsabilidad de pendientes');
   await expect(responsibilities.locator('.mine b')).toHaveText('0');
   await expect(responsibilities.locator('.preventive b')).toHaveText('0');
@@ -536,8 +536,8 @@ test('09f ficha completa funciona como expediente integral de acreditación', as
   await expect(page.getByText('Trabajador Piloto', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Obligaciones por período', { exact: true })).toBeVisible();
   await expect(page.getByText('Trazabilidad documental', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Empresa · F30 \/ F31 SII/)).toBeVisible();
-  await expect(page.getByText(/Trabajador Piloto · Certificado ODI/)).toBeVisible();
+  await expect(page.getByText(/Empresa · F30 \/ F31 SII/).first()).toBeVisible();
+  await expect(page.getByText(/Trabajador Piloto · Certificado ODI/).first()).toBeVisible();
   await expect(page.getByText('v3', { exact: true })).toBeVisible();
   await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
 });
