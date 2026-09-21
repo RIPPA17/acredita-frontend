@@ -127,8 +127,6 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
     business_sync_control: [{ revision: 99 }],
   };
 
-  await page.addInitScript(value => localStorage.setItem('acredita_session', JSON.stringify(value)), session('admin'));
-
   await page.route(`${SUPABASE}/**`, async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -242,6 +240,8 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   });
 
   // Acredita aprueba la versión corregida.
+  await page.goto('/');
+  await setRole(page, 'admin');
   await page.goto('/admin');
   await page.getByTitle('Cola de revisión').click();
   await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
@@ -257,7 +257,7 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   // El Mandante ve el mismo pago liberado y lo registra como pagado.
   await setRole(page, 'mandante');
   await page.goto('/mandante');
-  await page.getByText('Proyectos', { exact: true }).first().click();
+  await page.locator('.sb-item:visible').filter({ hasText: 'Proyectos' }).first().click();
   await page.getByText('Proyecto Integrado QA', { exact: true }).first().click();
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
@@ -271,7 +271,7 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   // Contratista crea un ticket sobre el mismo proyecto.
   await setRole(page, 'contratista');
   await page.goto('/contratista');
-  await page.getByText('Operación', { exact: true }).first().click();
+  await page.locator('.sb-item:visible').filter({ hasText: 'Operación' }).first().click();
   await page.getByRole('button', { name: /Soporte/ }).click();
   await page.getByLabel('Asunto').fill('Consulta piloto integrado');
   await page.getByLabel('Descripción').fill('Confirmar que el pago y la acreditación quedaron trazados correctamente.');
@@ -281,7 +281,7 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   // Mandante ve ese mismo ticket desde Operación.
   await setRole(page, 'mandante');
   await page.goto('/mandante');
-  await page.getByText('Proyectos', { exact: true }).first().click();
+  await page.locator('.sb-item:visible').filter({ hasText: 'Proyectos' }).first().click();
   await page.getByText('Proyecto Integrado QA', { exact: true }).first().click();
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Soporte/ }).click();
