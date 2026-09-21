@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, UserPlus, Eye } from 'lucide-react';
 import { Contratista, Proyecto, Mandante } from '../../types';
-import { parseVencimientoDate } from '../../data/localStorageDb';
+import { parseVencimientoDate } from '../../data/businessStore';
 import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
 
 type Filtro = 'todos' | 'bloqueados' | 'proceso' | 'acreditados';
