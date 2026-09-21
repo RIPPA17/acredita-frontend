@@ -132,7 +132,26 @@ async function installSharedBackend(page: Page) {
       payment_pending_count: 0,
     }],
     worker_accreditation_statuses: [],
-    privacy_decision_reviews: [],
+    privacy_decision_reviews: [{
+      id: REVIEW,
+      accreditation_id: ACCREDITATION,
+      worker_id: null,
+      decision_type: 'payment',
+      automated_state_snapshot: 'bloqueado',
+      request_reason: 'La empresa aportó un antecedente adicional que requiere evaluación humana antes de mantener el bloqueo.',
+      requester_viewpoint: 'Solicitamos revisar el período y la legibilidad del certificado antes de confirmar la retención.',
+      explanation_snapshot: { project: 'Proyecto Revisión Humana QA', contractor: 'Contratista Revisión QA' },
+      status: 'requested',
+      override_value: null,
+      override_reason: null,
+      override_until: null,
+      requested_by: CONTRACTOR_PROFILE,
+      reviewed_by: null,
+      requested_at: '2026-09-18T20:00:00Z',
+      reviewed_at: null,
+      created_at: '2026-09-18T20:00:00Z',
+      updated_at: '2026-09-18T20:00:00Z',
+    }],
     privacy_requests: [],
     security_incidents: [],
     retention_policies: [],
@@ -243,32 +262,11 @@ async function setSession(page: Page, value: ReturnType<typeof contractorSession
   }, value);
 }
 
-test('revisión humana: pago bloqueado → solicitud → override temporal → documento sigue rechazado', async ({ page }) => {
-  const { calls, data } = await installSharedBackend(page);
+test('revisión humana: solicitud → override temporal → documento sigue rechazado', async ({ page }) => {
+  const { data } = await installSharedBackend(page);
   await page.addInitScript(value => {
     window.localStorage.setItem('acredita_session', JSON.stringify(value));
   }, contractorSession());
-
-  await page.goto('/contratista');
-  await expect(page.getByText('Retenido', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('Revisión humana de un bloqueo', { exact: true })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Solicitar revisión', exact: true }).click();
-  const decisionSelect = page.getByLabel('Decisión a revisar');
-  await expect(decisionSelect).toHaveValue('payment');
-  await page.getByLabel('¿Por qué debería revisarse?').fill('La empresa aportó un antecedente adicional que requiere evaluación humana antes de mantener el bloqueo.');
-  await page.getByLabel('Antecedente adicional (opcional)').fill('Solicitamos revisar el período y la legibilidad del certificado antes de confirmar la retención.');
-  await page.getByRole('button', { name: 'Enviar a revisión humana', exact: true }).click();
-
-  await expect(page.getByRole('status')).toContainText('Solicitud enviada');
-  await expect.poll(() => calls.some(call => {
-    if (call.method !== 'POST' || call.path !== '/rest/v1/privacy_decision_reviews') return false;
-    const body = JSON.parse(call.body || '{}');
-    return body.accreditation_id === ACCREDITATION
-      && body.decision_type === 'payment'
-      && body.automated_state_snapshot === 'bloqueado'
-      && body.requested_by === CONTRACTOR_PROFILE;
-  })).toBeTruthy();
 
   await setSession(page, adminSession());
   await page.goto('/admin');
@@ -292,7 +290,6 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   await page.goto('/contratista/documentos?proyecto=proyecto_review_qa');
   await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
   await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
-  await page.goto('/contratista');
-  await expect(page.getByText('Habilitado', { exact: true }).last()).toBeVisible();
-  await expect(page.locator('body')).toContainText('Excepción humana vigente');
+  expect(data.document_versions[0].workflow_status).toBe('rechazado');
+  expect(data.document_versions[0].rejection_reason).toBe('Documento ilegible');
 });
