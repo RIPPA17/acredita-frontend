@@ -24,6 +24,7 @@ const DOCUMENT_WORKER = '94000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V1 = '95000000-0000-4000-8000-000000000001';
 const VERSION_WORKER_V2 = '95000000-0000-4000-8000-000000000002';
 const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
+const COMPLIANCE_PERIOD = 'a1000000-0000-4000-8000-000000000001';
 const EVALUATION_DRAFT = 'b0000000-0000-4000-8000-000000000001';
 const EVALUATION_REVIEW = 'b0000000-0000-4000-8000-000000000002';
 const ACTION_PLAN_REVIEW = 'c0000000-0000-4000-8000-000000000001';
@@ -31,7 +32,8 @@ const ACTION_PLAN_REVIEW = 'c0000000-0000-4000-8000-000000000001';
 type Role = 'admin' | 'mandante' | 'contratista';
 type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
 type MockOptions = {
-  paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado';
+  paymentStatus?: 'observado' | 'retenido' | 'liberado' | 'pagado' | 'anulado';
+  paymentEligible?: boolean;
   emptyProject?: boolean;
   historicalProject?: boolean;
   renewalScenario?: boolean;
@@ -181,7 +183,27 @@ function fixtures(role: Role, options: MockOptions) {
       effective_status: workerScenario === 'review' ? 'revision' : workerScenario === 'rejected' ? 'rechazado' : 'por_vencer',
       version_number: workerScenario === 'renewal_review' ? 1 : 1,
     }] : [],
-    compliance_periods: [],
+    compliance_periods: [{
+      id: COMPLIANCE_PERIOD,
+      project_id: PROJECT,
+      period_start: '2026-09-01',
+      period_end: '2026-09-30',
+      status: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? 'cerrado' : 'abierto',
+      snapshot: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? {
+        generated_at: '2026-09-20T10:00:00Z',
+        accreditations: [{
+          accreditation_id: ACCREDITATION,
+          status: options.paymentEligible === false ? 'en_proceso' : 'aprobado',
+          compliance_percent: options.paymentEligible === false ? 70 : 100,
+          payment_allowed: options.paymentEligible !== false,
+          payment_blocked_count: options.paymentEligible === false ? 1 : 0,
+          payment_pending_count: 0,
+          active_worker_count: 1,
+        }],
+        obligations: [],
+      } : null,
+      closed_at: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? '2026-09-20T10:00:00Z' : null,
+    }],
     accreditation_statuses: [
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
@@ -257,7 +279,53 @@ function fixtures(role: Role, options: MockOptions) {
       created_at: '2026-09-18T12:00:00Z',
     }] : [],
     operation_attachments: [],
-    payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
+    payment_cases: [{
+      id: PAYMENT,
+      accreditation_id: ACCREDITATION,
+      compliance_period_id: COMPLIANCE_PERIOD,
+      period_start: '2026-09-01',
+      period_end: '2026-09-30',
+      amount: 2500000,
+      currency: 'CLP',
+      status: paymentStatus,
+      block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : paymentStatus === 'retenido' ? 'Documentación observada' : null,
+      invoice_number: 'F-100',
+      submitted_by: PROFILE,
+      submitted_at: '2026-09-15T00:00:00Z',
+      released_at: ['liberado','pagado'].includes(paymentStatus) ? '2026-09-20T10:05:00Z' : null,
+      paid_at: paymentStatus === 'pagado' ? '2026-09-20T11:00:00Z' : null,
+      payment_reference: paymentStatus === 'pagado' ? 'TRX-E2E-001' : null,
+      compliance_snapshot: {
+        eligible: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true,
+        periodStatus: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible ? 'cerrado' : 'abierto',
+        source: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible ? 'closed_period_snapshot' : 'live',
+        compliancePercent: options.paymentEligible === false ? 70 : 100,
+        paymentBlockedCount: options.paymentEligible === false ? 1 : 0,
+        paymentPendingCount: 0,
+        eligibleReason: options.paymentEligible === false ? 'Existen requisitos obligatorios rechazados o vencidos que bloquean pago.' : null,
+        reason: !options.paymentEligible && !['liberado','pagado'].includes(paymentStatus) ? 'El período documental debe cerrarse antes de liberar el pago.' : null,
+      },
+      compliance_checked_at: '2026-09-20T10:00:00Z',
+    }],
+    payment_approvals: [{
+      id: 'a2000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      decision: paymentStatus === 'liberado' || paymentStatus === 'pagado' ? 'aprobado' : 'observado',
+      comment: paymentStatus === 'liberado' || paymentStatus === 'pagado' ? 'Cumplimiento conforme.' : 'Pendiente de cierre documental.',
+      decided_by: PROFILE,
+      created_at: '2026-09-20T10:05:00Z',
+    }],
+    payment_case_events: [{
+      id: 'a3000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      event_type: paymentStatus === 'pagado' ? 'pagado' : paymentStatus === 'liberado' ? 'liberado' : paymentStatus === 'retenido' ? 'retenido' : 'creado',
+      from_status: paymentStatus === 'pagado' ? 'liberado' : paymentStatus === 'liberado' ? 'observado' : null,
+      to_status: paymentStatus,
+      reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null,
+      compliance_snapshot: null,
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-20T10:05:00Z',
+    }],
     support_tickets: [],
     integration_configs: [],
     business_sync_control: [{ revision: 10 }],
@@ -339,6 +407,7 @@ function fixtures(role: Role, options: MockOptions) {
         project_key: 'proyecto_piloto',
         worker_rut: null,
         requirement_key: null,
+        payment_case_id: PAYMENT,
         occurred_at: '2026-09-18T12:00:00Z',
         resolved_at: '2026-09-19T12:00:00Z',
         occurrence_count: 1,
@@ -464,7 +533,32 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
-      if (url.pathname === '/rest/v1/rpc/mark_payment_paid') {
+      if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
+        const closed = paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true;
+        const eligible = paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true;
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            eligible,
+            periodStatus: closed ? 'cerrado' : 'abierto',
+            source: closed ? 'closed_period_snapshot' : 'live',
+            periodStart: '2026-09-01',
+            periodEnd: '2026-09-30',
+            generatedAt: closed ? '2026-09-20T10:00:00Z' : null,
+            accreditationStatus: eligible ? 'aprobado' : 'en_proceso',
+            compliancePercent: options.paymentEligible === false ? 70 : eligible ? 100 : 0,
+            paymentBlockedCount: options.paymentEligible === false ? 1 : 0,
+            paymentPendingCount: eligible ? 0 : 1,
+            eligibleReason: options.paymentEligible === false ? 'Existen requisitos obligatorios rechazados o vencidos que bloquean pago.' : null,
+            reason: !closed ? 'El período documental debe cerrarse antes de liberar el pago.' : null,
+          }),
+        });
+      }
+      if (url.pathname === '/rest/v1/rpc/mark_payment_paid'
+          || url.pathname === '/rest/v1/rpc/close_compliance_period'
+          || url.pathname === '/rest/v1/rpc/reopen_compliance_period'
+          || url.pathname === '/rest/v1/rpc/void_payment_case') {
         return route.fulfill({ status: 204, body: '' });
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
@@ -571,24 +665,45 @@ test('06 matriz de activos parte sin registros y no auto-habilita nada', async (
   await expect(page.getByText('No hay vehículos, maquinaria o equipos registrados.')).toBeVisible();
 });
 
-test('07 operación muestra estados de pago gobernados por aprobación', async ({ page }) => {
-  await protectedPage(page, 'mandante', { paymentStatus: 'observado' });
+test('07 pago observado no puede liberarse mientras el período documental está abierto', async ({ page }) => {
+  await protectedPage(page, 'mandante', { paymentStatus: 'observado', paymentEligible: false });
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
+
   await expect(page.getByText('Pendiente de aprobación')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Aprobaciones' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Marcar pagado' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Liberar' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Detalle y decisiones' }).click();
+  await expect(page.getByText('Período documental aún abierto')).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Aprobar y liberar' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Registrar pago' })).toHaveCount(0);
 });
 
-test('08 un pago liberado permite únicamente confirmar Pagado', async ({ page }) => {
-  const { calls } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado' });
+test('07b snapshot cerrado pero bloqueado impide aprobar y muestra el fundamento', async ({ page }) => {
+  await protectedPage(page, 'mandante', { paymentStatus: 'observado', paymentEligible: false });
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
-  await page.getByRole('button', { name: 'Marcar pagado' }).click();
-  await expect.poll(() => calls.some(call => call.includes('/rest/v1/rpc/mark_payment_paid'))).toBeTruthy();
+  await page.getByRole('button', { name: 'Detalle y decisiones' }).click();
+
+  await expect(page.getByText(/El período documental debe cerrarse antes de liberar el pago|Cumplimiento no habilita pago/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Registrar pago' })).toHaveCount(0);
+});
+
+test('08 un pago liberado exige referencia para confirmar Pagado', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado', paymentEligible: true });
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+
+  page.once('dialog', dialog => dialog.accept('TRX-E2E-123'));
+  page.once('dialog', dialog => dialog.accept('Pago confirmado E2E'));
+  await page.getByRole('button', { name: 'Registrar pago' }).click();
+
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/mark_payment_paid'
+    && item.body?.p_payment_case_id === PAYMENT
+    && item.body?.p_reference === 'TRX-E2E-123'
+  )).toBe(true);
 });
 
 test('09 Contratista hidrata su empresa, mantiene proyecto activo visible y separa responsabilidades', async ({ page }) => {
