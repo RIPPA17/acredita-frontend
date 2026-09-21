@@ -2,20 +2,28 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Clock3, FileText, MessageSquare, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
 import {
   createActionPlan,
+  closePaymentCompliancePeriod,
   createPaymentApproval,
+  getPaymentCompliance,
   listActionPlanAttachments,
   listActionPlanEvents,
   listActionPlans,
   listPaymentApprovals,
+  listPaymentEvents,
   listTicketMessages,
   openOperationAttachment,
+  reopenPaymentCompliancePeriod,
   reviewActionPlan,
   sendTicketMessage,
+  voidPaymentCase,
   type ActionPlanEventRecord,
   type ActionPlanRecord,
   type EvaluationStatus,
   type OperationAttachmentRecord,
   type PaymentApprovalRecord,
+  type PaymentCaseEventRecord,
+  type PaymentComplianceContext,
+  type PaymentRecord,
   type TicketMessageRecord,
 } from '../data/supabaseOperations';
 
@@ -195,12 +203,163 @@ export function EvaluationActionPlans({
   </div>;
 }
 
-export function PaymentApprovals({ paymentId, showToast, onChanged }: { paymentId: string; showToast: (message: string, type?: 'success'|'error'|'warning') => void; onChanged: () => void }) {
-  const [items,setItems]=useState<PaymentApprovalRecord[]>([]); const [decision,setDecision]=useState<PaymentApprovalRecord['decision']>('aprobado'); const [comment,setComment]=useState(''); const [saving,setSaving]=useState(false);
-  const load=async()=>{try{setItems(await listPaymentApprovals(paymentId));}catch(error){showToast(error instanceof Error?error.message:'No fue posible cargar aprobaciones.','error');}};
-  useEffect(()=>{void load();},[paymentId]);
-  const submit=async(event:FormEvent)=>{event.preventDefault();if(saving)return;setSaving(true);try{await createPaymentApproval(paymentId,decision,comment||undefined);setComment('');await load();onChanged();showToast(decision==='aprobado'?'Pago aprobado y liberado.':'Pago observado/retenido.');}catch(error){showToast(error instanceof Error?error.message:'No fue posible registrar la aprobación.','error');}finally{setSaving(false);}};
-  return <div className="border rounded-xl p-4 mt-3"><h4 className="font-semibold text-navy">Aprobaciones de pago</h4><p className="text-sm text-gray-500">Cada decisión queda trazada y actualiza automáticamente el estado del pago.</p><form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3"><select value={decision} onChange={e=>setDecision(e.target.value as PaymentApprovalRecord['decision'])} className="form-input p-2 border rounded"><option value="aprobado">Aprobar</option><option value="observado">Observar</option><option value="rechazado">Rechazar</option></select><input value={comment} onChange={e=>setComment(e.target.value)} className="form-input p-2 border rounded sm:col-span-2" placeholder="Comentario o fundamento"/><button className="btn btn-primary sm:col-span-3" disabled={saving}>Registrar decisión</button></form><div className="space-y-2 mt-3">{items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong>{item.decision}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.comment?` · ${item.comment}`:''}</span></div>)}{items.length===0&&<p className="text-sm text-gray-500">Aún no hay decisiones registradas.</p>}</div></div>;
+export function PaymentApprovals({
+  payment,
+  readOnly = false,
+  showToast,
+  onChanged,
+}: {
+  payment: PaymentRecord;
+  readOnly?: boolean;
+  showToast: (message: string, type?: 'success'|'error'|'warning') => void;
+  onChanged: () => void;
+}) {
+  const [items, setItems] = useState<PaymentApprovalRecord[]>([]);
+  const [events, setEvents] = useState<PaymentCaseEventRecord[]>([]);
+  const [compliance, setCompliance] = useState<PaymentComplianceContext>();
+  const [decision, setDecision] = useState<PaymentApprovalRecord['decision']>('aprobado');
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const [approvals, history, context] = await Promise.all([
+        listPaymentApprovals(payment.id),
+        listPaymentEvents(payment.id),
+        getPaymentCompliance(payment.id),
+      ]);
+      setItems(approvals);
+      setEvents(history);
+      setCompliance(context);
+      if (!context.eligible && decision === 'aprobado') setDecision('observado');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cargar el detalle del pago.', 'error');
+    }
+  };
+
+  useEffect(() => { void load(); }, [payment.id, payment.status]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (saving || readOnly || ['pagado','anulado'].includes(payment.status)) return;
+    if (decision === 'aprobado' && !compliance?.eligible) {
+      showToast(compliance?.eligibleReason || compliance?.reason || 'El período documental todavía no habilita pago.', 'warning');
+      return;
+    }
+    if (decision !== 'aprobado' && comment.trim().length < 3) {
+      showToast('Indica el fundamento de la observación o rechazo.', 'warning');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createPaymentApproval(payment.id, decision, comment || undefined);
+      setComment('');
+      await load();
+      onChanged();
+      showToast(decision === 'aprobado' ? 'Pago aprobado y liberado.' : 'Pago retenido con fundamento registrado.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible registrar la decisión.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const closePeriod = async () => {
+    if (readOnly || !payment.compliance_period_id) return;
+    if (!window.confirm('Cerrar el período congela el estado documental usado para decidir el pago. ¿Continuar?')) return;
+    setSaving(true);
+    try {
+      await closePaymentCompliancePeriod(payment.compliance_period_id);
+      await load();
+      onChanged();
+      showToast('Período documental cerrado. Ya puedes revisar si el snapshot habilita pago.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cerrar el período.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reopenPeriod = async () => {
+    if (readOnly || !payment.compliance_period_id || payment.status === 'pagado') return;
+    const reason = window.prompt('Motivo de reapertura del período documental:')?.trim();
+    if (!reason) return;
+    setSaving(true);
+    try {
+      await reopenPaymentCompliancePeriod(payment.compliance_period_id, reason);
+      await load();
+      onChanged();
+      showToast('Período reabierto para correcciones. Un pago liberado vuelve a retenido hasta un nuevo cierre y aprobación.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible reabrir el período.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const voidCase = async () => {
+    if (readOnly || ['pagado','anulado'].includes(payment.status)) return;
+    const reason = window.prompt('Motivo de anulación del estado de pago:')?.trim();
+    if (!reason) return;
+    setSaving(true);
+    try {
+      await voidPaymentCase(payment.id, reason);
+      await load();
+      onChanged();
+      showToast('Estado de pago anulado con trazabilidad.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible anular el pago.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const periodClosed = compliance?.periodStatus === 'cerrado';
+  const eligible = compliance?.eligible === true;
+
+  return <div className="border rounded-xl p-4 mt-3">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h4 className="font-semibold text-navy">Gobernanza del pago</h4>
+        <p className="text-sm text-gray-500">La liberación exige período documental cerrado, snapshot trazable y una decisión de aprobación.</p>
+      </div>
+      {!readOnly && !['pagado','anulado'].includes(payment.status) && <button type="button" className="btn btn-secondary" onClick={() => void voidCase()} disabled={saving}>Anular caso</button>}
+    </div>
+
+    <div className={`mt-3 rounded-lg border p-3 text-sm ${eligible ? 'border-green-200 bg-green-50 text-green-800' : periodClosed ? 'border-red-200 bg-red-50 text-red-800' : 'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+      <strong>{eligible ? 'Cumplimiento habilita pago' : periodClosed ? 'Cumplimiento no habilita pago' : 'Período documental aún abierto'}</strong>
+      <p className="mt-1">{eligible ? `Snapshot cerrado · cumplimiento ${compliance?.compliancePercent ?? 0}% · sin bloqueos de pago.` : compliance?.eligibleReason || compliance?.reason || 'Revisa el período documental.'}</p>
+      <div className="mt-2 flex flex-wrap gap-3 text-xs">
+        <span>Período: {compliance?.periodStatus || '—'}</span>
+        {compliance?.paymentBlockedCount !== undefined && <span>Bloqueos: {compliance.paymentBlockedCount}</span>}
+        {compliance?.paymentPendingCount !== undefined && <span>Pendientes: {compliance.paymentPendingCount}</span>}
+        {compliance?.generatedAt && <span>Snapshot: {new Date(compliance.generatedAt).toLocaleString('es-CL')}</span>}
+      </div>
+      {!readOnly && payment.compliance_period_id && !periodClosed && <button type="button" className="btn btn-secondary mt-3" disabled={saving} onClick={() => void closePeriod()}>Cerrar período documental</button>}
+      {!readOnly && payment.compliance_period_id && periodClosed && !eligible && payment.status !== 'pagado' && <button type="button" className="btn btn-secondary mt-3" disabled={saving} onClick={() => void reopenPeriod()}>Reabrir para correcciones</button>}
+    </div>
+
+    {!readOnly && !['pagado','anulado'].includes(payment.status) && <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+      <select value={decision} onChange={e=>setDecision(e.target.value as PaymentApprovalRecord['decision'])} className="form-input p-2 border rounded">
+        <option value="aprobado" disabled={!eligible}>Aprobar y liberar</option>
+        <option value="observado">Observar / retener</option>
+        <option value="rechazado">Rechazar / retener</option>
+      </select>
+      <input value={comment} maxLength={2000} onChange={e=>setComment(e.target.value)} className="form-input p-2 border rounded sm:col-span-2" placeholder={decision === 'aprobado' ? 'Comentario opcional' : 'Fundamento obligatorio'} />
+      <button className="btn btn-primary sm:col-span-3" disabled={saving || (decision === 'aprobado' && !eligible)}>Registrar decisión</button>
+    </form>}
+
+    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div>
+        <h5 className="text-sm font-semibold text-navy">Decisiones</h5>
+        <div className="space-y-2 mt-2">{items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong className="capitalize">{item.decision}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.comment? ` · ${item.comment}` : ''}</span></div>)}{items.length===0&&<p className="text-sm text-gray-500">Aún no hay decisiones registradas.</p>}</div>
+      </div>
+      <div>
+        <h5 className="text-sm font-semibold text-navy">Historial del estado</h5>
+        <div className="space-y-2 mt-2">{events.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong className="capitalize">{item.event_type}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.reason? ` · ${item.reason}` : ''}</span></div>)}{events.length===0&&<p className="text-sm text-gray-500">Sin eventos todavía.</p>}</div>
+      </div>
+    </div>
+  </div>;
 }
 
 export function TicketConversation({ ticketId, showToast }: { ticketId: string; showToast: (message: string, type?: 'success'|'error'|'warning') => void }) {
