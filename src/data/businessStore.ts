@@ -1,7 +1,7 @@
 import { DEFAULT_DOCUMENT_TEMPLATES } from './defaultTemplates';
 import { Contratista, Proyecto, Mandante, Documento, Trabajador, Requisito, HistorialVersionDocumento } from '../types';
 import { backendAccreditationLabel, clearDerivedStateCache, getBackendAccreditationState, getBackendWorkerStateForProject } from './supabaseDerivedState';
-import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './businessRuntimeCache';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
