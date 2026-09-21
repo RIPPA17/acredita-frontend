@@ -9,6 +9,7 @@ const ACCREDITATION = '51000000-0000-4000-8000-000000000001';
 const EVALUATION = '61000000-0000-4000-8000-000000000001';
 const PLAN = '71000000-0000-4000-8000-000000000001';
 const PAYMENT = '81000000-0000-4000-8000-000000000001';
+const PAYMENT_PERIOD = '82000000-0000-4000-8000-000000000001';
 const TICKET = '91000000-0000-4000-8000-000000000001';
 
 function session() {
@@ -44,12 +45,22 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
     documents: [],
     document_versions: [],
     obligation_statuses: [],
-    compliance_periods: [],
+    compliance_periods: [{
+      id: PAYMENT_PERIOD,
+      project_id: PROJECT,
+      period_start: '2026-08-01',
+      period_end: '2026-08-31',
+      upload_deadline: '2026-09-06',
+      review_deadline: '2026-09-11',
+      status: 'cerrado',
+      closed_at: '2026-09-12T12:00:00Z',
+    }],
     accreditation_statuses: [{ accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }],
     worker_accreditation_statuses: [],
     contractor_evaluations: [{
       id: EVALUATION,
       accreditation_id: ACCREDITATION,
+      compliance_period_id: PAYMENT_PERIOD,
       period_start: '2026-08-01',
       period_end: '2026-08-31',
       status: 'publicada',
@@ -109,6 +120,20 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
       block_reason: 'Falta cierre de observación.',
       invoice_number: 'F-OPS-01',
       submitted_at: '2026-09-10T12:00:00Z',
+      submission_note: 'Estado de pago agosto.',
+      compliance_checked_at: '2026-09-12T12:00:00Z',
+    }],
+    payment_approvals: [],
+    payment_case_events: [{
+      id: '83000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      event_type: 'creado',
+      from_status: null,
+      to_status: 'observado',
+      reason: 'Falta cierre de observación.',
+      compliance_snapshot: {},
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-10T12:00:00Z',
     }],
     support_tickets: [{
       id: TICKET,
@@ -150,6 +175,20 @@ async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 
     }
     if (url.pathname.startsWith('/auth/v1/token')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'e2e-access', refresh_token: 'e2e-refresh', expires_in: 3600, user: { id: PROFILE, email: 'contratista-ops@e2e.invalid' } }) });
+    }
+    if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          eligible: false,
+          periodStatus: 'cerrado',
+          compliancePercent: 75,
+          paymentBlockedCount: 1,
+          paymentPendingCount: 0,
+          eligibleReason: 'Existen requisitos obligatorios rechazados o vencidos que bloquean pago.',
+        }),
+      });
     }
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       return route.fulfill({ status: 204, body: '' });
@@ -235,6 +274,29 @@ test('Enlace profundo abre directamente el plan de acción indicado', async ({ p
   await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
   await expect(page.locator(`#action-plan-${PLAN}`)).toBeVisible();
   await expect(page.getByText('Cerrar hallazgo de seguridad')).toBeVisible();
+});
+
+test('Contratista consulta snapshot e historial del estado de pago', async ({ page }) => {
+  await mockContractor(page);
+  await openOperations(page);
+
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+  await page.getByRole('button', { name: 'Ver detalle' }).click();
+
+  await expect(page.getByText('75%', { exact: true })).toBeVisible();
+  await expect(page.getByText('Existen requisitos obligatorios rechazados o vencidos que bloquean pago.')).toBeVisible();
+  await page.getByText('Historial del pago · 1', { exact: true }).click();
+  await expect(page.getByText(/creado/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Registrar pago/i })).toHaveCount(0);
+});
+
+test('Enlace profundo abre directamente el pago indicado', async ({ page }) => {
+  await mockContractor(page);
+  await page.goto(`/contratista/operacion?proyecto=proyecto_ops_qa&pago=${PAYMENT}`);
+
+  await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
+  await expect(page.locator(`#payment-case-${PAYMENT}`)).toBeVisible();
+  await expect(page.getByText('75%', { exact: true })).toBeVisible();
 });
 
 test('Contratista ve estado de pago y conversa con soporte sin controles administrativos', async ({ page }) => {
