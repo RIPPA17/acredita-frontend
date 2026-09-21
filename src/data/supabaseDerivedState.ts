@@ -1,43 +1,50 @@
-import type { SupabaseUserSession } from './supabaseAuth';
-
-const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
-  || 'https://jwlscxbmttpicwljozwf.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
-  || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, type SupabaseUserSession } from './supabaseAuth';
 
 type BackendAccreditationStatus = {
   accreditation_id: string;
-  project_id: string;
-  contratista_id: string;
+  project_id?: string;
+  contratista_id?: string;
   status: 'no_acreditado' | 'en_proceso' | 'aprobado' | 'vencido_bloqueado';
   compliance_percent: number | string;
   access_allowed: boolean;
   payment_allowed: boolean;
-  near_expiry_count: number;
-  access_blocked_count: number;
-  access_pending_count: number;
-  payment_blocked_count: number;
-  payment_pending_count: number;
+  near_expiry_count?: number;
+  access_blocked_count?: number;
+  access_pending_count?: number;
+  payment_blocked_count?: number;
+  payment_pending_count?: number;
+  pending_required?: number;
+  rejected_required?: number;
+  expired_required?: number;
+  near_expiry_required?: number;
 };
 
 type BackendWorkerStatus = {
   accreditation_id: string;
-  project_id: string;
-  contratista_id: string;
+  project_id?: string;
+  contratista_id?: string;
   worker_id: string;
-  worker_rut: string;
+  worker_rut?: string;
   status: 'no_acreditado' | 'en_proceso' | 'aprobado' | 'vencido_bloqueado';
-  required_count: number;
-  submitted_count: number;
-  satisfied_count: number;
-  pending_count: number;
-  blocked_count: number;
-  near_expiry_count: number;
-  compliance_percent: number | string;
+  required_count?: number;
+  submitted_count?: number;
+  satisfied_count?: number;
+  pending_count?: number;
+  blocked_count?: number;
+  near_expiry_count?: number;
+  compliance_percent?: number | string;
+  total_required?: number;
+  approved_required?: number;
+  pending_required?: number;
+  rejected_required?: number;
+  expired_required?: number;
+  near_expiry_required?: number;
 };
 
 type BackendProject = { id: string; integration_key: string | null };
 type BackendContractor = { id: string; integration_key: string | null };
+type BackendAccreditationContext = { id: string; project_id: string; contratista_id: string };
+type BackendWorkerIdentity = { id: string; contratista_id: string; rut: string };
 
 export type DerivedAccreditationState = {
   status: BackendAccreditationStatus['status'];
@@ -134,9 +141,11 @@ export function getBackendWorkerStateForProject(
 export async function refreshDerivedStateCache(session: SupabaseUserSession): Promise<void> {
   if (typeof window === 'undefined') return;
   const token = session._supabase.accessToken;
-  const [projects, contractors, accreditationRows, workerRows] = await Promise.all([
+  const [projects, contractors, accreditationContexts, workerIdentities, accreditationRows, workerRows] = await Promise.all([
     selectRows<BackendProject>('projects', token, 'id,integration_key'),
     selectRows<BackendContractor>('contratistas', token, 'id,integration_key'),
+    selectRows<BackendAccreditationContext>('accreditations', token, 'id,project_id,contratista_id'),
+    selectRows<BackendWorkerIdentity>('workers', token, 'id,contratista_id,rut'),
     selectRows<BackendAccreditationStatus>(
       'accreditation_statuses',
       token,
@@ -151,39 +160,68 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
 
   const projectKey = new Map(projects.filter(p => p.integration_key).map(p => [p.id, p.integration_key as string]));
   const contractorKey = new Map(contractors.filter(c => c.integration_key).map(c => [c.id, c.integration_key as string]));
+  const accreditationContextById = new Map(accreditationContexts.map(row => [row.id, row]));
+  const workerIdentityById = new Map(workerIdentities.map(row => [row.id, row]));
   const accreditations: DerivedStateCache['accreditations'] = {};
   const workers: DerivedStateCache['workers'] = {};
 
   for (const row of accreditationRows) {
-    const pKey = projectKey.get(row.project_id);
-    const cKey = contractorKey.get(row.contratista_id);
+    const context = accreditationContextById.get(row.accreditation_id);
+    const projectId = row.project_id || context?.project_id;
+    const contractorId = row.contratista_id || context?.contratista_id;
+    const pKey = projectId ? projectKey.get(projectId) : undefined;
+    const cKey = contractorId ? contractorKey.get(contractorId) : undefined;
     if (!pKey || !cKey) continue;
+
+    const genericBlocked = Number(row.rejected_required || 0) + Number(row.expired_required || 0);
+    const accessBlockedCount = row.access_blocked_count ?? (!row.access_allowed && row.status === 'vencido_bloqueado' ? genericBlocked : 0);
+    const paymentBlockedCount = row.payment_blocked_count ?? (!row.payment_allowed && row.status === 'vencido_bloqueado' ? genericBlocked : 0);
+    const genericPending = Number(row.pending_required || 0);
+
     accreditations[`${cKey}:${pKey}`] = {
       status: row.status,
       compliancePercent: Number(row.compliance_percent || 0),
       accessAllowed: Boolean(row.access_allowed),
       paymentAllowed: Boolean(row.payment_allowed),
-      nearExpiryCount: Number(row.near_expiry_count || 0),
-      accessBlockedCount: Number(row.access_blocked_count || 0),
-      accessPendingCount: Number(row.access_pending_count || 0),
-      paymentBlockedCount: Number(row.payment_blocked_count || 0),
-      paymentPendingCount: Number(row.payment_pending_count || 0),
+      nearExpiryCount: Number(row.near_expiry_count ?? row.near_expiry_required ?? 0),
+      accessBlockedCount: Number(accessBlockedCount || 0),
+      accessPendingCount: Number(row.access_pending_count ?? (!row.access_allowed && !accessBlockedCount ? genericPending || 1 : 0)),
+      paymentBlockedCount: Number(paymentBlockedCount || 0),
+      paymentPendingCount: Number(row.payment_pending_count ?? (!row.payment_allowed && !paymentBlockedCount ? genericPending || 1 : 0)),
     };
   }
 
   for (const row of workerRows) {
-    const pKey = projectKey.get(row.project_id);
-    const cKey = contractorKey.get(row.contratista_id);
-    if (!pKey || !cKey) continue;
-    workers[`${cKey}:${pKey}:${normalizeRut(row.worker_rut)}`] = {
+    const context = accreditationContextById.get(row.accreditation_id);
+    const identity = workerIdentityById.get(row.worker_id);
+    const projectId = row.project_id || context?.project_id;
+    const contractorId = row.contratista_id || context?.contratista_id || identity?.contratista_id;
+    const workerRut = row.worker_rut || identity?.rut || '';
+    const pKey = projectId ? projectKey.get(projectId) : undefined;
+    const cKey = contractorId ? contractorKey.get(contractorId) : undefined;
+    if (!pKey || !cKey || !workerRut) continue;
+
+    const requiredCount = Number(row.required_count ?? row.total_required ?? 0);
+    const satisfiedCount = Number(row.satisfied_count ?? row.approved_required ?? 0);
+    const blockedCount = Number(
+      row.blocked_count
+      ?? (Number(row.rejected_required || 0) + Number(row.expired_required || 0))
+    );
+    const compliancePercent = row.compliance_percent != null
+      ? Number(row.compliance_percent)
+      : requiredCount > 0
+        ? Math.round((satisfiedCount * 1000) / requiredCount) / 10
+        : 0;
+
+    workers[`${cKey}:${pKey}:${normalizeRut(workerRut)}`] = {
       status: row.status,
-      requiredCount: Number(row.required_count || 0),
-      submittedCount: Number(row.submitted_count || 0),
-      satisfiedCount: Number(row.satisfied_count || 0),
-      pendingCount: Number(row.pending_count || 0),
-      blockedCount: Number(row.blocked_count || 0),
-      nearExpiryCount: Number(row.near_expiry_count || 0),
-      compliancePercent: Number(row.compliance_percent || 0),
+      requiredCount,
+      submittedCount: Number(row.submitted_count ?? 0),
+      satisfiedCount,
+      pendingCount: Number(row.pending_count ?? row.pending_required ?? 0),
+      blockedCount,
+      nearExpiryCount: Number(row.near_expiry_count ?? row.near_expiry_required ?? 0),
+      compliancePercent,
     };
   }
 

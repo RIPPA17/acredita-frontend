@@ -1,10 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { restoreSupabaseSession, type AppRole, type SupabaseUserSession } from '../data/supabaseAuth';
-import { prepareCoreDataForSession } from '../data/supabaseCoreData';
-import { prepareOperationalDataForSession } from '../data/supabaseOperationalData';
-import { prepareReviewOperationsForSession } from '../data/supabaseReviewOperations';
-import { captureBusinessRevision, clearBusinessRevisionBaseline } from '../data/supabaseBusinessSync';
+import { clearBusinessRuntimeSession, synchronizeBusinessSession } from '../data/businessDataSync';
 import { DataSyncProvider } from './DataSyncContext';
 
 interface ProtectedRouteProps {
@@ -31,17 +28,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     const task = (async () => {
       if (activeRef.current) setSyncing(true);
       try {
-        const restored = await restoreSupabaseSession();
+        const restored = await synchronizeBusinessSession();
         if (!restored) {
-          clearBusinessRevisionBaseline();
           if (activeRef.current) setSession(null);
           return false;
         }
-
-        await prepareCoreDataForSession(restored);
-        await prepareOperationalDataForSession(restored);
-        await prepareReviewOperationsForSession(restored);
-        await captureBusinessRevision(restored);
         if (!activeRef.current) return false;
 
         setSession(restored);
@@ -75,7 +66,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           const refreshed = await restoreSupabaseSession();
           if (!activeRef.current) return;
           if (!refreshed) {
-            clearBusinessRevisionBaseline();
+            clearBusinessRuntimeSession();
             setSession(null);
             return;
           }
@@ -90,7 +81,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
     return () => {
       activeRef.current = false;
-      clearBusinessRevisionBaseline();
+      // No limpiamos la proyección de negocio al desmontar la ruta.
+      // React StrictMode ejecuta cleanup/re-mount en desarrollo y además un
+      // cambio entre portales protegidos no equivale a cerrar sesión.
       if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, [synchronizeBusinessData]);

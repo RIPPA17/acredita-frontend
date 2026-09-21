@@ -10,15 +10,10 @@ import type {
   ServicioContrato,
   Trabajador,
 } from '../types';
-import type { SupabaseUserSession } from './supabaseAuth';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, type SupabaseUserSession } from './supabaseAuth';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
-import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './businessRuntimeStore';
 import { formatPeriodo, setCierresDocumentales, setObligacionesDocumentales } from './operationalCore';
-
-const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
-  || 'https://jwlscxbmttpicwljozwf.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = ((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
-  || 'sb_publishable_27fQcRn8vsWGpzjjE-XIAQ_0Du8m0UP';
 
 const CONTRACTORS_KEY = 'acredita_contratistas';
 

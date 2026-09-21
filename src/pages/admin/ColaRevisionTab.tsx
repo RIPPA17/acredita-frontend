@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, XCircle, Search, RefreshCw, Clock3 } from 'lucide-react';
-import { getContratistas, getMandantes, getProyectos } from '../../data/localStorageDb';
+import { getContratistas, getMandantes, getProyectos } from '../../data/businessStore';
 import {
   claimDocumentReview,
   refreshReviewOperationsCache,
