@@ -86,7 +86,7 @@ export default function AdminPortal() {
   // invitar/reasignar (para que la tabla cambie al instante, sin depender
   // de que algún otro estado fuerce un re-render) y se resincroniza al
   // cambiar de pestaña, para no perder cambios guardados por otros flujos
-  // (p. ej. Cola de revisión) que escriben en localStorage por su cuenta.
+  // (p. ej. Cola de revisión) que actualizan el cache runtime y persisten en Supabase.
   const [contratistas, setContratistas] = useState<Contratista[]>(() => getContratistas());
   // Mismo patrón para proyectos (creación de "Nuevo proyecto" desde
   // Proyectos) y requisitos (alta/edición/activación desde el drawer de
