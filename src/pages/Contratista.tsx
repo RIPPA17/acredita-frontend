@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Contratista, Documento, Proyecto, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/businessStore';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
@@ -100,7 +100,7 @@ export default function ContratistaPortal() {
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
-  // Load contractors, projects, and mandantes from localStorageDb
+  // Load contractors, projects, and mandantes from businessStore
   const allContratistas = getContratistas();
   const allProyectos = getProyectos();
   const allMandantes = getMandantes();
