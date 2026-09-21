@@ -60,7 +60,7 @@ import OperationalNotificationsPanel from '../components/OperationalNotification
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
-import { usePortalTab } from '../hooks/usePortalTab';
+import { usePortalTab } from '../hooks/usePortalTab';\nimport { useSidebarPreference } from '../hooks/useSidebarPreference';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
@@ -72,19 +72,9 @@ export default function AdminPortal() {
   const navigate = useNavigate();
   const session = getCurrentSession();
   const { revision: dataSyncRevision } = useDataSync();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const stored = localStorage.getItem('sidebar_collapsed');
-    if (stored !== null) return stored === 'true';
-    // Default collapsed on laptops (< ~1440px) so the dashboard's KPI row has
-    // room to render at its intended spacious size without wrapping.
-    return typeof window !== 'undefined' && window.innerWidth < 1440;
-  });
-
-  const toggleSidebar = () => {
-    const nextState = !sidebarCollapsed;
-    setSidebarCollapsed(nextState);
-    localStorage.setItem('sidebar_collapsed', String(nextState));
-  };
+  const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(
+    typeof window !== 'undefined' && window.innerWidth < 1440,
+  );
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
