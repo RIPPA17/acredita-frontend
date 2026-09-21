@@ -87,6 +87,10 @@ export function getBusinessToday(): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+function backendIsAuthoritative(): boolean {
+  return typeof window !== 'undefined' && Boolean(getStoredSupabaseSession());
+}
+
 function createCalendarDate(year: number, month: number, day: number): Date | null {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
   const date = new Date(year, month, day);
@@ -262,6 +266,9 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
     if (backendState.status === 'aprobado') return backendState.nearExpiryCount > 0 ? 'por_vencer' : 'aprobado';
     return 'pendiente';
   }
+  // En una sesión real, la ausencia de estado derivado nunca habilita por cálculo local.
+  // El fallback local se conserva únicamente para pruebas puras/compatibilidad sin sesión.
+  if (backendIsAuthoritative()) return 'pendiente';
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const documentos = w.documentos || [];
 
@@ -339,6 +346,9 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 
 
   const backendState = getBackendAccreditationState(c.id, proyectoId);
   if (backendState) return backendAccreditationLabel(backendState);
+  // Supabase es la fuente de verdad en sesiones autenticadas.
+  // Si la proyección derivada no está disponible, fallamos de forma conservadora.
+  if (backendIsAuthoritative()) return 'En proceso';
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -513,6 +523,20 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
         : backendState.paymentAllowed ? undefined : pagoBloqueado ? `${backendState.paymentBlockedCount} obligación(es) de pago rechazada(s) o vencida(s)` : `${backendState.paymentPendingCount} obligación(es) de pago pendiente(s)`,
     };
   }
+  if (backendIsAuthoritative()) {
+    const reason = 'Estado operacional no disponible en Supabase. Sincroniza nuevamente antes de continuar.';
+    return {
+      accesoEstado: 'pendiente',
+      accesoBloqueado: false,
+      accesoPendiente: true,
+      motivoAcceso: reason,
+      pagoEstado: 'pendiente',
+      pagoBloqueado: false,
+      pagoPendiente: true,
+      motivoPago: reason,
+    };
+  }
+
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
