@@ -5,7 +5,8 @@ import { getRuntimeArray, setRuntimeArray } from './businessRuntimeCache';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
-import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';\nimport {
+import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';
+import {
   esDocumentoCumplido,
   esPorVencerPorFecha,
   esVencidoPorFecha,
@@ -346,7 +347,6 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 
   return 'Aprobado';
 }
 
-}
 export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Normal' | 'Baja' {
   let rule = r;
   if (!rule) {
