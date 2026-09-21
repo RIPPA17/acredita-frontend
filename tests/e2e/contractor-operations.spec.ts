@@ -312,7 +312,7 @@ test('Pago finalizado conserva el snapshot histórico aunque cambie el cumplimie
 
   await expect(page.getByText('Snapshot histórico que justificó la decisión de pago.', { exact: true })).toBeVisible();
   await expect(page.getByText('Este registro no se recalcula con cambios documentales posteriores.', { exact: true })).toBeVisible();
-  await expect(page.getByText('TRX-HIST-001', { exact: false })).toBeVisible();
+  await expect(page.getByText(/Referencia de pago: TRX-HIST-001/)).toBeVisible();
   await expect(page.getByText('100%', { exact: true })).toBeVisible();
 });
 
