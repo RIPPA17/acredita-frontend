@@ -28,6 +28,7 @@ export interface NotificacionContratista {
   trabajadorRut?: string;
   actionPlanId?: string;
   evaluationId?: string;
+  paymentCaseId?: string;
 }
 
 interface Params {
