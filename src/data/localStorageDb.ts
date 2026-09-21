@@ -5,6 +5,7 @@ import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
+import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
@@ -489,6 +490,8 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
   pagoPendiente: boolean;
   motivoPago?: string;
 } {
+  const accessOverride = getActiveProjectDecisionOverride(c.id, proyectoId, 'access');
+  const paymentOverride = getActiveProjectDecisionOverride(c.id, proyectoId, 'payment');
   const backendState = getBackendAccreditationState(c.id, proyectoId);
   if (backendState) {
     const accesoBloqueado = backendState.accessBlockedCount > 0;
