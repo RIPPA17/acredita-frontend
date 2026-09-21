@@ -1,7 +1,7 @@
 import {
   esPorVencerPorFecha,
   esVencidoPorFecha,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { Documento, Requisito } from '../../types';
 import { DocEstado } from '../admin/acreditacionUtils';
 
