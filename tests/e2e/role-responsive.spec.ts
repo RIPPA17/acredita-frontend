@@ -99,7 +99,7 @@ test('Mandante recorre todos sus módulos principales', async ({ page }) => {
     ['Contratistas', 'Compara rápidamente cómo se encuentra cada empresa'],
     ['Configuración', 'Mi organización'],
   ] as const) {
-    await page.getByText(menu, { exact: true }).first().click();
+    await page.locator('button:visible').filter({ hasText: menu }).first().click();
     await expect(page.locator('body')).toContainText(expected);
     await expectNoPageOverflow(page);
   }
@@ -121,7 +121,7 @@ test('Acredita Admin recorre todos sus módulos principales', async ({ page }) =
     ['Auditoría', 'Auditoría'],
     ['Configuración', 'Configuración'],
   ] as const) {
-    await page.getByText(menu, { exact: true }).first().click();
+    await page.locator('button:visible').filter({ hasText: menu }).first().click();
     await expect(page.locator('body')).toContainText(expected);
     await expectNoPageOverflow(page);
   }
