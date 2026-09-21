@@ -17,6 +17,7 @@ import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
 import { usePortalTab } from '../hooks/usePortalTab';
 import { usePersistentSidebar } from '../hooks/usePersistentSidebar';
+import { useContractorNotificationState } from '../hooks/useContractorNotificationState';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -24,8 +25,8 @@ import TrabajadoresTab from './contratista/TrabajadoresTab';
 import ConfigTab from './contratista/ConfigTab';
 import OperationsTab from './contratista/OperationsTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
-import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
-import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, loadStoredNotifications, markNotificationKeysRead, saveNotificationPreferences, type StoredNotification } from '../data/supabaseNotifications';
+import { NotificacionContratista } from './contratista/notificacionesUtils';
+
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getAsignacionProyecto, getServiciosProyecto, proyectoOperativoParaContratista } from '../data/operationalCore';
 
@@ -108,153 +109,24 @@ export default function ContratistaPortal() {
     documentos: [],
     trabajadores: [],
   };
-  const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
-  const [notificacionesPersistidas, setNotificacionesPersistidas] = useState<StoredNotification[]>([]);
-  const [preferenciasNotificaciones, setPreferenciasNotificaciones] = useState({ ...DEFAULT_NOTIFICATION_PREFERENCES });
-  const misProyectos = allProyectos
-    .filter(p => p.contratistas.includes(contratistaLogueado.id))
-    .sort((a, b) => Number(proyectoOperativoParaContratista(b, contratistaLogueado.id)) - Number(proyectoOperativoParaContratista(a, contratistaLogueado.id)) || a.nombre.localeCompare(b.nombre, 'es'));
-  const proyectosActivos = misProyectos.filter(proyecto => proyectoOperativoParaContratista(proyecto, contratistaLogueado.id));
-  const proyectosHistoricos = misProyectos.filter(proyecto => !proyectoOperativoParaContratista(proyecto, contratistaLogueado.id));
-  const proyectosKey = misProyectos.map(proyecto => `${proyecto.id}:${proyecto.estado}:${proyectoOperativoParaContratista(proyecto, contratistaLogueado.id)}`).join('|');
-
-  React.useEffect(() => {
-    if (!session?.profileId) return;
-    let cancelled = false;
-    Promise.all([
-      loadNotificationPreferences(session.profileId, session),
-      loadReadNotificationKeys(session.profileId, session),
-      loadStoredNotifications(session.profileId, session),
-    ]).then(([preferencias, leidas, persistidas]) => {
-      if (cancelled) return;
-      setPreferenciasNotificaciones(preferencias);
-      setNotificacionesLeidas(leidas);
-      setNotificacionesPersistidas(persistidas);
-    }).catch(() => {
-      if (!cancelled) {
-        setNotificacionesLeidas(new Set());
-        setNotificacionesPersistidas([]);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [session?.profileId]);
-
-  React.useEffect(() => {
-    if (!showNotif || !session?.profileId) return;
-    let cancelled = false;
-    Promise.all([
-      loadStoredNotifications(session.profileId, session),
-      loadReadNotificationKeys(session.profileId, session),
-    ]).then(([persistidas, leidas]) => {
-      if (cancelled) return;
-      setNotificacionesPersistidas(persistidas);
-      setNotificacionesLeidas(leidas);
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [showNotif, session?.profileId, dataRevision, dataSyncRevision]);
-
-  const actuales = buildNotificacionesContratista({
+  const {
+    contractorProjects: misProyectos,
+    activeProjects: proyectosActivos,
+    historicalProjects: proyectosHistoricos,
+    projectsKey: proyectosKey,
+    notifications: notificaciones,
+    unreadCount: notificacionesSinLeer,
+    preferences: preferenciasNotificaciones,
+    markRead: marcarLeidas,
+    savePreferences: guardarPreferenciasNotificaciones,
+  } = useContractorNotificationState({
     contratista: contratistaLogueado,
-    proyectos: misProyectos,
-    requisitos: getRequisitos(),
-    preferencias: preferenciasNotificaciones,
+    proyectos: allProyectos,
+    session,
+    showNotifications: showNotif,
+    dataRevision,
+    dataSyncRevision,
   });
-
-  const eventosDerivados = new Set([
-    'document_rejected',
-    'document_expired',
-    'document_expiring',
-    'document_in_review',
-    'accreditation_approved',
-    'worker_blocked',
-    'worker_enabled',
-    'worker_contract_expiring',
-    'worker_contract_expired',
-  ]);
-
-  const persistidasVisibles: NotificacionContratista[] = notificacionesPersistidas
-    .filter(item => {
-      if (item.status === 'resolved' || !eventosDerivados.has(item.eventType)) return true;
-      const alreadyDerived = actuales.some(actual =>
-        actual.eventType === item.eventType
-        && actual.proyectoId === item.projectKey
-        && (!item.workerRut || actual.trabajadorRut === item.workerRut)
-        && (!item.requirementKey || actual.requisitoId === item.requirementKey)
-      );
-      return !alreadyDerived;
-    })
-    .map(item => {
-      const proyecto = misProyectos.find(candidate => candidate.id === item.projectKey);
-      const worker = item.workerRut
-        ? (contratistaLogueado.trabajadores || []).find(candidate => candidate.rut === item.workerRut)
-        : undefined;
-      const tipo = item.category === 'informativa' ? 'informativa' : item.category;
-      const prioridad = item.status === 'resolved'
-        ? 9
-        : item.severity === 'critical'
-          ? 0
-          : item.severity === 'action'
-            ? 1
-            : item.severity === 'preventive'
-              ? 2
-              : tipo === 'revision'
-                ? 3
-                : 5;
-      const actionPlanId = item.eventType.match(/^action_plan_[^:]+:(.+)$/)?.[1];
-      const evaluationId = item.eventType.match(/^evaluation_[^:]+:(.+)$/)?.[1];
-      const paymentCaseId = item.paymentCaseId || item.key.match(/^payment_(?:blocked|released|paid|voided):(.+)$/)?.[1];
-      const destino = item.actionKind === 'trabajador' && worker
-        ? { tipo: 'trabajador' as const, trabajador: worker }
-        : item.actionKind === 'operacion' || item.actionKind === 'soporte'
-          ? { tipo: 'operacion' as const }
-          : item.actionKind === 'proyecto'
-            ? { tipo: 'proyecto' as const }
-            : item.actionKind === 'acreditacion'
-              ? { tipo: 'acreditacion' as const }
-              : { tipo: 'documentos' as const };
-      return {
-        id: item.key,
-        tipo,
-        proyectoId: proyecto?.id || item.projectKey || misProyectos[0]?.id || '',
-        proyectoNombre: proyecto?.nombre || 'Proyecto',
-        titulo: item.title,
-        descripcion: item.body,
-        fecha: new Date(item.occurredAt).toLocaleString('es-CL'),
-        cta: item.actionLabel,
-        destino,
-        prioridad,
-        eventType: item.eventType,
-        nivel: item.severity,
-        situacion: item.status === 'resolved' ? 'resuelta' as const : 'activa' as const,
-        persistida: true,
-        requisitoId: item.requirementKey,
-        trabajadorRut: item.workerRut,
-        actionPlanId,
-        evaluationId,
-        paymentCaseId,
-        supportTicketId: item.supportTicketId,
-      };
-    });
-
-  const notificaciones = [...actuales, ...persistidasVisibles]
-    .filter(item => Boolean(item.proyectoId))
-    .sort((a, b) => a.prioridad - b.prioridad || (b.fecha || '').localeCompare(a.fecha || '') || a.titulo.localeCompare(b.titulo, 'es'));
-  const notificacionesSinLeer = notificaciones.filter(item => item.situacion !== 'resuelta' && !notificacionesLeidas.has(item.id)).length;
-
-  const marcarLeidas = (ids: string[]) => {
-    setNotificacionesLeidas(actual => {
-      const next = new Set<string>(actual);
-      ids.forEach(id => next.add(id));
-      return next;
-    });
-    if (session?.profileId) void markNotificationKeysRead(session.profileId, ids, session).catch(() => undefined);
-  };
-
-  const guardarPreferenciasNotificaciones = async (preferencias: typeof preferenciasNotificaciones) => {
-    if (!session?.profileId) throw new Error('Sesión inválida');
-    await saveNotificationPreferences(session.profileId, preferencias, session);
-    setPreferenciasNotificaciones(preferencias);
-  };
 
   const abrirNotificaciones = () => setShowNotif(actual => !actual);
 
