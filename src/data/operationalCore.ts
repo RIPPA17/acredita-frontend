@@ -1,5 +1,5 @@
 import type { CierreDocumental, ObligacionDocumental, Proyecto, ServicioContrato, Trabajador } from '../types';
-import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './businessRuntimeCache';
 import { requestBusinessPersistence } from './supabasePersistence';
 
 const SERVICES_KEY = 'acredita_servicios';
