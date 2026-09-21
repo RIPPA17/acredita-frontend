@@ -12,7 +12,7 @@ import type {
 } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
 import { refreshDerivedStateCache } from './supabaseDerivedState';
-import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
+import { getRuntimeArray, setRuntimeArray } from './businessRuntimeCache';
 import { formatPeriodo, setCierresDocumentales, setObligacionesDocumentales } from './operationalCore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
