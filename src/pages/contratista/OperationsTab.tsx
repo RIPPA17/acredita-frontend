@@ -33,6 +33,7 @@ import {
   type TicketRecord,
 } from '../../data/supabaseOperations';
 import { updateContractorActionPlan } from '../../data/contractorOperations';
+import { PaymentApprovals } from '../../components/OperationsWorkflowPanels';
 import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 type Mode = 'evaluaciones' | 'pagos' | 'soporte';
@@ -48,6 +49,7 @@ const paymentLabel: Record<string, string> = {
   retenido: 'Retenido',
   liberado: 'Liberado',
   pagado: 'Pagado',
+  anulado: 'Anulado',
 };
 
 const ticketLabel: Record<string, string> = {
@@ -345,12 +347,14 @@ export default function OperationsTab({
   const [data, setData] = useState<OperationsData>({ evaluations: [], payments: [], tickets: [] });
   const [loading, setLoading] = useState(true);
   const [expandedEvaluation, setExpandedEvaluation] = useState<string>();
+  const [expandedPayment, setExpandedPayment] = useState<string>();
   const [expandedTicket, setExpandedTicket] = useState<string>();
   const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'normal' });
   const [savingTicket, setSavingTicket] = useState(false);
   const operationParams = new URLSearchParams(window.location.search);
   const requestedPlanId = operationParams.get('plan') || undefined;
   const requestedEvaluationId = operationParams.get('evaluacion') || undefined;
+  const requestedPaymentId = operationParams.get('pago') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
@@ -379,6 +383,14 @@ export default function OperationsTab({
       setExpandedEvaluation(requestedEvaluationId);
     }
   }, [requestedEvaluationId, project?.id]);
+
+  useEffect(() => {
+    if (requestedPaymentId && project) {
+      setMode('pagos');
+      setExpandedPayment(requestedPaymentId);
+      setTimeout(() => document.getElementById(`payment-${requestedPaymentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+    }
+  }, [requestedPaymentId, project?.id]);
 
   useEffect(() => {
     if (!requestedPlanId || !project) return;
@@ -429,7 +441,7 @@ export default function OperationsTab({
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Proyecto
-              <select value={project.id} onChange={event => { setSelectedProyectoId(event.target.value); setExpandedEvaluation(undefined); setExpandedTicket(undefined); }} className="form-input mt-1 block min-w-[220px]">
+              <select value={project.id} onChange={event => { setSelectedProyectoId(event.target.value); setExpandedEvaluation(undefined); setExpandedPayment(undefined); setExpandedTicket(undefined); }} className="form-input mt-1 block min-w-[220px]">
                 {proyectos.map(item => <option key={item.id} value={item.id}>{item.nombre}</option>)}
               </select>
             </label>
@@ -482,9 +494,19 @@ export default function OperationsTab({
 
           {mode === 'pagos' && <section className="rounded-xl border border-cream3 bg-white p-4">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
-                <thead><tr className="border-b text-xs uppercase tracking-wide text-gray-500"><th className="p-2">Período</th><th className="p-2">Monto</th><th className="p-2">Referencia</th><th className="p-2">Estado</th><th className="p-2">Observación</th></tr></thead>
-                <tbody>{data.payments.map(item => <tr key={item.id} className="border-b last:border-0"><td className="p-2">{item.period_start} — {item.period_end}</td><td className="p-2">{item.amount ? `$${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}</td><td className="p-2">{item.invoice_number || '—'}</td><td className="p-2"><strong>{paymentLabel[item.status] || item.status}</strong></td><td className="p-2 text-gray-500">{item.block_reason || (item.status === 'pagado' ? 'Pago registrado' : 'Sin observaciones')}</td></tr>)}</tbody>
+              <table className="w-full min-w-[780px] text-left text-sm">
+                <thead><tr className="border-b text-xs uppercase tracking-wide text-gray-500"><th className="p-2">Período</th><th className="p-2">Monto</th><th className="p-2">Referencia</th><th className="p-2">Estado</th><th className="p-2">Observación</th><th className="p-2">Detalle</th></tr></thead>
+                <tbody>{data.payments.map(item => <tr id={`payment-${item.id}`} key={item.id} className="border-b last:border-0 align-top">
+                  <td className="p-2">{item.period_start} — {item.period_end}</td>
+                  <td className="p-2">{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}</td>
+                  <td className="p-2">{item.invoice_number || '—'}{item.payment_reference && <small className="block text-green-700">Pago: {item.payment_reference}</small>}</td>
+                  <td className="p-2"><strong>{paymentLabel[item.status] || item.status}</strong>{item.paid_at && <small className="block text-gray-500">{new Date(item.paid_at).toLocaleString('es-CL')}</small>}</td>
+                  <td className="p-2 text-gray-500">{item.block_reason || (item.status === 'pagado' ? 'Pago confirmado' : item.status === 'liberado' ? 'Habilitado para pago' : 'Sin observaciones')}</td>
+                  <td className="p-2">
+                    <button type="button" className="btn btn-secondary" onClick={() => setExpandedPayment(current => current === item.id ? undefined : item.id)}>{expandedPayment === item.id ? 'Ocultar' : 'Ver detalle'}</button>
+                    {expandedPayment === item.id && <div className="min-w-[540px]"><PaymentApprovals payment={item} readOnly showToast={showToast} onChanged={() => void load()} /></div>}
+                  </td>
+                </tr>)}</tbody>
               </table>
             </div>
             {data.payments.length === 0 && <p className="p-4 text-center text-sm text-gray-500">Todavía no hay estados de pago registrados para este proyecto.</p>}
