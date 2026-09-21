@@ -5,6 +5,7 @@ import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
+import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
@@ -489,6 +490,8 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
   pagoPendiente: boolean;
   motivoPago?: string;
 } {
+  const accessOverride = getActiveProjectDecisionOverride(c.id, proyectoId, 'access');
+  const paymentOverride = getActiveProjectDecisionOverride(c.id, proyectoId, 'payment');
   const backendState = getBackendAccreditationState(c.id, proyectoId);
   if (backendState) {
     const accesoBloqueado = backendState.accessBlockedCount > 0;
@@ -496,14 +499,18 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
     const accesoPendiente = backendState.accessPendingCount > 0;
     const pagoPendiente = backendState.paymentPendingCount > 0;
     return {
-      accesoEstado: backendState.accessAllowed ? 'habilitado' : accesoBloqueado ? 'bloqueado' : 'pendiente',
-      accesoBloqueado,
-      accesoPendiente,
-      motivoAcceso: backendState.accessAllowed ? undefined : accesoBloqueado ? `${backendState.accessBlockedCount} obligación(es) de acceso rechazada(s) o vencida(s)` : `${backendState.accessPendingCount} obligación(es) de acceso pendiente(s)`,
-      pagoEstado: backendState.paymentAllowed ? 'habilitado' : pagoBloqueado ? 'bloqueado' : 'pendiente',
-      pagoBloqueado,
-      pagoPendiente,
-      motivoPago: backendState.paymentAllowed ? undefined : pagoBloqueado ? `${backendState.paymentBlockedCount} obligación(es) de pago rechazada(s) o vencida(s)` : `${backendState.paymentPendingCount} obligación(es) de pago pendiente(s)`,
+      accesoEstado: accessOverride ? 'habilitado' : backendState.accessAllowed ? 'habilitado' : accesoBloqueado ? 'bloqueado' : 'pendiente',
+      accesoBloqueado: accessOverride ? false : accesoBloqueado,
+      accesoPendiente: accessOverride ? false : accesoPendiente,
+      motivoAcceso: accessOverride
+        ? `Excepción humana vigente hasta ${new Date(accessOverride.overrideUntil).toLocaleString('es-CL')}: ${accessOverride.overrideReason}`
+        : backendState.accessAllowed ? undefined : accesoBloqueado ? `${backendState.accessBlockedCount} obligación(es) de acceso rechazada(s) o vencida(s)` : `${backendState.accessPendingCount} obligación(es) de acceso pendiente(s)`,
+      pagoEstado: paymentOverride ? 'habilitado' : backendState.paymentAllowed ? 'habilitado' : pagoBloqueado ? 'bloqueado' : 'pendiente',
+      pagoBloqueado: paymentOverride ? false : pagoBloqueado,
+      pagoPendiente: paymentOverride ? false : pagoPendiente,
+      motivoPago: paymentOverride
+        ? `Excepción humana vigente hasta ${new Date(paymentOverride.overrideUntil).toLocaleString('es-CL')}: ${paymentOverride.overrideReason}`
+        : backendState.paymentAllowed ? undefined : pagoBloqueado ? `${backendState.paymentBlockedCount} obligación(es) de pago rechazada(s) o vencida(s)` : `${backendState.paymentPendingCount} obligación(es) de pago pendiente(s)`,
     };
   }
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
@@ -569,14 +576,18 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
   });
 
   return {
-    accesoEstado: accesoBloqueado ? 'bloqueado' : accesoPendiente ? 'pendiente' : 'habilitado',
-    accesoBloqueado,
-    accesoPendiente,
-    motivoAcceso: motivosAcceso.length > 0 ? motivosAcceso.join('; ') : undefined,
-    pagoEstado: pagoBloqueado ? 'bloqueado' : pagoPendiente ? 'pendiente' : 'habilitado',
-    pagoBloqueado,
-    pagoPendiente,
-    motivoPago: motivosPago.length > 0 ? motivosPago.join('; ') : undefined
+    accesoEstado: accessOverride ? 'habilitado' : accesoBloqueado ? 'bloqueado' : accesoPendiente ? 'pendiente' : 'habilitado',
+    accesoBloqueado: accessOverride ? false : accesoBloqueado,
+    accesoPendiente: accessOverride ? false : accesoPendiente,
+    motivoAcceso: accessOverride
+      ? `Excepción humana vigente hasta ${new Date(accessOverride.overrideUntil).toLocaleString('es-CL')}: ${accessOverride.overrideReason}`
+      : motivosAcceso.length > 0 ? motivosAcceso.join('; ') : undefined,
+    pagoEstado: paymentOverride ? 'habilitado' : pagoBloqueado ? 'bloqueado' : pagoPendiente ? 'pendiente' : 'habilitado',
+    pagoBloqueado: paymentOverride ? false : pagoBloqueado,
+    pagoPendiente: paymentOverride ? false : pagoPendiente,
+    motivoPago: paymentOverride
+      ? `Excepción humana vigente hasta ${new Date(paymentOverride.overrideUntil).toLocaleString('es-CL')}: ${paymentOverride.overrideReason}`
+      : motivosPago.length > 0 ? motivosPago.join('; ') : undefined
   };
 }
 
@@ -596,6 +607,14 @@ export function evaluarHabilitacionCompuerta(
   proyectoId: string,
   compuerta: 'acceso' | 'pago'
 ): HabilitacionResultado {
+  const override = getActiveProjectDecisionOverride(c.id, proyectoId, compuerta === 'acceso' ? 'access' : 'payment');
+  if (override) {
+    return {
+      estado: 'habilitado',
+      motivo: `Excepción humana vigente hasta ${new Date(override.overrideUntil).toLocaleString('es-CL')}: ${override.overrideReason}`,
+      responsable: 'interno',
+    };
+  }
   const reqs = getRequisitos().filter(
     r => r.proyectoId === proyectoId && r.activo !== false
   );
