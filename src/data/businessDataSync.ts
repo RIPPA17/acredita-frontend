@@ -4,6 +4,7 @@ import { prepareOperationalDataForSession } from './supabaseOperationalData';
 import { prepareReviewOperationsForSession } from './supabaseReviewOperations';
 import { captureBusinessRevision, clearBusinessRevisionBaseline } from './supabaseBusinessSync';
 import { clearDerivedStateCache } from './supabaseDerivedState';
+import { clearRuntimeBusinessData } from './businessRuntimeStore';
 
 /**
  * Orquesta una sincronización completa de la sesión.
@@ -28,4 +29,5 @@ export async function synchronizeBusinessSession(): Promise<SupabaseUserSession 
 export function clearBusinessRuntimeSession(): void {
   clearBusinessRevisionBaseline();
   clearDerivedStateCache();
+  clearRuntimeBusinessData();
 }
