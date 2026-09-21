@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { XCircle, Plus, Edit } from 'lucide-react';
 import { Contratista, Proyecto, Mandante, Requisito, PlantillaBase } from '../../types';
-import { saveRequisitos, getPlantillas, getRequisitos } from '../../data/localStorageDb';
+import { saveRequisitos, getPlantillas, getRequisitos } from '../../data/businessStore';
 import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
 import { confirmBusinessPersistence } from '../../data/supabasePersistence';
 
