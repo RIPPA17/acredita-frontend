@@ -4,7 +4,7 @@ import {
   esTrabajadorAsignado,
   getRequisitos,
   obtenerDiasRestantes,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { Contratista, Mandante, Proyecto } from '../../types';
 import { DocEstado } from '../admin/acreditacionUtils';
