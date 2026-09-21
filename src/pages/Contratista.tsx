@@ -237,6 +237,7 @@ export default function ContratistaPortal() {
         trabajadorRut: item.workerRut,
         actionPlanId,
         evaluationId,
+        paymentCaseId: item.paymentCaseId,
       };
     });
 
@@ -276,6 +277,7 @@ export default function ContratistaPortal() {
         params.set('proyecto', notificacion.proyectoId);
         if (notificacion.actionPlanId) params.set('plan', notificacion.actionPlanId);
         if (notificacion.evaluationId) params.set('evaluacion', notificacion.evaluationId);
+        if (notificacion.paymentCaseId) params.set('pago', notificacion.paymentCaseId);
         navigate({ pathname: '/contratista/operacion', search: `?${params.toString()}` });
       } else {
         setActiveTab('operacion');
