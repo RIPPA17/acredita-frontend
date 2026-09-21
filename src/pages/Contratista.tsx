@@ -116,6 +116,7 @@ export default function ContratistaPortal() {
     projectsKey: proyectosKey,
     notifications: notificaciones,
     unreadCount: notificacionesSinLeer,
+    readKeys: notificacionesLeidas,
     preferences: preferenciasNotificaciones,
     markRead: marcarLeidas,
     savePreferences: guardarPreferenciasNotificaciones,
