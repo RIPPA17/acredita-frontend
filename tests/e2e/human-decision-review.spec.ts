@@ -224,6 +224,8 @@ async function installSharedBackend(page: Page) {
       }
 
       let rows = [...(data[table] || [])];
+      if (table === 'acredita_memberships' && !isAdmin) rows = [];
+      if (table === 'contratista_memberships' && isAdmin) rows = [];
       const limit = Number(url.searchParams.get('limit') || 0);
       if (limit > 0) rows = rows.slice(0, limit);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
