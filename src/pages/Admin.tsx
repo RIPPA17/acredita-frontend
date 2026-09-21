@@ -60,7 +60,8 @@ import OperationalNotificationsPanel from '../components/OperationalNotification
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
-import { usePortalTab } from '../hooks/usePortalTab';\nimport { useSidebarPreference } from '../hooks/useSidebarPreference';
+import { usePortalTab } from '../hooks/usePortalTab';
+import { useSidebarPreference } from '../hooks/useSidebarPreference';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
