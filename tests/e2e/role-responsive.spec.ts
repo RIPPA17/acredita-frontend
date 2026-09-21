@@ -111,7 +111,7 @@ test('Acredita Admin recorre todos sus módulos principales', async ({ page }) =
   await page.goto('/admin');
 
   for (const [menu, expected] of [
-    ['Inicio', 'Panel de control'],
+    ['Inicio', 'Centro de Operaciones · Acredita'],
     ['Cola de revisión', 'Cola de revisión'],
     ['Acreditaciones', 'Acreditaciones'],
     ['Mandantes', 'Mandantes'],
