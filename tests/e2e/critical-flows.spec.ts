@@ -188,8 +188,8 @@ function fixtures(role: Role, options: MockOptions) {
       project_id: PROJECT,
       period_start: '2026-09-01',
       period_end: '2026-09-30',
-      status: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? 'cerrado' : 'abierto',
-      snapshot: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? {
+      status: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible !== undefined ? 'cerrado' : 'abierto',
+      snapshot: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible !== undefined ? {
         generated_at: '2026-09-20T10:00:00Z',
         accreditations: [{
           accreditation_id: ACCREDITATION,
@@ -202,7 +202,7 @@ function fixtures(role: Role, options: MockOptions) {
         }],
         obligations: [],
       } : null,
-      closed_at: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible ? '2026-09-20T10:00:00Z' : null,
+      closed_at: options.paymentStatus === 'liberado' || options.paymentStatus === 'pagado' || options.paymentEligible !== undefined ? '2026-09-20T10:00:00Z' : null,
     }],
     accreditation_statuses: [
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
@@ -297,7 +297,7 @@ function fixtures(role: Role, options: MockOptions) {
       payment_reference: paymentStatus === 'pagado' ? 'TRX-E2E-001' : null,
       compliance_snapshot: {
         eligible: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true,
-        periodStatus: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible ? 'cerrado' : 'abierto',
+        periodStatus: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible !== undefined ? 'cerrado' : 'abierto',
         source: paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible ? 'closed_period_snapshot' : 'live',
         compliancePercent: options.paymentEligible === false ? 70 : 100,
         paymentBlockedCount: options.paymentEligible === false ? 1 : 0,
@@ -534,7 +534,7 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
       if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
-        const closed = paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true;
+        const closed = paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible !== undefined;
         const eligible = paymentStatus === 'liberado' || paymentStatus === 'pagado' || options.paymentEligible === true;
         return route.fulfill({
           status: 200,
@@ -666,7 +666,7 @@ test('06 matriz de activos parte sin registros y no auto-habilita nada', async (
 });
 
 test('07 pago observado no puede liberarse mientras el período documental está abierto', async ({ page }) => {
-  await protectedPage(page, 'mandante', { paymentStatus: 'observado', paymentEligible: false });
+  await protectedPage(page, 'mandante', { paymentStatus: 'observado' });
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
@@ -1292,6 +1292,21 @@ test('13d notificación de plan abre el plan de acción exacto', async ({ page }
   await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*plan=${ACTION_PLAN_REVIEW}`));
   await expect(page.locator(`#action-plan-${ACTION_PLAN_REVIEW}`)).toBeVisible();
   await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
+});
+
+test('13e notificación de pago abre el período exacto y su trazabilidad', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true, paymentEligible: false });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  await panel.getByRole('button', { name: 'Resueltas' }).click();
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Pago retenido' });
+  await item.getByRole('button', { name: 'Ver pago' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*pago=${PAYMENT}`));
+  await expect(page.locator(`#payment-${PAYMENT}`)).toBeVisible();
+  await expect(page.getByText('Cumplimiento no habilita pago')).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {
