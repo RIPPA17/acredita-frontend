@@ -27,6 +27,7 @@ import {
   uploadActionPlanAttachment,
   type ActionPlanEventRecord,
   type ActionPlanRecord,
+  type CompliancePeriodRecord,
   type EvaluationRecord,
   type OperationAttachmentRecord,
   type PaymentCaseEventRecord,
@@ -43,6 +44,7 @@ type Mode = 'evaluaciones' | 'pagos' | 'soporte';
 type OperationsData = {
   evaluations: EvaluationRecord[];
   payments: PaymentRecord[];
+  periods: CompliancePeriodRecord[];
   tickets: TicketRecord[];
 };
 
@@ -409,7 +411,7 @@ export default function OperationsTab({
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [mode, setMode] = useState<Mode>('evaluaciones');
-  const [data, setData] = useState<OperationsData>({ evaluations: [], payments: [], tickets: [] });
+  const [data, setData] = useState<OperationsData>({ evaluations: [], payments: [], periods: [], tickets: [] });
   const [loading, setLoading] = useState(true);
   const [expandedEvaluation, setExpandedEvaluation] = useState<string>();
   const [expandedPayment, setExpandedPayment] = useState<string>();
@@ -426,7 +428,7 @@ export default function OperationsTab({
 
   const load = async () => {
     if (!project) {
-      setData({ evaluations: [], payments: [], tickets: [] });
+      setData({ evaluations: [], payments: [], periods: [], tickets: [] });
       setLoading(false);
       return;
     }
