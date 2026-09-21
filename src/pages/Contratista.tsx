@@ -209,6 +209,7 @@ export default function ContratistaPortal() {
                 : 5;
       const actionPlanId = item.eventType.match(/^action_plan_[^:]+:(.+)$/)?.[1];
       const evaluationId = item.eventType.match(/^evaluation_[^:]+:(.+)$/)?.[1];
+      const paymentCaseId = item.key.match(/^payment_(?:blocked|released|paid):(.+)$/)?.[1];
       const destino = item.actionKind === 'trabajador' && worker
         ? { tipo: 'trabajador' as const, trabajador: worker }
         : item.actionKind === 'operacion' || item.actionKind === 'soporte'
@@ -237,6 +238,7 @@ export default function ContratistaPortal() {
         trabajadorRut: item.workerRut,
         actionPlanId,
         evaluationId,
+        paymentCaseId,
       };
     });
 
@@ -271,11 +273,12 @@ export default function ContratistaPortal() {
     } else if (notificacion.destino.tipo === 'acreditacion') {
       setShowFichaAcreditacion(true);
     } else if (notificacion.destino.tipo === 'operacion') {
-      if (notificacion.actionPlanId || notificacion.evaluationId) {
+      if (notificacion.actionPlanId || notificacion.evaluationId || notificacion.paymentCaseId) {
         const params = new URLSearchParams();
         params.set('proyecto', notificacion.proyectoId);
         if (notificacion.actionPlanId) params.set('plan', notificacion.actionPlanId);
         if (notificacion.evaluationId) params.set('evaluacion', notificacion.evaluationId);
+        if (notificacion.paymentCaseId) params.set('pago', notificacion.paymentCaseId);
         navigate({ pathname: '/contratista/operacion', search: `?${params.toString()}` });
       } else {
         setActiveTab('operacion');
