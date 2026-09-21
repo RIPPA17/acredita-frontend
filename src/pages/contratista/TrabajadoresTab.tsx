@@ -9,7 +9,7 @@ import {
   getRequisitos,
   obtenerDiasRestantes,
   requisitoAplicaATrabajador,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { AsignacionTrabajador, Contratista, Documento, Mandante, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumentStorage';
 import { DocEstado } from '../admin/acreditacionUtils';

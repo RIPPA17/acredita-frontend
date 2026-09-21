@@ -36,7 +36,7 @@ import {
   ArrowLeft,
   ChevronRight, Briefcase, Menu, ChevronLeft, UserCheck, Settings
 } from "lucide-react";
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getCurrentSession } from "../data/localStorageDb";
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, saveMandantes, getRequisitos, saveRequisitos, calcularEstadoAcreditacion, calcularEstadoTrabajador, getAlertasVigencia, esVencidoPorFecha, obtenerDiasRestantes, logoutUser, getCurrentSession } from "../data/businessStore";
 import { Contratista, Proyecto, Requisito, Verificador, ClaimRevision } from "../types";
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ColaRevisionTab from './admin/ColaRevisionTab';
@@ -61,6 +61,7 @@ import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
 import { usePortalTab } from '../hooks/usePortalTab';
+import { useSidebarPreference } from '../hooks/useSidebarPreference';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
@@ -72,19 +73,9 @@ export default function AdminPortal() {
   const navigate = useNavigate();
   const session = getCurrentSession();
   const { revision: dataSyncRevision } = useDataSync();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const stored = localStorage.getItem('sidebar_collapsed');
-    if (stored !== null) return stored === 'true';
-    // Default collapsed on laptops (< ~1440px) so the dashboard's KPI row has
-    // room to render at its intended spacious size without wrapping.
-    return typeof window !== 'undefined' && window.innerWidth < 1440;
-  });
-
-  const toggleSidebar = () => {
-    const nextState = !sidebarCollapsed;
-    setSidebarCollapsed(nextState);
-    localStorage.setItem('sidebar_collapsed', String(nextState));
-  };
+  const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(
+    typeof window !== 'undefined' && window.innerWidth < 1440,
+  );
   const GLOBAL_MANDANTES = getMandantes();
   const GLOBAL_PROYECTOS = getProyectos();
   const GLOBAL_CONTRATISTAS = getContratistas();
@@ -95,7 +86,7 @@ export default function AdminPortal() {
   // invitar/reasignar (para que la tabla cambie al instante, sin depender
   // de que algún otro estado fuerce un re-render) y se resincroniza al
   // cambiar de pestaña, para no perder cambios guardados por otros flujos
-  // (p. ej. Cola de revisión) que escriben en localStorage por su cuenta.
+  // (p. ej. Cola de revisión) que actualizan el cache runtime y persisten en Supabase.
   const [contratistas, setContratistas] = useState<Contratista[]>(() => getContratistas());
   // Mismo patrón para proyectos (creación de "Nuevo proyecto" desde
   // Proyectos) y requisitos (alta/edición/activación desde el drawer de

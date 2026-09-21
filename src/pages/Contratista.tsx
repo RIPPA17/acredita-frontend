@@ -9,13 +9,14 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Contratista, Documento, Proyecto, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/localStorageDb';
+import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/businessStore';
 import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
 import { usePortalTab } from '../hooks/usePortalTab';
+import { useSidebarPreference } from '../hooks/useSidebarPreference';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -32,15 +33,7 @@ export default function ContratistaPortal() {
   const navigate = useNavigate();
   const location = useLocation();
   const { revision: dataSyncRevision } = useDataSync();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebar_collapsed') === 'true';
-  });
-
-  const toggleSidebar = () => {
-    const nextState = !sidebarCollapsed;
-    setSidebarCollapsed(nextState);
-    localStorage.setItem('sidebar_collapsed', String(nextState));
-  };
+  const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(false);
   const [activeTab, setActiveTab] = usePortalTab('contratista');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
@@ -100,7 +93,7 @@ export default function ContratistaPortal() {
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
-  // Load contractors, projects, and mandantes from localStorageDb
+  // Load contractors, projects, and mandantes from businessStore
   const allContratistas = getContratistas();
   const allProyectos = getProyectos();
   const allMandantes = getMandantes();
