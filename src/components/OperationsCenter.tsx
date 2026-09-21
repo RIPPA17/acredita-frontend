@@ -9,13 +9,15 @@ import {
   loadOperations,
   setEvaluationStatus,
   updateEvaluationDraft,
+  updatePaymentDetails,
   updateTicketStatus,
+  type CompliancePeriodRecord,
   type EvaluationEventRecord,
   type EvaluationRecord,
   type PaymentRecord,
   type TicketRecord,
 } from '../data/supabaseOperations';
-import { markPaymentPaid } from '../data/supabasePaymentState';
+import { closeCompliancePeriod, markPaymentPaid, reopenCompliancePeriod, voidPaymentCase } from '../data/supabasePaymentState';
 import { EvaluationActionPlans, PaymentApprovals, TicketConversation } from './OperationsWorkflowPanels';
 import IntegrationsPanel from './IntegrationsPanel';
 import { proyectoOperativoParaContratista } from '../data/operationalCore';
@@ -71,7 +73,7 @@ export default function OperationsCenter({
   contractors: Contratista[];
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
-  const [data, setData] = useState<{ evaluations: EvaluationRecord[]; payments: PaymentRecord[]; tickets: TicketRecord[] }>({ evaluations: [], payments: [], tickets: [] });
+  const [data, setData] = useState<{ evaluations: EvaluationRecord[]; payments: PaymentRecord[]; periods: CompliancePeriodRecord[]; tickets: TicketRecord[] }>({ evaluations: [], payments: [], periods: [], tickets: [] });
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>('evaluacion');
   const [expanded, setExpanded] = useState<string>();
@@ -87,6 +89,8 @@ export default function OperationsCenter({
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [paymentPeriodId, setPaymentPeriodId] = useState('');
+  const [paymentSavingId, setPaymentSavingId] = useState<string>();
   const [scores, setScores] = useState({ safety: 80, quality: 80, labor: 80, compliance: 80 });
   const [editingEvaluationId, setEditingEvaluationId] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -104,6 +108,16 @@ export default function OperationsCenter({
       setContractor(operationalContractors[0]?.id || '');
     }
   }, [operationalContractors, contractor]);
+
+  const today = new Date().toISOString().slice(0,10);
+  const selectablePeriods = data.periods.filter(period => period.period_start <= today);
+  const usedPeriodIds = new Set(data.payments.filter(item => item.contratista_id === contractor && item.status !== 'anulado').map(item => item.compliance_period_id));
+  const paymentPeriods = selectablePeriods.filter(period => !usedPeriodIds.has(period.id));
+  useEffect(() => {
+    if (!paymentPeriods.some(period => period.id === paymentPeriodId)) {
+      setPaymentPeriodId(paymentPeriods[0]?.id || '');
+    }
+  }, [contractor, data.periods.length, data.payments.length]);
 
   const resetEvaluationForm = () => {
     setEditingEvaluationId(undefined);
@@ -145,7 +159,14 @@ export default function OperationsCenter({
         }
         resetEvaluationForm();
       } else if (mode === 'pago') {
-        await createPayment(project.id, contractor, { start, end, amount: amount ? Number(amount) : undefined, status: 'observado', reason: description, invoiceNumber: invoiceNumber || undefined });
+        const period = data.periods.find(item => item.id === paymentPeriodId);
+        if (!period) throw new Error('Selecciona un período documental válido.');
+        await createPayment(project.id, contractor, {
+          period,
+          amount: Number(amount),
+          invoiceNumber: invoiceNumber || undefined,
+          note: description || undefined,
+        });
         setDescription(''); setAmount(''); setInvoiceNumber('');
       } else {
         await createTicket(project.id, contractor || undefined, { subject, description, priority: 'normal', category: 'operacion' });
@@ -188,14 +209,80 @@ export default function OperationsCenter({
     }
   };
 
-  const confirmPaid = async (id: string) => {
-    if (readOnlyProject) return;
+  const confirmPaid = async (item: PaymentRecord) => {
+    if (readOnlyProject || item.accreditation_active === false) return;
+    const reference = window.prompt('Referencia del pago (transferencia, comprobante o egreso):', item.payment_reference || '')?.trim();
+    if (!reference) return;
+    const note = window.prompt('Nota de pago (opcional):', item.payment_note || '')?.trim() || undefined;
+    setPaymentSavingId(item.id);
     try {
-      await markPaymentPaid(id);
+      await markPaymentPaid(item.id, reference, note);
       await load();
-      showToast('Pago marcado como pagado.');
+      showToast('Pago marcado como pagado con referencia registrada.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible marcar el pago como pagado.', 'error');
+    } finally {
+      setPaymentSavingId(undefined);
+    }
+  };
+
+  const voidPayment = async (item: PaymentRecord) => {
+    if (readOnlyProject || item.accreditation_active === false || item.status === 'pagado') return;
+    const reason = window.prompt('Motivo de anulación del estado de pago:')?.trim();
+    if (!reason) return;
+    setPaymentSavingId(item.id);
+    try {
+      await voidPaymentCase(item.id, reason);
+      await load();
+      showToast('Estado de pago anulado con trazabilidad.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible anular el pago.', 'error');
+    } finally {
+      setPaymentSavingId(undefined);
+    }
+  };
+
+  const editPayment = async (item: PaymentRecord) => {
+    if (readOnlyProject || item.accreditation_active === false || !['observado','retenido'].includes(item.status)) return;
+    const rawAmount = window.prompt('Monto CLP:', String(item.amount || ''))?.trim();
+    if (!rawAmount) return;
+    const nextAmount = Number(rawAmount);
+    const ref = window.prompt('N° factura / referencia (opcional):', item.invoice_number || '')?.trim() || undefined;
+    const note = window.prompt('Nota del estado de pago (opcional):', item.submission_note || '')?.trim() || undefined;
+    setPaymentSavingId(item.id);
+    try {
+      await updatePaymentDetails(item.id, { amount: nextAmount, invoiceNumber: ref, note });
+      await load();
+      showToast('Datos del estado de pago actualizados.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible actualizar el pago.', 'error');
+    } finally {
+      setPaymentSavingId(undefined);
+    }
+  };
+
+  const closePeriod = async (period: CompliancePeriodRecord) => {
+    if (readOnlyProject) return;
+    if (!window.confirm(`Cerrar el período ${period.period_start} — ${period.period_end} congelará el cumplimiento documental usado para decidir pagos. ¿Continuar?`)) return;
+    try {
+      await closeCompliancePeriod(period.id);
+      await load();
+      showToast('Período documental cerrado y snapshot generado.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cerrar el período.', 'error');
+    }
+  };
+
+  const reopenPeriod = async (period: CompliancePeriodRecord) => {
+    if (readOnlyProject) return;
+    const reason = window.prompt('Motivo de reapertura del período:')?.trim();
+    if (!reason) return;
+    try {
+      await reopenCompliancePeriod(period.id, reason);
+      await load();
+      showToast('Período reabierto. Los pagos liberados de este período volvieron a retenido.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible reabrir el período.', 'error');
     }
   };
 
@@ -255,13 +342,32 @@ export default function OperationsCenter({
         </select>
       </label>}
 
-      {mode !== 'ticket' && <><label className="text-sm">Inicio<input type="date" required value={start} onChange={event => setStart(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">Término<input type="date" required value={end} onChange={event => setEnd(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label></>}
+      {mode === 'evaluacion' && <><label className="text-sm">Inicio<input type="date" required value={start} onChange={event => setStart(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">Término<input type="date" required value={end} onChange={event => setEnd(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label></>}
+      {mode === 'pago' && <label className="text-sm sm:col-span-2">Período documental
+        <select required value={paymentPeriodId} onChange={event => setPaymentPeriodId(event.target.value)} className="form-input w-full mt-1 p-2 border rounded">
+          <option value="">Selecciona un período</option>
+          {paymentPeriods.map(period => <option key={period.id} value={period.id}>{period.period_start} — {period.period_end} · {period.status}</option>)}
+        </select>
+      </label>}
       {mode === 'evaluacion' && <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2">{Object.entries(scores).map(([key, value]) => <label className="text-sm" key={key}>{key === 'safety' ? 'Seguridad' : key === 'quality' ? 'Calidad' : key === 'labor' ? 'Laboral' : 'Cumplimiento'}<input type="number" min="0" max="100" value={value} onChange={event => setScores({ ...scores, [key]: Number(event.target.value) })} className="form-input w-full mt-1 p-2 border rounded" /></label>)}</div>}
-      {mode === 'pago' && <><label className="text-sm">Monto CLP<input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">N° factura / referencia<input value={invoiceNumber} onChange={event => setInvoiceNumber(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><p className="sm:col-span-2 text-xs text-gray-500">El pago nace observado. Solo una decisión registrada en “Aprobaciones” puede liberarlo; “Pagado” solo aparece después de quedar liberado.</p></>}
+      {mode === 'pago' && <><label className="text-sm">Monto CLP<input required type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><label className="text-sm">N° factura / referencia<input value={invoiceNumber} onChange={event => setInvoiceNumber(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label><p className="sm:col-span-2 text-xs text-gray-500">El pago nace observado y vinculado al período seleccionado. Solo puede liberarse con el período cerrado, cumplimiento habilitado y una aprobación registrada.</p></>}
       {mode === 'ticket' && <label className="sm:col-span-2 text-sm">Asunto<input required value={subject} onChange={event => setSubject(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label>}
       <label className="sm:col-span-2 text-sm">{mode === 'ticket' ? 'Descripción' : 'Observaciones'}<textarea required={mode === 'ticket'} value={description} onChange={event => setDescription(event.target.value)} className="form-input w-full mt-1 p-2 border rounded" /></label>
-      <button className="btn btn-primary sm:col-span-2" type="submit" disabled={saving || (mode !== 'ticket' && !editingEvaluationId && !contractor)}><Plus />{saving ? 'Guardando…' : mode === 'evaluacion' ? editingEvaluationId ? 'Guardar cambios del borrador' : 'Guardar borrador' : 'Guardar'}</button>
+      <button className="btn btn-primary sm:col-span-2" type="submit" disabled={saving || (mode !== 'ticket' && !editingEvaluationId && !contractor) || (mode === 'pago' && (!paymentPeriodId || !amount || Number(amount)<=0))}><Plus />{saving ? 'Guardando…' : mode === 'evaluacion' ? editingEvaluationId ? 'Guardar cambios del borrador' : 'Guardar borrador' : 'Guardar'}</button>
     </form>}
+
+    {mode === 'pago' && <section className="mt-5 rounded-xl border border-cream3 bg-white p-4">
+      <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-navy">Períodos documentales</h3><p className="text-sm text-gray-500">Cerrar un período congela el cumplimiento usado para decidir pagos. Reabrirlo vuelve a retener pagos liberados de ese período.</p></div></div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {selectablePeriods.slice(0,12).map(period => <div key={period.id} className="rounded-lg border p-3 text-sm">
+          <strong>{period.period_start} — {period.period_end}</strong>
+          <span className="block capitalize text-gray-500">{period.status}</span>
+          {period.reopen_reason && <small className="block text-orange-700">Reapertura: {period.reopen_reason}</small>}
+          {!readOnlyProject && period.status !== 'cerrado' && period.period_end <= today && <button type="button" className="mt-2" onClick={() => void closePeriod(period)}>Cerrar período</button>}
+          {!readOnlyProject && period.status === 'cerrado' && <button type="button" className="mt-2" onClick={() => void reopenPeriod(period)}>Reabrir período</button>}
+        </div>)}
+      </div>
+    </section>}
 
     {mode === 'integracion' ? <IntegrationsPanel projectKey={project.id} showToast={showToast} /> : <div className="mt-5 mandante-proyectos-table-wrap">
       <table><thead><tr><th>Tipo</th><th>Período / asunto</th><th>Resultado</th><th>Estado y acciones</th></tr></thead><tbody>
@@ -289,7 +395,26 @@ export default function OperationsCenter({
             </td>
           </tr>;
         })}
-        {mode === 'pago' && data.payments.map(item => <tr key={item.id}><td>Pago</td><td>{item.period_start} — {item.period_end}{item.invoice_number && <small className="block text-gray-500">Ref. {item.invoice_number}</small>}</td><td>{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.block_reason && <small className="block text-red-700">{item.block_reason}</small>}</td><td><strong className="block capitalize">{item.status}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`pay:${item.id}`)}>Aprobaciones</button>{!readOnlyProject && item.status === 'liberado' && <button type="button" onClick={() => void confirmPaid(item.id)}>Marcar pagado</button>}</div>{expanded === `pay:${item.id}` && <PaymentApprovals paymentId={item.id} showToast={showToast} onChanged={() => void load()} />}</td></tr>)}
+        {mode === 'pago' && data.payments.map(item => {
+          const paymentReadOnly = readOnlyProject || item.accreditation_active === false || ['pagado','anulado'].includes(item.status);
+          const contractorName = contractors.find(candidate => candidate.id === item.contratista_id)?.nombre || 'Contratista';
+          return <tr key={item.id}>
+            <td>Pago<small className="block text-gray-500">{contractorName}</small></td>
+            <td>{item.period_start} — {item.period_end}{item.invoice_number && <small className="block text-gray-500">Ref. {item.invoice_number}</small>}{item.submission_note && <small className="block text-gray-500">{item.submission_note}</small>}</td>
+            <td>{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.block_reason && <small className="block text-red-700">{item.block_reason}</small>}{item.payment_reference && <small className="block text-green-700">Pago: {item.payment_reference}</small>}</td>
+            <td>
+              <strong className="block capitalize">{item.status}</strong>
+              {item.accreditation_active === false && <small className="block text-gray-500">Relación histórica · solo consulta</small>}
+              <div className="flex flex-wrap gap-2 mt-1">
+                <button type="button" onClick={() => openDetail(`pay:${item.id}`)}>{expanded === `pay:${item.id}` ? 'Ocultar detalle' : 'Detalle e historial'}</button>
+                {!paymentReadOnly && ['observado','retenido'].includes(item.status) && <button type="button" disabled={paymentSavingId===item.id} onClick={() => void editPayment(item)}>Editar datos</button>}
+                {!readOnlyProject && item.accreditation_active !== false && item.status === 'liberado' && <button type="button" disabled={paymentSavingId===item.id} onClick={() => void confirmPaid(item)}>Registrar pago</button>}
+                {!readOnlyProject && item.accreditation_active !== false && item.status !== 'pagado' && item.status !== 'anulado' && <button type="button" disabled={paymentSavingId===item.id} onClick={() => void voidPayment(item)}>Anular</button>}
+              </div>
+              {expanded === `pay:${item.id}` && <PaymentApprovals payment={item} readOnly={paymentReadOnly} showToast={showToast} onChanged={() => void load()} />}
+            </td>
+          </tr>;
+        })}
         {mode === 'ticket' && data.tickets.map(item => <tr key={item.id}><td>{item.category}</td><td>{item.subject}<small className="block text-gray-500">{item.resolution || item.description}</small></td><td>{item.priority}</td><td><strong className="block capitalize">{item.status.replace('_', ' ')}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`ticket:${item.id}`)}>Conversación</button>{!readOnlyProject && <><button type="button" onClick={() => void changeTicket(item.id, 'en_progreso')}>Tomar</button><button type="button" onClick={() => void changeTicket(item.id, 'resuelto')}>Resolver</button><button type="button" onClick={() => void changeTicket(item.id, 'cerrado')}>Cerrar</button></>}</div>{expanded === `ticket:${item.id}` && <TicketConversation ticketId={item.id} showToast={showToast} />}</td></tr>)}
       </tbody></table>
       {loading && <p className="p-4 text-sm text-gray-500">Cargando operación…</p>}
