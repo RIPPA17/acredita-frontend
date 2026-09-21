@@ -199,7 +199,19 @@ function fixtures(role: Role, options: MockOptions) {
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
     ],
-    worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{ worker_assignment_id: ASSIGNMENT, worker_id: WORKER, accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 1, approved_required: 0, pending_required: 1, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false }],
+    worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{
+      worker_assignment_id: ASSIGNMENT,
+      worker_id: WORKER,
+      accreditation_id: ACCREDITATION,
+      status: workerScenario === 'rejected' ? 'vencido_bloqueado' : workerScenario === 'renewal_review' ? 'aprobado' : 'en_proceso',
+      total_required: 1,
+      approved_required: workerScenario === 'renewal_review' ? 1 : 0,
+      pending_required: workerScenario === 'pending' || workerScenario === 'review' || !workerScenario ? 1 : 0,
+      rejected_required: workerScenario === 'rejected' ? 1 : 0,
+      expired_required: 0,
+      near_expiry_required: workerScenario === 'renewal_review' ? 1 : 0,
+      access_allowed: workerScenario === 'renewal_review',
+    }],
     contractor_evaluations: options.evaluationWorkflow ? [
       {
         id: EVALUATION_DRAFT,
