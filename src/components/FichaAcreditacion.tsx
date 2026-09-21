@@ -11,7 +11,7 @@ import {
   esVencidoPorFecha,
   esPorVencerPorFecha,
   nombresDocumentoCoinciden
-} from '../data/localStorageDb';
+} from '../data/businessStore';
 import { Contratista, Trabajador, Requisito, Documento } from '../types';
 import { Mandante, Proyecto } from '../types';
 import ContratistaFichaAcreditacion from './ContratistaFichaAcreditacion';
