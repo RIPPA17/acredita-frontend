@@ -215,6 +215,7 @@ export function useContractorNotificationState({
     projectsKey,
     notifications,
     unreadCount,
+    readKeys,
     preferences,
     markRead,
     savePreferences,
