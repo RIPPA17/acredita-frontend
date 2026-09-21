@@ -244,24 +244,27 @@ export function getProblemasFichaTrabajador(w: Trabajador, proyectoId: string, c
 }
 
 export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente' {
-  if (contratoTrabajadorVencido(w)) return 'rechazado';
-  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
-
-  const configuredWorkerReqs = getRequisitos().filter(
-    r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
-  );
-  // Un proyecto sin matriz documental de trabajadores nunca acredita por omisión.
-  if (configuredWorkerReqs.length === 0) return 'pendiente';
-
   const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
   if (backendState) {
     if (backendState.status === 'vencido_bloqueado') return 'rechazado';
-    if (problemasFicha.length > 0) return 'pendiente';
-    // Defensa adicional: una vista derivada con 0 requisitos no puede habilitar al trabajador.
     if (backendState.requiredCount === 0) return 'pendiente';
     if (backendState.status === 'aprobado') return backendState.nearExpiryCount > 0 ? 'por_vencer' : 'aprobado';
     return 'pendiente';
   }
+
+  // En una sesión autenticada Supabase es la única fuente de verdad.
+  // Si la vista derivada no está disponible, fallamos en modo conservador y nunca
+  // reconstruimos un estado operacional alternativo en el navegador.
+  if (getStoredSupabaseSession()) return 'pendiente';
+
+  // Compatibilidad exclusiva para pruebas de dominio sin sesión autenticada.
+  if (contratoTrabajadorVencido(w)) return 'rechazado';
+  const problemasFicha = getProblemasFichaTrabajador(w, proyectoId);
+  const configuredWorkerReqs = getRequisitos().filter(
+    r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
+  );
+  if (configuredWorkerReqs.length === 0) return 'pendiente';
+
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false && requisitoAplicaATrabajador(r, w, proyectoId));
   const documentos = w.documentos || [];
 
@@ -272,26 +275,21 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   let hasPorVencer = false;
 
   reqs.forEach(req => {
-    const doc = documentos.find(d => 
+    const doc = documentos.find(d =>
       d.proyectoId === proyectoId &&
       nombresDocumentoCoinciden(d.nombre, req.nombre)
     );
 
     if (!doc) {
-      if (req.obligatorio) {
-        hasPendiente = true;
-      }
+      if (req.obligatorio) hasPendiente = true;
       return;
     }
 
     const cumplido = esDocumentoCumplido(doc, req);
     if (!cumplido && req.obligatorio) {
       const isVencido = esVencidoPorFecha(doc.vencimiento);
-      if (doc.estado === 'rechazado' || isVencido) {
-        hasRechazado = true;
-      } else {
-        hasPendiente = true;
-      }
+      if (doc.estado === 'rechazado' || isVencido) hasRechazado = true;
+      else hasPendiente = true;
     } else if (cumplido && req.obligatorio && (doc.estado === 'por_vencer' || esPorVencerPorFecha(doc.vencimiento, req.alertaDias))) {
       hasPorVencer = true;
     }
@@ -303,7 +301,6 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   if (hasPorVencer) return 'por_vencer';
   return 'aprobado';
 }
-
 export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyectos?: Proyecto[]): boolean {
   if (w.asignaciones !== undefined) return Boolean(getAsignacionProyecto(w, proyectoId));
   const hasDocs = w.documentos?.some(d => d.proyectoId === proyectoId);
@@ -330,15 +327,19 @@ export function esTrabajadorAcreditado(w: Trabajador, proyectoId: string): boole
 }
 
 export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 'No acreditado' | 'En proceso' | 'Aprobado' | 'Vencido/Bloqueado' {
+  const backendState = getBackendAccreditationState(c.id, proyectoId);
+  if (backendState) return backendAccreditationLabel(backendState);
+
+  // En producción no existe un segundo motor de acreditación en el navegador.
+  // Un estado backend ausente se trata como no resuelto y nunca como aprobado.
+  if (getStoredSupabaseSession()) return 'En proceso';
+
   const proyectos = getProyectos();
   const projectWorkers = (c.trabajadores || []).filter(w => esTrabajadorAsignado(w, proyectoId, proyectos));
   const workerReqsConfigured = getRequisitos().filter(
     r => r.proyectoId === proyectoId && r.destino === 'trabajador' && r.activo !== false
   );
   if (projectWorkers.length > 0 && workerReqsConfigured.length === 0) return 'En proceso';
-
-  const backendState = getBackendAccreditationState(c.id, proyectoId);
-  if (backendState) return backendAccreditationLabel(backendState);
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.destino === 'empresa' && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
@@ -411,6 +412,7 @@ export function calcularEstadoAcreditacion(c: Contratista, proyectoId: string): 
   return 'Aprobado';
 }
 
+}
 export function calcularPrioridadDocumento(d: Documento, r?: any): 'Alta' | 'Normal' | 'Baja' {
   let rule = r;
   if (!rule) {
@@ -513,6 +515,20 @@ export function calcularAccesoPago(c: Contratista, proyectoId: string): {
         : backendState.paymentAllowed ? undefined : pagoBloqueado ? `${backendState.paymentBlockedCount} obligación(es) de pago rechazada(s) o vencida(s)` : `${backendState.paymentPendingCount} obligación(es) de pago pendiente(s)`,
     };
   }
+  if (getStoredSupabaseSession()) {
+    return {
+      accesoEstado: 'pendiente',
+      accesoBloqueado: false,
+      accesoPendiente: true,
+      motivoAcceso: 'Estado operacional pendiente de sincronización con Supabase.',
+      pagoEstado: 'pendiente',
+      pagoBloqueado: false,
+      pagoPendiente: true,
+      motivoPago: 'Estado operacional pendiente de sincronización con Supabase.',
+    };
+  }
+
+  // Compatibilidad exclusiva para pruebas de dominio sin sesión autenticada.
   const reqs = getRequisitos().filter(r => r.proyectoId === proyectoId && r.activo !== false);
   const documentos = c.documentos || [];
   const trabajadores = c.trabajadores || [];
