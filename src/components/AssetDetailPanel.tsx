@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Check, ClipboardCheck, FileText, Plus, RefreshCw, Upload, UserRound, Wrench, X, XCircle } from 'lucide-react';
+import { Check, ClipboardCheck, FileClock, FileText, Plus, RefreshCw, Upload, UserRound, Wrench, X, XCircle } from 'lucide-react';
 import {
   assignAssetOperator,
   createAssetInspection,
   createAssetMaintenance,
   listAssetDocuments,
+  listAssetDocumentVersions,
   listAssetInspections,
   listAssetMaintenance,
   listAssetOperators,
   listAssetRequirementStatuses,
   listOperatorCandidates,
   openAssetDocument,
+  openAssetDocumentVersion,
   reviewAssetDocument,
   updateAssetOperatorStatus,
   uploadAssetDocument,
   type AssetDocument,
+  type AssetDocumentVersion,
   type AssetInspection,
   type AssetMaintenanceRecord,
   type AssetOperatorAssignment,
@@ -46,6 +49,9 @@ export default function AssetDetailPanel({
 }) {
   const [requirements, setRequirements] = useState<AssetRequirementStatus[]>([]);
   const [documents, setDocuments] = useState<AssetDocument[]>([]);
+  const [versionsByDocument, setVersionsByDocument] = useState<Record<string, AssetDocumentVersion[]>>({});
+  const [expandedVersions, setExpandedVersions] = useState<string>();
+  const [loadingVersions, setLoadingVersions] = useState<string>();
   const [inspections, setInspections] = useState<AssetInspection[]>([]);
   const [maintenance, setMaintenance] = useState<AssetMaintenanceRecord[]>([]);
   const [operators, setOperators] = useState<AssetOperatorAssignment[]>([]);
@@ -139,6 +145,29 @@ export default function AssetDetailPanel({
     catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible abrir el documento.', 'error'); }
   };
 
+  const toggleVersions = async (documentId: string) => {
+    if (expandedVersions === documentId) {
+      setExpandedVersions(undefined);
+      return;
+    }
+    setExpandedVersions(documentId);
+    if (versionsByDocument[documentId]) return;
+    setLoadingVersions(documentId);
+    try {
+      const versions = await listAssetDocumentVersions(documentId);
+      setVersionsByDocument(current => ({ ...current, [documentId]: versions }));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cargar el historial de versiones.', 'error');
+    } finally {
+      setLoadingVersions(undefined);
+    }
+  };
+
+  const viewVersion = async (version: AssetDocumentVersion) => {
+    try { await openAssetDocumentVersion(version); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible abrir esta versión.', 'error'); }
+  };
+
   const submitInspection = async (event: FormEvent) => {
     event.preventDefault(); if (saving || readOnly) return; setSaving(true);
     try {
@@ -187,11 +216,24 @@ export default function AssetDetailPanel({
           <section>
             <div className="flex items-center gap-2 mb-3"><FileText /><div><h4 className="font-semibold text-navy">Matriz documental</h4><p className="text-sm text-gray-500">Todos los obligatorios deben estar aprobados y vigentes para habilitar acceso.</p></div></div>
             {requirements.length === 0 ? <div className="rounded-lg border p-4 text-sm text-gray-600">El Mandante todavía no configuró requisitos para este tipo de activo. El acceso permanece pendiente.</div> : <>
-              <div className="space-y-2 mb-4">{requirements.map(item => <div key={item.id} className="border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><strong>{item.documentType}</strong><small className="block text-gray-500">{item.required ? 'Obligatorio' : 'Opcional'}{item.validityDays ? ` · Vigencia ${item.validityDays} días` : ''} · {statusLabel[item.status] || item.status}</small>{item.rejectionReason && <small className="block text-red-700">{item.rejectionReason}</small>}{item.checklist.length > 0 && <small className="block text-gray-500">Revisar: {item.checklist.join(' · ')}</small>}</div><div className="flex gap-2 items-center">{item.satisfied ? <span className="text-green-700"><Check /> Cumple</span> : <span className="text-red-700">No cumple</span>}{item.documentId && <><button type="button" onClick={() => void view(item.documentId)}><FileText /> Ver</button>{!contractorMode && <><button type="button" onClick={() => void review(item.documentId!, 'aprobado')} aria-label="Aprobar"><Check /></button><button type="button" onClick={() => void review(item.documentId!, 'rechazado')} aria-label="Rechazar"><XCircle /></button></>}</>}</div></div>)}</div>
+              <div className="space-y-2 mb-4">{requirements.map(item => {
+                const versions = item.documentId ? versionsByDocument[item.documentId] || [] : [];
+                const expanded = Boolean(item.documentId && expandedVersions === item.documentId);
+                return <div key={item.id} className="border rounded-lg p-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div><strong>{item.documentType}</strong><small className="block text-gray-500">{item.required ? 'Obligatorio' : 'Opcional'} · {item.blocksAccess ? 'bloquea acceso' : 'no bloquea acceso'}{item.validityDays ? ` · Vigencia ${item.validityDays} días` : ''} · {statusLabel[item.status] || item.status}</small>{item.rejectionReason && <small className="block text-red-700">{item.rejectionReason}</small>}{item.checklist.length > 0 && <small className="block text-gray-500">Revisar: {item.checklist.join(' · ')}</small>}</div>
+                    <div className="flex gap-2 items-center flex-wrap">{item.satisfied ? <span className="text-green-700"><Check /> Cumple</span> : <span className="text-red-700">No cumple</span>}{item.documentId && <><button type="button" onClick={() => void view(item.documentId)}><FileText /> Ver actual</button><button type="button" onClick={() => void toggleVersions(item.documentId!)}><FileClock /> {expanded ? 'Ocultar versiones' : 'Versiones'}</button>{!contractorMode && !readOnly && <><button type="button" onClick={() => void review(item.documentId!, 'aprobado')} aria-label="Aprobar"><Check /></button><button type="button" onClick={() => void review(item.documentId!, 'rechazado')} aria-label="Rechazar"><XCircle /></button></>}</>}</div>
+                  </div>
+                  {expanded && <div className="mt-3 rounded-lg bg-cream2/50 p-3">
+                    <strong className="text-sm text-navy">Historial de versiones</strong>
+                    {loadingVersions === item.documentId ? <p className="mt-2 text-sm text-gray-500">Cargando versiones…</p> : versions.length === 0 ? <p className="mt-2 text-sm text-gray-500">Sin versiones históricas registradas.</p> : <div className="mt-2 space-y-2">{versions.map(version => <div key={version.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border bg-white p-2 text-sm"><div><strong>v{version.versionNumber} · {version.fileName}</strong><small className="block text-gray-500">{new Date(version.uploadedAt).toLocaleString('es-CL')} · {(version.fileSize / 1024 / 1024).toFixed(2)} MB</small></div><button type="button" onClick={() => void viewVersion(version)}><FileText /> Abrir versión</button></div>)}</div>}
+                  </div>}
+                </div>;
+              })}</div>
               {!readOnly && <form onSubmit={submitDocument} className="grid grid-cols-1 sm:grid-cols-4 gap-3 border rounded-xl p-4">
                 <label className="text-sm sm:col-span-2">Requisito<select required value={requirementId} onChange={event => changeRequirement(event.target.value)} className="form-input w-full mt-1 p-2 border rounded-lg">{requirements.map(item => <option key={item.id} value={item.id}>{item.documentType} · {statusLabel[item.status] || item.status}</option>)}</select></label>
-                <label className="text-sm">Emisión<input type="date" value={issuedAt} onChange={event => changeIssuedAt(event.target.value)} className="form-input w-full mt-1 p-2 border rounded-lg" /></label>
-                <label className="text-sm">Vencimiento<input type="date" value={expiresAt} onChange={event => setExpiresAt(event.target.value)} className="form-input w-full mt-1 p-2 border rounded-lg" /></label>
+                <label className="text-sm">Emisión{selectedRequirement?.validityDays ? ' *' : ''}<input type="date" required={Boolean(selectedRequirement?.validityDays)} value={issuedAt} onChange={event => changeIssuedAt(event.target.value)} className="form-input w-full mt-1 p-2 border rounded-lg" /></label>
+                <label className="text-sm">{selectedRequirement?.validityDays ? 'Vencimiento calculado' : 'Vencimiento'}<input type="date" readOnly={Boolean(selectedRequirement?.validityDays)} value={expiresAt} onChange={event => setExpiresAt(event.target.value)} className="form-input w-full mt-1 p-2 border rounded-lg" /></label>
                 <label className="text-sm sm:col-span-3">Archivo<input required type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={event => setFile(event.target.files?.[0])} className="form-input w-full mt-1 p-2 border rounded-lg" /></label>
                 <button type="submit" disabled={saving || !file} className="btn btn-primary"><Upload /> Enviar a revisión</button>
               </form>}
@@ -213,7 +255,8 @@ export default function AssetDetailPanel({
           </section>
 
           <section className="border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3"><UserRound /><div><h4 className="font-semibold text-navy">Operadores asignados</h4><p className="text-sm text-gray-500">Solo trabajadores de la misma acreditación pueden vincularse al activo.</p></div></div>
+            <div className="flex items-center gap-2 mb-3"><UserRound /><div><h4 className="font-semibold text-navy">Operadores asignados</h4><p className="text-sm text-gray-500">Solo trabajadores activos, acreditados y con acceso habilitado pueden operar el activo. La vigencia no debe superar su contrato laboral.</p></div></div>
+            {!readOnly && candidates.length === 0 && <p className="mb-3 text-sm text-gray-500">No hay trabajadores habilitados disponibles para asignar como operador.</p>}
             {!readOnly && candidates.length > 0 && <form onSubmit={submitOperator} className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4"><select required value={operatorForm.workerAssignmentId} onChange={event => setOperatorForm({ ...operatorForm, workerAssignmentId: event.target.value })} className="form-input p-2 border rounded sm:col-span-2">{candidates.map(item => <option key={item.workerAssignmentId} value={item.workerAssignmentId}>{item.fullName} · {item.rut} · {item.accessStatus}</option>)}</select><input type="date" required value={operatorForm.validFrom} onChange={event => setOperatorForm({ ...operatorForm, validFrom: event.target.value })} className="form-input p-2 border rounded" /><input type="date" value={operatorForm.validUntil} onChange={event => setOperatorForm({ ...operatorForm, validUntil: event.target.value })} className="form-input p-2 border rounded" /><button className="btn btn-primary sm:col-span-4" disabled={saving}><Plus /> Asignar operador</button></form>}
             <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Trabajador</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead><tbody>{operators.map(item => <tr key={item.id}><td><strong>{item.fullName}</strong><small>{item.rut}{item.jobTitle ? ` · ${item.jobTitle}` : ''}</small></td><td>{item.validFrom} — {item.validUntil || 'Sin término'}</td><td>{item.status}</td><td>{!readOnly && item.status === 'activo' && <button type="button" onClick={() => void changeOperatorStatus(item.id, 'finalizado')}>Finalizar</button>}</td></tr>)}</tbody></table></div>
             {operators.length === 0 && <p className="text-sm text-gray-500 mt-2">Sin operadores asignados.</p>}
