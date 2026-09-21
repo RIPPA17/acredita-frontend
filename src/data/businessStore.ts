@@ -5,7 +5,25 @@ import { getRuntimeArray, setRuntimeArray } from './runtimeDataStore';
 import { requestBusinessPersistence } from './supabasePersistence';
 import { clearSupabaseSession, getStoredSupabaseSession, type SupabaseUserSession } from './supabaseAuth';
 import { getAsignacionProyecto, getServiciosProyecto } from './operationalCore';
-import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';
+import { getActiveProjectDecisionOverride } from './supabaseDecisionReviews';\nimport {
+  esDocumentoCumplido,
+  esPorVencerPorFecha,
+  esVencidoPorFecha,
+  getBusinessToday,
+  nombresDocumentoCoinciden,
+  obtenerDiasRestantes,
+  parseVencimientoDate,
+} from '../domain/documentRules';
+
+export {
+  esDocumentoCumplido,
+  esPorVencerPorFecha,
+  esVencidoPorFecha,
+  getBusinessToday,
+  nombresDocumentoCoinciden,
+  obtenerDiasRestantes,
+  parseVencimientoDate,
+} from '../domain/documentRules';
 
 export const REGLAS_DEFAULT = [
   { id: 1, documento: "Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)", diasVigencia: 30, alertaDias: 7, criticidad: "bloquea_pago" },
@@ -80,90 +98,6 @@ export function saveRequisitos(data: Requisito[]) {
 
 function getReglas(): any[] {
   return REGLAS_DEFAULT;
-}
-
-export function getBusinessToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function createCalendarDate(year: number, month: number, day: number): Date | null {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
-  const date = new Date(year, month, day);
-  return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
-}
-
-export function parseVencimientoDate(vencimientoStr: string): Date | null {
-  if (!vencimientoStr || vencimientoStr === '—') return null;
-  if (vencimientoStr.includes('-')) {
-    const parts = vencimientoStr.split('-');
-    if (parts.length === 3) {
-      // YYYY-MM-DD
-      if (parts[0].length === 4) {
-        const year = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const day = parseInt(parts[2]);
-        return createCalendarDate(year, month, day);
-      }
-      // DD-MM-YYYY
-      else {
-        const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const year = parseInt(parts[2]);
-        return createCalendarDate(year, month, day);
-      }
-    }
-  }
-  if (vencimientoStr.includes('/')) {
-    const parts = vencimientoStr.split('/');
-    if (parts.length === 3) {
-      // YYYY/MM/DD
-      if (parts[0].length === 4) {
-        const year = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const day = parseInt(parts[2]);
-        return createCalendarDate(year, month, day);
-      }
-      // DD/MM/YYYY
-      else {
-        const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const year = parseInt(parts[2]);
-        return createCalendarDate(year, month, day);
-      }
-    }
-  }
-  const parts = vencimientoStr.trim().split(/\s+/);
-  if (parts.length < 3) return null;
-  const day = parseInt(parts[0]);
-  const year = parseInt(parts[2]);
-  const months: Record<string, number> = {
-    'ene': 0, 'feb': 1, 'mar': 2, 'abr': 3, 'may': 4, 'jun': 5,
-    'jul': 6, 'ago': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dic': 11
-  };
-  const monthStr = parts[1].substring(0, 3).toLowerCase();
-  const month = months[monthStr];
-  if (month === undefined) return null;
-  return createCalendarDate(year, month, day);
-}
-
-export function esVencidoPorFecha(vencimientoStr: string): boolean {
-  const vDate = parseVencimientoDate(vencimientoStr);
-  if (!vDate) return false;
-  return vDate < getBusinessToday();
-}
-
-export function obtenerDiasRestantes(vencimientoStr: string): number {
-  const vDate = parseVencimientoDate(vencimientoStr);
-  if (!vDate) return 99999;
-  const diffTime = vDate.getTime() - getBusinessToday().getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
-
-export function esPorVencerPorFecha(vencimientoStr: string, alertaDias: number): boolean {
-  const diasRestantes = obtenerDiasRestantes(vencimientoStr);
-  return diasRestantes >= 0 && diasRestantes <= alertaDias;
 }
 
 export function esRequisitoObligatorio(docNombre: string, proyectoId?: string): boolean {
