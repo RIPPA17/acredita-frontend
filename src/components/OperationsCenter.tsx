@@ -16,6 +16,7 @@ import {
   type EvaluationRecord,
   type PaymentRecord,
   type TicketRecord,
+  type TicketStatus,
 } from '../data/supabaseOperations';
 import { closeCompliancePeriod, markPaymentPaid, reopenCompliancePeriod, voidPaymentCase } from '../data/supabasePaymentState';
 import { EvaluationActionPlans, PaymentApprovals, TicketConversation } from './OperationsWorkflowPanels';
@@ -286,12 +287,24 @@ export default function OperationsCenter({
     }
   };
 
-  const changeTicket = async (id: string, status: 'en_progreso' | 'resuelto' | 'cerrado') => {
-    if (readOnlyProject) return;
-    const resolution = status === 'resuelto' || status === 'cerrado' ? window.prompt('Resolución aplicada:') || '' : undefined;
+  const changeTicket = async (item: TicketRecord, status: TicketStatus) => {
+    if (readOnlyProject || item.status === 'cerrado') return;
+    const resolution = status === 'resuelto' || status === 'cerrado' ? window.prompt('Resolución aplicada:')?.trim() || '' : undefined;
     if ((status === 'resuelto' || status === 'cerrado') && !resolution) return;
-    try { await updateTicketStatus(id, status, resolution); await load(); showToast(`Ticket ${status.replace('_', ' ')}.`); }
-    catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible actualizar el ticket.', 'error'); }
+    try {
+      await updateTicketStatus(item.id, status, resolution);
+      await load();
+      const labels: Record<TicketStatus, string> = {
+        abierto: 'abierto',
+        en_progreso: 'en progreso',
+        esperando_usuario: 'esperando respuesta',
+        resuelto: 'resuelto',
+        cerrado: 'cerrado',
+      };
+      showToast(`Ticket ${labels[status]}.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible actualizar el ticket.', 'error');
+    }
   };
 
   const openDetail = (key: string) => setExpanded(current => current === key ? undefined : key);
@@ -415,7 +428,32 @@ export default function OperationsCenter({
             </td>
           </tr>;
         })}
-        {mode === 'ticket' && data.tickets.map(item => <tr key={item.id}><td>{item.category}</td><td>{item.subject}<small className="block text-gray-500">{item.resolution || item.description}</small></td><td>{item.priority}</td><td><strong className="block capitalize">{item.status.replace('_', ' ')}</strong><div className="flex flex-wrap gap-2 mt-1"><button type="button" onClick={() => openDetail(`ticket:${item.id}`)}>Conversación</button>{!readOnlyProject && <><button type="button" onClick={() => void changeTicket(item.id, 'en_progreso')}>Tomar</button><button type="button" onClick={() => void changeTicket(item.id, 'resuelto')}>Resolver</button><button type="button" onClick={() => void changeTicket(item.id, 'cerrado')}>Cerrar</button></>}</div>{expanded === `ticket:${item.id}` && <TicketConversation ticketId={item.id} showToast={showToast} />}</td></tr>)}
+        {mode === 'ticket' && data.tickets.map(item => <tr key={item.id}>
+          <td>{item.category}</td>
+          <td>{item.subject}<small className="block text-gray-500">{item.resolution || item.description}</small></td>
+          <td>{item.priority}</td>
+          <td>
+            <strong className="block capitalize">{item.status === 'esperando_usuario' ? 'Esperando respuesta' : item.status.replace('_', ' ')}</strong>
+            {item.assigned_to && <small className="block text-gray-500">Ticket asignado</small>}
+            <div className="flex flex-wrap gap-2 mt-1">
+              <button type="button" onClick={() => openDetail(`ticket:${item.id}`)}>Conversación</button>
+              {!readOnlyProject && item.status === 'abierto' && <button type="button" onClick={() => void changeTicket(item, 'en_progreso')}>Tomar</button>}
+              {!readOnlyProject && item.status === 'en_progreso' && <>
+                <button type="button" onClick={() => void changeTicket(item, 'esperando_usuario')}>Esperar respuesta</button>
+                <button type="button" onClick={() => void changeTicket(item, 'resuelto')}>Resolver</button>
+              </>}
+              {!readOnlyProject && item.status === 'esperando_usuario' && <>
+                <button type="button" onClick={() => void changeTicket(item, 'en_progreso')}>Retomar</button>
+                <button type="button" onClick={() => void changeTicket(item, 'resuelto')}>Resolver</button>
+              </>}
+              {!readOnlyProject && item.status === 'resuelto' && <>
+                <button type="button" onClick={() => void changeTicket(item, 'en_progreso')}>Reabrir</button>
+                <button type="button" onClick={() => void changeTicket(item, 'cerrado')}>Cerrar</button>
+              </>}
+            </div>
+            {expanded === `ticket:${item.id}` && <TicketConversation ticketId={item.id} status={item.status} readOnly={readOnlyProject} showToast={showToast} onChanged={load} />}
+          </td>
+        </tr>)}
       </tbody></table>
       {loading && <p className="p-4 text-sm text-gray-500">Cargando operación…</p>}
       {!loading && mode === 'evaluacion' && data.evaluations.length===0 && <p className="p-4 text-sm text-gray-500">Aún no hay evaluaciones para este proyecto.</p>}
