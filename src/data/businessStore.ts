@@ -121,27 +121,6 @@ export function esReglaBloqueante(docNombre: string, proyectoId?: string): boole
   return rule.criticidad === 'bloquea_acceso' || rule.criticidad === 'bloquea_pago' || rule.criticidad === 'bloquea_ambas';
 }
 
-export function nombresDocumentoCoinciden(a: string, b: string): boolean {
-  const normalizar = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
-  return normalizar(a) === normalizar(b);
-}
-
-export function esDocumentoCumplido(doc: Documento | undefined, req: Requisito): boolean {
-  if (!doc) return false;
-  
-  if (!nombresDocumentoCoinciden(doc.nombre, req.nombre)) return false;
-  
-  if (doc.proyectoId !== req.proyectoId) return false;
-
-  const isApproved = doc.estado === 'aprobado' || doc.estado === 'por_vencer';
-  if (!isApproved) return false;
-
-  const isVencido = esVencidoPorFecha(doc.vencimiento);
-  if (isVencido) return false;
-
-  return true;
-}
-
 export function requisitoAplicaATrabajador(req: Requisito, trabajador: Trabajador, proyectoId: string): boolean {
   const assignment = getAsignacionProyecto(trabajador, proyectoId);
   if (req.servicioId && req.servicioId !== assignment?.servicioId) return false;
