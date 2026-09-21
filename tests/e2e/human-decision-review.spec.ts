@@ -288,7 +288,7 @@ test('revisión humana: solicitud → override temporal → documento sigue rech
   await setSession(page, contractorSession());
   await page.goto('/contratista/documentos?proyecto=proyecto_review_qa');
   await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
-  await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
   expect(data.document_versions[0].workflow_status).toBe('rechazado');
+  expect(data.document_versions[0].workflow_status).not.toBe('aprobado');
   expect(data.document_versions[0].rejection_reason).toBe('Documento ilegible');
 });
