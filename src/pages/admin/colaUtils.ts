@@ -1,4 +1,4 @@
-import { calcularPrioridadDocumento, getRequisitos, vigenciaRequeridaLabel, estadoVencimiento, parseVencimientoDate } from "../../data/localStorageDb";
+import { calcularPrioridadDocumento, getRequisitos, vigenciaRequeridaLabel, estadoVencimiento, parseVencimientoDate } from "../../data/businessStore";
 import { Contratista, Proyecto, Documento, HistorialVersionDocumento } from "../../types";
 
 // Texto de "qué se está verificando" para cada documento — no siempre coincide
