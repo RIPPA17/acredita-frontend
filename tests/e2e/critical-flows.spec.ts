@@ -27,6 +27,7 @@ const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 const EVALUATION_DRAFT = 'b0000000-0000-4000-8000-000000000001';
 const EVALUATION_REVIEW = 'b0000000-0000-4000-8000-000000000002';
 const ACTION_PLAN_REVIEW = 'c0000000-0000-4000-8000-000000000001';
+const PAYMENT_PERIOD = 'd0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
 type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
@@ -42,6 +43,7 @@ type MockOptions = {
   assetLifecycle?: boolean;
   notificationScenario?: boolean;
   evaluationWorkflow?: boolean;
+  paymentWorkflow?: boolean;
 };
 
 function appSession(role: Role) {
@@ -181,7 +183,18 @@ function fixtures(role: Role, options: MockOptions) {
       effective_status: workerScenario === 'review' ? 'revision' : workerScenario === 'rejected' ? 'rechazado' : 'por_vencer',
       version_number: workerScenario === 'renewal_review' ? 1 : 1,
     }] : [],
-    compliance_periods: [],
+    compliance_periods: options.paymentWorkflow ? [{
+      id: PAYMENT_PERIOD,
+      project_id: PROJECT,
+      period_start: '2026-08-01',
+      period_end: '2026-08-31',
+      upload_deadline: '2026-09-06',
+      review_deadline: '2026-09-11',
+      status: 'cerrado',
+      closed_at: '2026-09-12T10:00:00Z',
+      reopened_at: null,
+      reopen_reason: null,
+    }] : [],
     accreditation_statuses: [
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
@@ -257,7 +270,42 @@ function fixtures(role: Role, options: MockOptions) {
       created_at: '2026-09-18T12:00:00Z',
     }] : [],
     operation_attachments: [],
-    payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
+    payment_cases: [{
+      id: PAYMENT,
+      accreditation_id: ACCREDITATION,
+      compliance_period_id: options.paymentWorkflow ? PAYMENT_PERIOD : null,
+      period_start: options.paymentWorkflow ? '2026-08-01' : '2026-09-01',
+      period_end: options.paymentWorkflow ? '2026-08-31' : '2026-09-30',
+      amount: 2500000,
+      currency: 'CLP',
+      status: paymentStatus,
+      block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null,
+      invoice_number: 'F-100',
+      submission_note: options.paymentWorkflow ? 'Pago mensual agosto.' : null,
+      submitted_at: '2026-09-15T00:00:00Z',
+      released_at: paymentStatus === 'liberado' || paymentStatus === 'pagado' ? '2026-09-15T00:30:00Z' : null,
+      paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null,
+      payment_reference: paymentStatus === 'pagado' ? 'TRX-100' : null,
+    }],
+    payment_approvals: options.paymentWorkflow ? [{
+      id: 'd1000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      decision: paymentStatus === 'retenido' ? 'observado' : 'aprobado',
+      comment: paymentStatus === 'retenido' ? 'Falta antecedente.' : 'Cumplimiento conforme.',
+      decided_by: PROFILE,
+      created_at: '2026-09-15T00:20:00Z',
+    }] : [],
+    payment_case_events: options.paymentWorkflow ? [{
+      id: 'd2000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      event_type: 'creado',
+      from_status: null,
+      to_status: 'observado',
+      reason: 'Pago mensual agosto.',
+      compliance_snapshot: {},
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-15T00:00:00Z',
+    }] : [],
     support_tickets: [],
     integration_configs: [],
     business_sync_control: [{ revision: 10 }],
@@ -464,7 +512,31 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
-      if (url.pathname === '/rest/v1/rpc/mark_payment_paid') {
+      if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(options.paymentWorkflow ? {
+            eligible: true,
+            periodStatus: 'cerrado',
+            compliancePercent: 100,
+            paymentBlockedCount: 0,
+            paymentPendingCount: 0,
+            eligibleReason: null,
+          } : {
+            eligible: false,
+            periodStatus: 'abierto',
+            compliancePercent: 0,
+            paymentBlockedCount: 0,
+            paymentPendingCount: 1,
+            reason: 'El período documental debe cerrarse antes de liberar el pago.',
+          }),
+        });
+      }
+      if (url.pathname === '/rest/v1/rpc/mark_payment_paid'
+          || url.pathname === '/rest/v1/rpc/void_payment_case'
+          || url.pathname === '/rest/v1/rpc/close_compliance_period'
+          || url.pathname === '/rest/v1/rpc/reopen_compliance_period') {
         return route.fulfill({ status: 204, body: '' });
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
