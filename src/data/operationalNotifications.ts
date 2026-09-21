@@ -1,5 +1,5 @@
 import type { Contratista, Proyecto } from '../types';
-import { calcularEstadoAcreditacion, getAlertasVigencia } from './localStorageDb';
+import { calcularEstadoAcreditacion, getAlertasVigencia } from './businessStore';
 
 export type OperationalNotificationType = 'accion' | 'preventiva' | 'revision' | 'positiva';
 export type OperationalNotificationDestination = 'cola' | 'acreditacion' | 'proyecto';
