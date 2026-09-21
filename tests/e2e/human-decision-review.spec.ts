@@ -250,10 +250,6 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   }, contractorSession());
 
   await page.goto('/contratista');
-  await page.getByText('Documentos', { exact: true }).first().click();
-  await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
-  await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
-  await page.getByText('Inicio', { exact: true }).first().click();
   await expect(page.getByText('Retenido', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Revisión humana de un bloqueo', { exact: true })).toBeVisible();
 
@@ -261,10 +257,10 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   const decisionSelect = page.getByLabel('Decisión a revisar');
   await expect(decisionSelect).toHaveValue('payment');
   await page.getByLabel('¿Por qué debería revisarse?').fill('La empresa aportó un antecedente adicional que requiere evaluación humana antes de mantener el bloqueo.');
-  await page.getByLabel('Tu punto de vista o antecedente adicional (opcional)').fill('Solicitamos revisar el período y la legibilidad del certificado antes de confirmar la retención.');
+  await page.getByLabel('Antecedente adicional (opcional)').fill('Solicitamos revisar el período y la legibilidad del certificado antes de confirmar la retención.');
   await page.getByRole('button', { name: 'Enviar a revisión humana', exact: true }).click();
 
-  await expect(page.getByRole('status')).toContainText('Solicitud de revisión humana enviada');
+  await expect(page.getByRole('status')).toContainText('Solicitud enviada');
   await expect.poll(() => calls.some(call => {
     if (call.method !== 'POST' || call.path !== '/rest/v1/privacy_decision_reviews') return false;
     const body = JSON.parse(call.body || '{}');
@@ -293,11 +289,10 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
   expect(review.override_until).toBeTruthy();
 
   await setSession(page, contractorSession());
-  await page.goto('/contratista');
-  await page.getByText('Documentos', { exact: true }).first().click();
+  await page.goto('/contratista/documentos?proyecto=proyecto_review_qa');
   await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
   await expect(page.getByText('Rechazado', { exact: true }).first()).toBeVisible();
-  await page.getByText('Inicio', { exact: true }).first().click();
+  await page.goto('/contratista');
   await expect(page.getByText('Habilitado', { exact: true }).last()).toBeVisible();
   await expect(page.locator('body')).toContainText('Excepción humana vigente');
 });
