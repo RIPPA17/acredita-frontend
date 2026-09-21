@@ -21,6 +21,7 @@ import {
   type PaymentCaseEventRecord,
   type PaymentRecord,
   type TicketMessageRecord,
+  type TicketStatus,
 } from '../data/supabaseOperations';
 
 const planLabel: Record<ActionPlanRecord['status'], string> = {
@@ -306,10 +307,65 @@ export function PaymentApprovals({
   </div>;
 }
 
-export function TicketConversation({ ticketId, showToast }: { ticketId: string; showToast: (message: string, type?: 'success'|'error'|'warning') => void }) {
-  const [items,setItems]=useState<TicketMessageRecord[]>([]); const [body,setBody]=useState(''); const [internal,setInternal]=useState(false); const [saving,setSaving]=useState(false);
-  const load=async()=>{try{setItems(await listTicketMessages(ticketId));}catch(error){showToast(error instanceof Error?error.message:'No fue posible cargar la conversación.','error');}};
-  useEffect(()=>{void load();},[ticketId]);
-  const submit=async(event:FormEvent)=>{event.preventDefault();if(!body.trim()||saving)return;setSaving(true);try{await sendTicketMessage(ticketId,body,internal);setBody('');setInternal(false);await load();}catch(error){showToast(error instanceof Error?error.message:'No fue posible enviar el mensaje.','error');}finally{setSaving(false);}};
-  return <div className="border rounded-xl p-4 mt-3"><div className="flex gap-2 items-center"><MessageSquare/><h4 className="font-semibold text-navy">Conversación del ticket</h4></div><div className="space-y-2 my-3 max-h-56 overflow-y-auto">{items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><span>{item.body}</span><small className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.is_internal?' · Nota interna':''}</small></div>)}{items.length===0&&<p className="text-sm text-gray-500">Sin mensajes todavía.</p>}</div><form onSubmit={submit} className="grid grid-cols-1 gap-2"><textarea required value={body} onChange={e=>setBody(e.target.value)} className="form-input p-2 border rounded" placeholder="Escribe una respuesta…"/><label className="text-sm inline-flex gap-2 items-center"><input type="checkbox" checked={internal} onChange={e=>setInternal(e.target.checked)}/> Nota interna para Mandante/Acredita</label><button className="btn btn-primary" disabled={saving}>Enviar mensaje</button></form></div>;
+export function TicketConversation({
+  ticketId,
+  status,
+  readOnly = false,
+  showToast,
+  onChanged,
+}: {
+  ticketId: string;
+  status: TicketStatus;
+  readOnly?: boolean;
+  showToast: (message: string, type?: 'success'|'error'|'warning') => void;
+  onChanged?: () => void | Promise<void>;
+}) {
+  const [items, setItems] = useState<TicketMessageRecord[]>([]);
+  const [body, setBody] = useState('');
+  const [internal, setInternal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const closed = status === 'cerrado';
+
+  const load = async () => {
+    try {
+      setItems(await listTicketMessages(ticketId));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cargar la conversación.', 'error');
+    }
+  };
+
+  useEffect(() => { void load(); }, [ticketId]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!body.trim() || saving || readOnly || closed) return;
+    setSaving(true);
+    try {
+      await sendTicketMessage(ticketId, body, internal);
+      setBody('');
+      setInternal(false);
+      await load();
+      await onChanged?.();
+      showToast('Mensaje enviado.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible enviar el mensaje.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="border rounded-xl p-4 mt-3">
+    <div className="flex gap-2 items-center"><MessageSquare/><h4 className="font-semibold text-navy">Conversación del ticket</h4></div>
+    <div className="space-y-2 my-3 max-h-56 overflow-y-auto">
+      {items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><span>{item.body}</span><small className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.is_internal?' · Nota interna':''}</small></div>)}
+      {items.length===0&&<p className="text-sm text-gray-500">Sin mensajes todavía.</p>}
+    </div>
+    {closed && <p className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">Ticket cerrado. La conversación queda disponible como historial y no admite nuevas respuestas.</p>}
+    {status === 'resuelto' && !readOnly && <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">El ticket está resuelto. Reábrelo antes de continuar la conversación.</p>}
+    {!readOnly && !closed && status !== 'resuelto' && <form onSubmit={submit} className="grid grid-cols-1 gap-2">
+      <textarea required maxLength={5000} value={body} onChange={e=>setBody(e.target.value)} className="form-input p-2 border rounded" placeholder="Escribe una respuesta…"/>
+      <label className="text-sm inline-flex gap-2 items-center"><input type="checkbox" checked={internal} onChange={e=>setInternal(e.target.checked)}/> Nota interna para Mandante/Acredita</label>
+      <button className="btn btn-primary" disabled={saving || !body.trim()}>Enviar mensaje</button>
+    </form>}
+  </div>;
 }
