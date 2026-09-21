@@ -24,7 +24,7 @@ import {
   getProblemasFichaTrabajador,
   getRequisitos,
   obtenerDiasRestantes,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
 import { requestProjectDecisionReview } from '../../data/supabaseDecisionReviews';
