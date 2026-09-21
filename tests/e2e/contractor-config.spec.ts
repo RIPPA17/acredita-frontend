@@ -113,10 +113,10 @@ test('Contratista consulta empresa y cuenta verificadas sin editar identidad est
 
   await page.getByText('Configuración', { exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Configuración' })).toBeVisible();
-  await expect(page.getByDisplayValue('Contratista Config QA SpA')).toBeVisible();
-  await expect(page.getByDisplayValue('77.555.555-6')).toBeVisible();
-  await expect(page.getByDisplayValue('Contratista Config QA SpA')).toHaveAttribute('readonly', '');
-  await expect(page.getByDisplayValue('77.555.555-6')).toHaveAttribute('readonly', '');
+  await expect(page.locator('input[value="Contratista Config QA SpA"]')).toBeVisible();
+  await expect(page.locator('input[value="77.555.555-6"]')).toBeVisible();
+  await expect(page.locator('input[value="Contratista Config QA SpA"]')).toHaveAttribute('readonly', '');
+  await expect(page.locator('input[value="77.555.555-6"]')).toHaveAttribute('readonly', '');
   await expect(page.getByText('Proyecto Config QA')).toBeVisible();
   await expect(page.getByText('Mandante Config QA')).toBeVisible();
   await expect(page.getByText('Activa', { exact: true })).toBeVisible();
@@ -157,7 +157,7 @@ test('Configuración de contratista es accesible en móvil desde la cuenta', asy
 
   await page.getByRole('button', { name: 'Abrir configuración de cuenta' }).click();
   await expect(page.getByRole('heading', { name: 'Configuración' })).toBeVisible();
-  await expect(page.getByDisplayValue('Contratista Config QA SpA')).toBeVisible();
+  await expect(page.locator('input[value="Contratista Config QA SpA"]')).toBeVisible();
 
   const sizes = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
