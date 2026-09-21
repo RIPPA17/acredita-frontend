@@ -4,18 +4,29 @@ import {fileURLToPath} from 'url';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local';
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'acredita-build-metadata',
+        transformIndexHtml(html: string) {
+          return html.replace(
+            '</head>',
+            `    <meta name="acredita-build" content="${buildCommit}">\n  </head>`,
+          );
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('.', import.meta.url)),
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

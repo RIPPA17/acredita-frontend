@@ -21,6 +21,16 @@ jobs:
             --output /tmp/body.html \
             https://acredita-frontend.vercel.app/
 
+      - name: Verify deployed commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          if ! grep -Fq "name=\"acredita-build\" content=\"${EXPECTED_SHA}\"" /tmp/body.html; then
+            echo "::error::Producción no corresponde al commit actual de main (${EXPECTED_SHA})."
+            grep -o 'name="acredita-build" content="[^"]*"' /tmp/body.html || true
+            exit 1
+          fi
+
       - name: Verify application shell
         run: |
           grep -qi '<title>Acredita | Gestión de acreditación documental</title>' /tmp/body.html
