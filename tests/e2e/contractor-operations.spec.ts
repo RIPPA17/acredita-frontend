@@ -9,6 +9,7 @@ const ACCREDITATION = '51000000-0000-4000-8000-000000000001';
 const EVALUATION = '61000000-0000-4000-8000-000000000001';
 const PLAN = '71000000-0000-4000-8000-000000000001';
 const PAYMENT = '81000000-0000-4000-8000-000000000001';
+const COMPLIANCE_PERIOD = '82000000-0000-4000-8000-000000000001';
 const TICKET = '91000000-0000-4000-8000-000000000001';
 
 function session() {
@@ -27,7 +28,11 @@ function session() {
   };
 }
 
-function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
+function fixtures(options: {
+  planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado';
+  reviewComment?: string;
+  paymentEligible?: boolean;
+} = {}) {
   return {
     profiles: [{ id: PROFILE, full_name: 'Contratista Operaciones QA' }],
     acredita_memberships: [],
@@ -44,7 +49,27 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
     documents: [],
     document_versions: [],
     obligation_statuses: [],
-    compliance_periods: [],
+    compliance_periods: [{
+      id: COMPLIANCE_PERIOD,
+      project_id: PROJECT,
+      period_start: '2026-08-01',
+      period_end: '2026-08-31',
+      status: 'cerrado',
+      snapshot: {
+        generated_at: '2026-09-10T11:00:00Z',
+        accreditations: [{
+          accreditation_id: ACCREDITATION,
+          status: options.paymentEligible ? 'aprobado' : 'en_proceso',
+          compliance_percent: options.paymentEligible ? 100 : 75,
+          payment_allowed: Boolean(options.paymentEligible),
+          payment_blocked_count: options.paymentEligible ? 0 : 1,
+          payment_pending_count: 0,
+          active_worker_count: 1,
+        }],
+        obligations: [],
+      },
+      closed_at: '2026-09-10T11:00:00Z',
+    }],
     accreditation_statuses: [{ accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }],
     worker_accreditation_statuses: [],
     contractor_evaluations: [{
@@ -101,14 +126,44 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
     payment_cases: [{
       id: PAYMENT,
       accreditation_id: ACCREDITATION,
+      compliance_period_id: COMPLIANCE_PERIOD,
       period_start: '2026-08-01',
       period_end: '2026-08-31',
       amount: 3500000,
       currency: 'CLP',
       status: 'observado',
-      block_reason: 'Falta cierre de observación.',
+      block_reason: options.paymentEligible ? 'Pendiente de decisión final.' : 'Existe documentación que bloquea pago.',
       invoice_number: 'F-OPS-01',
       submitted_at: '2026-09-10T12:00:00Z',
+      compliance_snapshot: {
+        eligible: Boolean(options.paymentEligible),
+        periodStatus: 'cerrado',
+        source: 'closed_period_snapshot',
+        compliancePercent: options.paymentEligible ? 100 : 75,
+        paymentBlockedCount: options.paymentEligible ? 0 : 1,
+        paymentPendingCount: 0,
+        eligibleReason: options.paymentEligible ? null : 'Existen requisitos obligatorios rechazados o vencidos que bloquean pago.',
+      },
+      compliance_checked_at: '2026-09-10T12:00:00Z',
+    }],
+    payment_approvals: [{
+      id: '83000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      decision: 'observado',
+      comment: 'Revisar respaldo documental.',
+      decided_by: PROFILE,
+      created_at: '2026-09-10T12:05:00Z',
+    }],
+    payment_case_events: [{
+      id: '84000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      event_type: 'creado',
+      from_status: null,
+      to_status: 'observado',
+      reason: 'Caso creado para revisión.',
+      compliance_snapshot: null,
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-10T12:00:00Z',
     }],
     support_tickets: [{
       id: TICKET,
@@ -132,7 +187,11 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
   } as Record<string, unknown[]>;
 }
 
-async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
+async function mockContractor(page: Page, options: {
+  planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado';
+  reviewComment?: string;
+  paymentEligible?: boolean;
+} = {}) {
   const data = fixtures(options);
   const calls: Array<{ method: string; path: string; body?: string | null }> = [];
 
@@ -150,6 +209,25 @@ async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 
     }
     if (url.pathname.startsWith('/auth/v1/token')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'e2e-access', refresh_token: 'e2e-refresh', expires_in: 3600, user: { id: PROFILE, email: 'contratista-ops@e2e.invalid' } }) });
+    }
+    if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          eligible: Boolean(options.paymentEligible),
+          periodStatus: 'cerrado',
+          source: 'closed_period_snapshot',
+          periodStart: '2026-08-01',
+          periodEnd: '2026-08-31',
+          generatedAt: '2026-09-10T11:00:00Z',
+          accreditationStatus: options.paymentEligible ? 'aprobado' : 'en_proceso',
+          compliancePercent: options.paymentEligible ? 100 : 75,
+          paymentBlockedCount: options.paymentEligible ? 0 : 1,
+          paymentPendingCount: 0,
+          eligibleReason: options.paymentEligible ? null : 'Existen requisitos obligatorios rechazados o vencidos que bloquean pago.',
+        }),
+      });
     }
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       return route.fulfill({ status: 204, body: '' });
@@ -237,15 +315,20 @@ test('Enlace profundo abre directamente el plan de acción indicado', async ({ p
   await expect(page.getByText('Cerrar hallazgo de seguridad')).toBeVisible();
 });
 
-test('Contratista ve estado de pago y conversa con soporte sin controles administrativos', async ({ page }) => {
-  const calls = await mockContractor(page);
+test('Contratista ve fundamento, decisiones e historial del pago sin controles administrativos', async ({ page }) => {
+  const calls = await mockContractor(page, { paymentEligible: false });
   await openOperations(page);
 
   await page.getByRole('button', { name: /Estados de pago/ }).click();
   await expect(page.getByText('F-OPS-01')).toBeVisible();
-  await expect(page.getByText('Falta cierre de observación.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Marcar pagado' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Liberar' })).toHaveCount(0);
+  await expect(page.getByText('Existe documentación que bloquea pago.')).toBeVisible();
+  await page.getByRole('button', { name: 'Ver detalle' }).click();
+  await expect(page.getByText('Cumplimiento no habilita pago')).toBeVisible();
+  await expect(page.getByText(/Revisar respaldo documental/)).toBeVisible();
+  await expect(page.getByText(/Caso creado para revisión/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Aprobar y liberar/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Anular caso/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Cerrar período documental/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: /Soporte/ }).click();
   await expect(page.getByText('Consulta de acreditación')).toBeVisible();
@@ -260,4 +343,14 @@ test('Contratista ve estado de pago y conversa con soporte sin controles adminis
   await page.getByLabel('Descripción').fill('Necesitamos confirmar el plazo de revisión.');
   await page.getByRole('button', { name: 'Crear ticket' }).click();
   await expect.poll(() => calls.some(call => call.method === 'POST' && call.path === '/rest/v1/support_tickets')).toBeTruthy();
+});test('Enlace profundo abre el pago exacto y su trazabilidad', async ({ page }) => {
+  await mockContractor(page, { paymentEligible: true });
+  await page.goto(`/contratista/operacion?proyecto=proyecto_ops_qa&pago=${PAYMENT}`);
+
+  await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
+  await expect(page.locator(`#payment-${PAYMENT}`)).toBeVisible();
+  await expect(page.getByText('Cumplimiento habilita pago')).toBeVisible();
+  await expect(page.getByText(/Revisar respaldo documental/)).toBeVisible();
 });
+
+
