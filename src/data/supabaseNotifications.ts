@@ -35,6 +35,7 @@ export interface StoredNotification {
   projectKey?: string;
   workerRut?: string;
   requirementKey?: string;
+  paymentCaseId?: string;
   occurredAt: string;
   resolvedAt?: string;
   occurrenceCount: number;
@@ -65,6 +66,7 @@ type NotificationRow = {
   project_key: string | null;
   worker_rut: string | null;
   requirement_key: string | null;
+  payment_case_id: string | null;
   occurred_at: string;
   resolved_at: string | null;
   occurrence_count: number;
@@ -164,7 +166,7 @@ export async function loadStoredNotifications(
   const session = await requireSession(sessionHint);
   assertOwnProfile(session, profileId);
   const url = new URL(`${SUPABASE_URL}/rest/v1/notifications`);
-  url.searchParams.set('select', 'notification_key,event_type,category,severity,status,title,body,action_label,action_kind,project_key,worker_rut,requirement_key,occurred_at,resolved_at,occurrence_count');
+  url.searchParams.set('select', 'notification_key,event_type,category,severity,status,title,body,action_label,action_kind,project_key,worker_rut,requirement_key,payment_case_id,occurred_at,resolved_at,occurrence_count');
   url.searchParams.set('recipient_profile_id', `eq.${profileId}`);
   url.searchParams.set('order', 'occurred_at.desc');
   url.searchParams.set('limit', '150');
@@ -184,6 +186,7 @@ export async function loadStoredNotifications(
     projectKey: row.project_key || undefined,
     workerRut: row.worker_rut || undefined,
     requirementKey: row.requirement_key || undefined,
+    paymentCaseId: row.payment_case_id || undefined,
     occurredAt: row.occurred_at,
     resolvedAt: row.resolved_at || undefined,
     occurrenceCount: row.occurrence_count,

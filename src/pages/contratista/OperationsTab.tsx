@@ -309,6 +309,7 @@ function ContractorPaymentDetail({
   const percent=Number(compliance?.compliancePercent || 0);
   const blockers=Number(compliance?.paymentBlockedCount || 0);
   const pending=Number(compliance?.paymentPendingCount || 0);
+  const historicalSnapshot=compliance?.historical===true || compliance?.source==='payment_case_snapshot';
 
   return <div className="mt-3 rounded-xl border bg-cream2/30 p-4">
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
@@ -318,7 +319,10 @@ function ContractorPaymentDetail({
       <div className="rounded bg-white p-2"><span className="block text-gray-500">Período</span><strong className="capitalize">{String(compliance?.periodStatus || '—')}</strong></div>
     </div>
     <div className={`mt-2 rounded-lg border p-3 text-sm ${eligible?'border-green-200 bg-green-50 text-green-800':'border-orange-200 bg-orange-50 text-orange-800'}`}>
-      <strong>{eligible?'Snapshot habilitado para pago.':'Pago no habilitado por cumplimiento.'}</strong>{reason && <span> {reason}</span>}
+      <strong>{historicalSnapshot
+        ? eligible ? 'Snapshot histórico que justificó la decisión de pago.' : 'Snapshot histórico del estado de pago.'
+        : eligible ? 'Snapshot habilitado para pago.' : 'Pago no habilitado por cumplimiento.'}</strong>{reason && <span> {reason}</span>}
+      {historicalSnapshot && <span className="mt-1 block text-xs opacity-80">Este registro no se recalcula con cambios documentales posteriores.</span>}
     </div>
 
     {payment.submission_note && <p className="mt-3 text-sm text-gray-600"><strong>Nota del estado de pago:</strong> {payment.submission_note}</p>}

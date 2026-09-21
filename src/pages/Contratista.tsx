@@ -209,7 +209,7 @@ export default function ContratistaPortal() {
                 : 5;
       const actionPlanId = item.eventType.match(/^action_plan_[^:]+:(.+)$/)?.[1];
       const evaluationId = item.eventType.match(/^evaluation_[^:]+:(.+)$/)?.[1];
-      const paymentCaseId = item.key.match(/^payment_(?:blocked|released|paid):(.+)$/)?.[1];
+      const paymentCaseId = item.paymentCaseId || item.key.match(/^payment_(?:blocked|released|paid|voided):(.+)$/)?.[1];
       const destino = item.actionKind === 'trabajador' && worker
         ? { tipo: 'trabajador' as const, trabajador: worker }
         : item.actionKind === 'operacion' || item.actionKind === 'soporte'
