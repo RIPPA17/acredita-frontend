@@ -15,7 +15,7 @@ import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
-import { usePortalTab } from '../hooks/usePortalTab';
+import { usePortalTab } from '../hooks/usePortalTab';\nimport { useSidebarPreference } from '../hooks/useSidebarPreference';
 import DashboardTab from './contratista/DashboardTab';
 import SubirTab from './contratista/SubirTab';
 import MisProyectosTab from './contratista/MisProyectosTab';
@@ -32,15 +32,7 @@ export default function ContratistaPortal() {
   const navigate = useNavigate();
   const location = useLocation();
   const { revision: dataSyncRevision } = useDataSync();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebar_collapsed') === 'true';
-  });
-
-  const toggleSidebar = () => {
-    const nextState = !sidebarCollapsed;
-    setSidebarCollapsed(nextState);
-    localStorage.setItem('sidebar_collapsed', String(nextState));
-  };
+  const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(false);
   const [activeTab, setActiveTab] = usePortalTab('contratista');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
