@@ -21,7 +21,7 @@ import {
   esTrabajadorAsignado,
   getRequisitos,
   obtenerDiasRestantes,
-} from '../data/localStorageDb';
+} from '../data/businessStore';
 import {
   getObligacionesDocumentales,
   getServiciosProyecto,
