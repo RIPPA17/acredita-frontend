@@ -5,6 +5,11 @@ import type { SupabaseUserSession as UserSession } from '../../data/supabaseAuth
 import { Contratista, Mandante, PreferenciasNotificacionesContratista, Proyecto } from '../../types';
 import BulkWorkersConfig from './BulkWorkersConfig';
 import { proyectoOperativoParaContratista } from '../../data/operationalCore';
+import {
+  contractorMembershipLabel,
+  loadContractorConfiguration,
+  type ContractorConfigurationSnapshot,
+} from '../../data/supabaseContractorSettings';
 
 type ConfigSubTab = 'empresa' | 'notificaciones' | 'carga' | 'cuenta';
 
@@ -36,6 +41,9 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
   const [preferencias, setPreferencias] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardadas, setGuardadas] = useState<PreferenciasNotificacionesContratista>(preferenciasNotificaciones);
   const [guardando, setGuardando] = useState(false);
+  const [configuracion, setConfiguracion] = useState<ContractorConfigurationSnapshot | null>(null);
+  const [configLoading, setConfigLoading] = useState(Boolean(session?.profileId));
+  const [configError, setConfigError] = useState('');
   const hayCambios = PREFERENCIAS.some(([key]) => preferencias[key] !== guardadas[key])
     || preferencias.correoHabilitado !== guardadas.correoHabilitado
     || preferencias.correoSoloCriticas !== guardadas.correoSoloCriticas;
@@ -47,6 +55,41 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
     setPreferencias(preferenciasNotificaciones);
     setGuardadas(preferenciasNotificaciones);
   }, [preferenciasNotificaciones]);
+
+  useEffect(() => {
+    if (!session?.profileId) {
+      setConfiguracion(null);
+      setConfigLoading(false);
+      setConfigError('');
+      return;
+    }
+    let cancelled = false;
+    setConfigLoading(true);
+    setConfigError('');
+    loadContractorConfiguration(session)
+      .then(snapshot => {
+        if (!cancelled) setConfiguracion(snapshot);
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setConfiguracion(null);
+          setConfigError(error instanceof Error ? error.message : 'No fue posible verificar los datos de configuración.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setConfigLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [session?.profileId, session?.contratistaBackendId]);
+
+  const companyName = configuracion?.company.legalName || configuracion?.company.name || contratistaLogueado.nombre;
+  const companyDisplayName = configuracion?.company.name || contratistaLogueado.nombre;
+  const companyRut = configuracion?.company.rut || contratistaLogueado.rut;
+  const accountActive = Boolean(
+    (configuracion?.company.isActive ?? true)
+    && (configuracion?.account.profileActive ?? true)
+    && (configuracion?.account.membershipActive ?? true),
+  );
 
   const guardarPreferencias = async () => {
     setGuardando(true);
@@ -71,10 +114,10 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
 
       <section className="cfg-floating">
         <div className="cfg-account-strip">
-          <div className="cfg-company"><div className="cfg-company-icon">{iniciales(contratistaLogueado.nombre)}</div><div><strong>{contratistaLogueado.nombre}</strong><small>RUT {contratistaLogueado.rut}</small></div></div>
+          <div className="cfg-company"><div className="cfg-company-icon">{iniciales(companyDisplayName)}</div><div><strong>{companyDisplayName}</strong><small>RUT {companyRut || '—'}</small></div></div>
           <div className="cfg-stat"><span>Portal</span><b>Contratista</b></div>
           <div className="cfg-stat"><span>Proyectos activos</span><b>{proyectosActivos.length}</b></div>
-          <div className="cfg-stat"><span>Estado de cuenta</span><div><span className="cfg-status">Activa</span></div></div>
+          <div className="cfg-stat"><span>Estado de cuenta</span><div><span className={`cfg-status ${accountActive ? '' : 'warning'}`}>{configLoading ? 'Verificando…' : accountActive ? 'Activa' : 'Restringida'}</span></div></div>
         </div>
 
         <div className="cfg-workspace">
@@ -88,10 +131,17 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
             {activeTab === 'empresa' && <>
               <section className="cfg-card">
                 <header><h2>Datos de la empresa</h2><p>Información utilizada para identificar al contratista dentro de los proyectos y acreditaciones.</p></header>
-                <div className="cfg-card-body"><div className="cfg-fields"><label><span>Razón social</span><input value={contratistaLogueado.nombre} readOnly /></label><label><span>RUT empresa</span><input value={contratistaLogueado.rut} readOnly /></label></div><div className="cfg-note">Estos datos forman parte de la identidad de la empresa en Acredita. Para evitar inconsistencias entre proyectos y acreditaciones, su modificación se gestiona mediante administración.</div></div>
+                <div className="cfg-card-body">
+                  <div className="cfg-fields">
+                    <label><span>Razón social</span><input value={companyName} readOnly /></label>
+                    <label><span>RUT empresa</span><input value={companyRut || '—'} readOnly /></label>
+                  </div>
+                  {configError && <div className="cfg-note">No fue posible verificar estos datos en línea: {configError} Se muestran los datos sincronizados disponibles.</div>}
+                  {!configError && <div className="cfg-note">Estos datos se verifican contra la empresa asociada a tu cuenta y permanecen en solo lectura. Para evitar inconsistencias entre proyectos y acreditaciones, su modificación se gestiona mediante administración.</div>}
+                </div>
               </section>
               <section className="cfg-card">
-                <header><h2>Proyectos asociados</h2><p>Proyectos en los que actualmente tu empresa participa como contratista.</p></header>
+                <header><h2>Proyectos asociados</h2><p>Contextos en los que tu empresa participa o participó como contratista. Los proyectos históricos permanecen disponibles para consulta.</p></header>
                 <div className="cfg-card-body"><div className="cfg-project-list">
                   {misProyectos.length === 0 ? <div className="cfg-empty">Todavía no existen proyectos asociados.</div> : misProyectos.map(proyecto => {
                     const mandante = allMandantes.find(item => item.id === proyecto.mandanteId);
@@ -125,7 +175,15 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
             {activeTab === 'cuenta' && <section className="cfg-card">
               <header><h2>Cuenta y sesión</h2><p>Gestiona el acceso a tu cuenta y la sesión actual.</p></header>
               <div className="cfg-card-body">
-                <div className="cfg-session-row"><div className="cfg-session-box"><span>Tipo de acceso</span><b>Portal Contratista</b></div><div className="cfg-session-box"><span>Empresa activa</span><b>{contratistaLogueado.nombre}</b></div>{session?.email && <div className="cfg-session-box"><span>Cuenta</span><b>{session.email}</b></div>}</div>
+                <div className="cfg-session-row">
+                  <div className="cfg-session-box"><span>Tipo de acceso</span><b>Portal Contratista</b></div>
+                  <div className="cfg-session-box"><span>Empresa</span><b>{companyDisplayName}</b></div>
+                  {session?.email && <div className="cfg-session-box"><span>Correo de acceso</span><b>{session.email}</b></div>}
+                  {configuracion?.account.fullName && <div className="cfg-session-box"><span>Usuario</span><b>{configuracion.account.fullName}</b></div>}
+                  {configuracion?.account.membershipRole && <div className="cfg-session-box"><span>Perfil</span><b>{contractorMembershipLabel(configuracion.account.membershipRole)}</b></div>}
+                  {configuracion?.account.phone && <div className="cfg-session-box"><span>Teléfono</span><b>{configuracion.account.phone}</b></div>}
+                </div>
+                {!configLoading && !accountActive && <div className="cfg-note">El acceso figura restringido en alguno de sus niveles (empresa, usuario o membresía). Contacta a administración si necesitas regularizarlo.</div>}
                 {session?.email && <div className="cfg-logout"><div><strong>Contraseña</strong><p>Solicita un enlace seguro por correo para definir una nueva contraseña.</p></div><Link to={`/recuperar?email=${encodeURIComponent(session.email)}`}><KeyRound size={14} />Cambiar contraseña</Link></div>}
                 <div className="cfg-logout"><div><strong>Cerrar sesión</strong><p>Finaliza la sesión actual y vuelve a la pantalla de acceso.</p></div><button onClick={onLogout}><LogOut size={14} />Cerrar sesión</button></div>
               </div>
