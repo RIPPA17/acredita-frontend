@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -25,6 +26,7 @@ import {
   obtenerDiasRestantes,
 } from '../../data/localStorageDb';
 import { Contratista, Documento, Mandante, Proyecto, Trabajador } from '../../types';
+import { requestProjectDecisionReview } from '../../data/supabaseDecisionReviews';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
 import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 import {
@@ -115,6 +117,12 @@ export default function DashboardTab({
   setShowAddWorkerModal: (value: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewType, setReviewType] = useState<'access' | 'payment'>('access');
+  const [reviewReason, setReviewReason] = useState('');
+  const [reviewViewpoint, setReviewViewpoint] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
   if (misProyectos.length === 0) {
     return (
@@ -295,6 +303,38 @@ export default function DashboardTab({
 
   const abrirFicha = () => setShowFichaAcreditacion(true);
 
+  const solicitarRevisionHumana = async () => {
+    setReviewBusy(true);
+    setReviewMessage(null);
+    try {
+      const automatedState = reviewType === 'access' ? acceso.estado : accesoPago.pagoEstado;
+      const result = await requestProjectDecisionReview({
+        projectKey: proyectoActual.id,
+        decisionType: reviewType,
+        automatedState,
+        requestReason: reviewReason,
+        viewpoint: reviewViewpoint,
+        explanation: {
+          project: proyectoActual.nombre,
+          accreditationState: estado,
+          accessState: acceso.estado,
+          accessDetail: acceso.detalle || accesoPago.motivoAcceso || null,
+          paymentState: accesoPago.pagoEstado,
+          paymentDetail: accesoPago.motivoPago || null,
+        },
+      });
+      setReviewMessage(result.alreadyOpen
+        ? 'Ya existe una revisión humana abierta para esta decisión.'
+        : 'Solicitud enviada. Una persona revisará la evidencia y dejará una decisión trazable.');
+      setReviewReason('');
+      setReviewViewpoint('');
+    } catch (err) {
+      setReviewMessage(err instanceof Error ? err.message : 'No fue posible solicitar la revisión humana.');
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   const descripcionEstado = modoConsulta
     ? 'Este proyecto o la participación del contratista ya no está operativa. La información permanece disponible como historial y no genera nuevas acciones, cargas ni bloqueos actuales.'
     : estado === 'Acreditado'
@@ -348,6 +388,44 @@ export default function DashboardTab({
             <div className="inicio2-metric"><div><span>Acceso a faena</span><strong>{accesoCorto}</strong><small>{modoConsulta ? 'Sin acceso operativo actual' : `${trabajadoresOk} trabajadores habilitados`}</small></div><i className={modoConsulta ? 'inicio2-blue' : acceso.estado === 'bloqueado' ? 'inicio2-red' : acceso.estado === 'habilitado' ? 'inicio2-green' : 'inicio2-yellow'}><LockKeyhole /></i></div>
             <div className="inicio2-metric"><div><span>Pago</span><strong>{pagoCorto}</strong><small>{modoConsulta ? 'Sin estado de pago operativo actual' : accesoPago.motivoPago || 'Sin restricciones de pago'}</small></div><i className={modoConsulta ? 'inicio2-blue' : accesoPago.pagoEstado === 'bloqueado' ? 'inicio2-red' : accesoPago.pagoEstado === 'pendiente' ? 'inicio2-yellow' : 'inicio2-green'}><WalletCards /></i></div>
           </div>
+
+          {!modoConsulta && (acceso.estado === 'bloqueado' || accesoPago.pagoEstado === 'bloqueado') && (
+            <section className="inicio2-card" style={{ marginBottom: 16 }}>
+              <header>
+                <div><h3>Revisión humana de un bloqueo</h3><p>Si el estado automático no refleja la evidencia o el contexto real, puedes pedir intervención humana.</p></div>
+                <button type="button" onClick={() => {
+                  if (reviewOpen) setReviewOpen(false);
+                  else {
+                    setReviewType(acceso.estado === 'bloqueado' ? 'access' : 'payment');
+                    setReviewOpen(true);
+                  }
+                  setReviewMessage(null);
+                }}>{reviewOpen ? 'Cerrar' : 'Solicitar revisión'}</button>
+              </header>
+              {reviewOpen && <div className="inicio2-card-body">
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700 }}>Decisión a revisar
+                    <select className="form-input" value={reviewType} onChange={event => setReviewType(event.target.value as 'access' | 'payment')} style={{ display: 'block', width: '100%', marginTop: 5 }}>
+                      <option value="access" disabled={acceso.estado !== 'bloqueado'}>Acceso a faena{acceso.estado !== 'bloqueado' ? ' (no bloqueado)' : ''}</option>
+                      <option value="payment" disabled={accesoPago.pagoEstado !== 'bloqueado'}>Pago{accesoPago.pagoEstado !== 'bloqueado' ? ' (no bloqueado)' : ''}</option>
+                    </select>
+                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 700 }}>¿Por qué debería revisarse?
+                    <textarea className="form-input" rows={3} maxLength={2000} value={reviewReason} onChange={event => setReviewReason(event.target.value)} placeholder="Describe la evidencia o el contexto que debería revisar una persona." style={{ display: 'block', width: '100%', marginTop: 5 }} />
+                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 700 }}>Punto de vista o antecedente adicional <span style={{ fontWeight: 400 }}>(opcional)</span>
+                    <textarea className="form-input" rows={2} maxLength={2000} value={reviewViewpoint} onChange={event => setReviewViewpoint(event.target.value)} placeholder="Agrega contexto relevante para la revisión." style={{ display: 'block', width: '100%', marginTop: 5 }} />
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <button className="btn btn-primary" type="button" disabled={reviewBusy || reviewReason.trim().length < 8} onClick={() => void solicitarRevisionHumana()}>{reviewBusy ? 'Enviando…' : 'Enviar a revisión humana'}</button>
+                    <small style={{ color: '#6f6f63' }}>La solicitud no elimina el bloqueo: debe existir una decisión humana fundada.</small>
+                  </div>
+                  {reviewMessage && <div role="status" style={{ fontSize: 12, padding: 10, borderRadius: 8, background: '#f6f2ea', color: '#3d3a35' }}>{reviewMessage}</div>}
+                  {reviewType === 'access' && <small style={{ color: '#7a7a6a' }}>Una excepción de acceso de empresa no habilita automáticamente a trabajadores bloqueados individualmente.</small>}
+                </div>
+              </div>}
+            </section>
+          )}
 
           {bloqueosVisibles.length > 0 && <section className="inicio2-block-map" aria-label="Impactos bloqueados"><header><strong>Qué está bloqueado</strong><span>Impacto operativo actual del proyecto</span></header><div>{bloqueosVisibles.map(item => <article key={item.label}><b>{item.label}</b><small>{item.detail}</small></article>)}</div></section>}
 
