@@ -22,7 +22,14 @@ export default function AssetMatrixPanel({
   const [items, setItems] = useState<AssetRequirementTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ type: 'vehiculo' as AssetType, documentType: '', validityDays: '', checklist: '' });
+  const [form, setForm] = useState({
+    type: 'vehiculo' as AssetType,
+    documentType: '',
+    validityDays: '',
+    checklist: '',
+    required: true,
+    blocksAccess: true,
+  });
 
   const load = async () => {
     setLoading(true);
@@ -42,8 +49,8 @@ export default function AssetMatrixPanel({
         type: form.type,
         documentType: form.documentType.trim(),
         validityDays: form.validityDays ? Number(form.validityDays) : undefined,
-        blocksAccess: true,
-        required: true,
+        blocksAccess: form.required && form.blocksAccess,
+        required: form.required,
         checklist: form.checklist.split('\n').map(value => value.trim()).filter(Boolean),
       });
       setForm(value => ({ ...value, documentType: '', validityDays: '', checklist: '' }));
@@ -73,7 +80,7 @@ export default function AssetMatrixPanel({
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-semibold text-navy">Matriz documental de activos</h3>
-          <p className="text-sm text-gray-500">Define los documentos obligatorios por tipo. Un activo solo queda habilitado cuando todos están aprobados y vigentes.</p>
+          <p className="text-sm text-gray-500">Define documentos por tipo, su vigencia y si bloquean acceso. Los requisitos retirados se conservan como historial.</p>
         </div>
         <button type="button" onClick={() => void load()} aria-label="Actualizar matriz"><RefreshCw /></button>
       </div>
@@ -90,6 +97,16 @@ export default function AssetMatrixPanel({
         <label className="text-sm">Vigencia (días)
           <input type="number" min="1" value={form.validityDays} onChange={event => setForm({ ...form, validityDays: event.target.value })} className="form-input w-full mt-1 p-2 border rounded-lg" placeholder="Opcional" />
         </label>
+        <div className="sm:col-span-4 flex flex-wrap gap-4 rounded-lg border p-3">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.required} onChange={event => setForm({ ...form, required: event.target.checked, blocksAccess: event.target.checked ? form.blocksAccess : false })} />
+            Requisito obligatorio
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.blocksAccess} disabled={!form.required} onChange={event => setForm({ ...form, blocksAccess: event.target.checked })} />
+            Bloquea acceso si no cumple
+          </label>
+        </div>
         <label className="text-sm sm:col-span-4">Criterios de revisión, uno por línea
           <textarea value={form.checklist} onChange={event => setForm({ ...form, checklist: event.target.value })} className="form-input w-full mt-1 p-2 border rounded-lg" rows={2} placeholder="Patente coincide con el activo\nDocumento legible y vigente" />
         </label>
