@@ -485,7 +485,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
           {/* CONFIGURACIÓN Y PREFERENCIAS */}
           {activeTab === 'config' && (
-            <ConfigTab activeConfigTab={activeConfigTab} setActiveConfigTab={setActiveConfigTab} showToast={showToast} misProyectos={misProyectos} mandante={mandanteLogueado} onDirtyChange={setConfigHasUnsavedChanges} />
+            <ConfigTab activeConfigTab={activeConfigTab} setActiveConfigTab={setActiveConfigTab} showToast={showToast} misProyectos={misProyectos} mandante={mandanteLogueado} session={session} onDirtyChange={setConfigHasUnsavedChanges} />
           )}
 
           {/* MOBILE NAVBAR */}

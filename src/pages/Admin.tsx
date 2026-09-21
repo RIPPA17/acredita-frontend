@@ -740,6 +740,7 @@ export default function AdminPortal() {
             <ConfiguracionTab
               verificadores={verificadores}
               verificadorActualId={verificadorActualId}
+              session={session}
               showToast={showToast}
             />
           )}

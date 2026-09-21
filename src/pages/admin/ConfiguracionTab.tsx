@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PlantillaBase, Verificador } from '../../types';
+import type { SupabaseUserSession } from '../../data/supabaseAuth';
 import { loadDocumentTemplates } from '../../data/supabaseTemplates';
 import AccessRequestsConfig from './configuracion/AccessRequestsConfig';
 import GeneralConfig from './configuracion/GeneralConfig';
@@ -21,9 +22,11 @@ export default function ConfiguracionTab({
   verificadores,
   verificadorActualId,
   showToast,
+  session,
 }: {
   verificadores: Verificador[];
   verificadorActualId: string | null;
+  session: SupabaseUserSession | null;
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [tab, setTab] = useState<Tab>('general');
@@ -75,7 +78,7 @@ export default function ConfiguracionTab({
           </div>
           <div className="p-5">
             {tab === 'general' ? (
-              <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} />
+              <GeneralConfig verificadores={verificadores} verificadorActualId={verificadorActualId} session={session} />
             ) : tab === 'solicitudes' ? (
               <AccessRequestsConfig showToast={showToast} />
             ) : tab === 'accesos' ? (

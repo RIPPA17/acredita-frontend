@@ -1,0 +1,2 @@
+create index if not exists privacy_impact_assessments_created_by_idx
+on public.privacy_impact_assessments(created_by);

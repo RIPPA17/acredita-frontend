@@ -45,6 +45,18 @@ export interface AssetDocument {
   rejectionReason?: string;
 }
 
+export interface AssetDocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  storageBucket: string;
+  storagePath: string;
+  uploadedAt: string;
+}
+
 export interface AssetRequirementTemplate {
   id: string;
   type: AssetType;
@@ -422,6 +434,36 @@ async function openStorageObject(bucket: string, path: string): Promise<void> {
 export async function openAssetDocument(document: AssetDocument): Promise<void> {
   if (!document.storageBucket || !document.storagePath) throw new Error('El documento no tiene un archivo disponible.');
   return openStorageObject(document.storageBucket, document.storagePath);
+}
+
+export async function listAssetDocumentVersions(documentId: string): Promise<AssetDocumentVersion[]> {
+  const rows = await request<Array<{
+    id: string; asset_document_id: string; version_number: number; file_name: string;
+    mime_type: string; file_size: number; storage_bucket: string; storage_path: string; uploaded_at: string;
+  }>>(`asset_document_versions?select=*&asset_document_id=eq.${documentId}&order=version_number.desc`);
+  return rows.map(row => ({
+    id: row.id,
+    documentId: row.asset_document_id,
+    versionNumber: row.version_number,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    storageBucket: row.storage_bucket,
+    storagePath: row.storage_path,
+    uploadedAt: row.uploaded_at,
+  }));
+}
+
+export async function openAssetDocumentVersion(version: AssetDocumentVersion): Promise<void> {
+  await request<boolean>('rpc/register_storage_access', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_bucket: version.storageBucket,
+      p_storage_path: version.storagePath,
+      p_action: 'view',
+    }),
+  });
+  return openStorageObject(version.storageBucket, version.storagePath);
 }
 
 export async function uploadAssetDocument(

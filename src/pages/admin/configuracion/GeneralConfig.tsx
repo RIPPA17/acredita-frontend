@@ -1,3 +1,6 @@
+import { KeyRound, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import type { SupabaseUserSession } from '../../../data/supabaseAuth';
 import type { Verificador } from '../../../types';
 
 const BADGE_CLASS: Record<string, string> = {
@@ -9,9 +12,11 @@ const BADGE_CLASS: Record<string, string> = {
 export default function GeneralConfig({
   verificadores,
   verificadorActualId,
+  session,
 }: {
   verificadores: Verificador[];
   verificadorActualId: string | null;
+  session: SupabaseUserSession | null;
 }) {
   const actual = verificadores.find(item => item.id === verificadorActualId);
   const supervisores = verificadores.filter(item => item.rol === 'supervisor' && item.activo);
@@ -49,6 +54,27 @@ export default function GeneralConfig({
           </div>
           <div><span className={`badge ${supervisores.length > 0 ? BADGE_CLASS.green : BADGE_CLASS.gray}`}>{supervisores.length}</span></div>
         </div>
+      </div>
+
+      <div className="border border-cream3 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-cream3">
+          <div className="text-[13px] font-bold text-navy">Cuenta administrativa</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">Acceso autenticado de la sesión actual.</div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr] gap-3 items-center px-4 py-3.5 border-b border-cream2">
+          <div>
+            <div className="text-[12.5px] font-semibold text-navy">Correo de acceso</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">Cuenta usada para ingresar al panel Acredita.</div>
+          </div>
+          <div className="inline-flex items-center gap-2 text-[13px] font-semibold text-navy"><Mail size={14} />{session?.email || '—'}</div>
+        </div>
+        {session?.email && <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[12.5px] font-semibold text-navy">Contraseña</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">Solicita un enlace seguro al correo de esta cuenta.</div>
+          </div>
+          <Link className="btn btn-ghost inline-flex items-center gap-2" to={`/recuperar?email=${encodeURIComponent(session.email)}`}><KeyRound size={14} />Cambiar contraseña</Link>
+        </div>}
       </div>
 
       <div className="border border-cream3 rounded-xl bg-white overflow-hidden">

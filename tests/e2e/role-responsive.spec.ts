@@ -86,3 +86,43 @@ for (const role of ['admin', 'mandante', 'contratista'] as const) {
     await expectNoPageOverflow(page);
   });
 }
+
+
+test('Mandante recorre todos sus módulos principales', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await mountRole(page, 'mandante');
+  await page.goto('/mandante');
+
+  for (const [menu, expected] of [
+    ['Inicio', 'Control ejecutivo'],
+    ['Proyectos', 'Vista general de tus proyectos'],
+    ['Contratistas', 'Compara rápidamente cómo se encuentra cada empresa'],
+    ['Configuración', 'Mi organización'],
+  ] as const) {
+    await page.locator('button:visible').filter({ hasText: menu }).first().click();
+    await expect(page.locator('body')).toContainText(expected);
+    await expectNoPageOverflow(page);
+  }
+});
+
+test('Acredita Admin recorre todos sus módulos principales', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await mountRole(page, 'admin');
+  await page.goto('/admin');
+
+  for (const [menu, expected] of [
+    ['Inicio', 'Centro de Operaciones · Acredita'],
+    ['Cola de revisión', 'Cola de revisión'],
+    ['Acreditaciones', 'Acreditaciones'],
+    ['Mandantes', 'Mandantes'],
+    ['Contratistas', 'Contratistas'],
+    ['Proyectos', 'Proyectos'],
+    ['Verificadores', 'Verificadores'],
+    ['Auditoría', 'Auditoría'],
+    ['Configuración', 'Configuración'],
+  ] as const) {
+    await page.locator('button:visible').filter({ hasText: menu }).first().click();
+    await expect(page.locator('body')).toContainText(expected);
+    await expectNoPageOverflow(page);
+  }
+});

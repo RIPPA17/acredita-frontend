@@ -19,6 +19,7 @@ import {
   downloadJsonFile,
   loadPrivacyAdminSnapshot,
   releaseLegalHold,
+  resolveDecisionReview,
   updatePrivacyImpactAssessment,
   updatePrivacyProcessingActivity,
   updateRequirementPrivacyAssessment,
@@ -40,12 +41,13 @@ import {
   type RetentionPolicyRow,
   type SecurityIncidentRow,
 } from '../../../data/supabasePrivacyAdmin';
+import type { DecisionReviewRow } from '../../../data/supabaseDecisionReviews';
 
-type Section = 'resumen' | 'tratamientos' | 'requisitos' | 'impacto' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
+type Section = 'resumen' | 'tratamientos' | 'requisitos' | 'impacto' | 'decisiones' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
 
 type ToastFn = (msg: string, type?: 'success' | 'error' | 'warning') => void;
 
-const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [], requirements: [], requirementAssessments: [] };
+const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [], requirements: [], requirementAssessments: [], decisionReviews: [] };
 
 const requestLabels: Record<PrivacyRequestRow['request_type'], string> = {
   access: 'Acceso',
@@ -157,6 +159,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
     { id: 'tratamientos', label: `Tratamientos (${data.processingActivities.length})` },
     { id: 'requisitos', label: `Requisitos (${data.requirementAssessments.length})` },
     { id: 'impacto', label: `EIPD (${data.impactAssessments.length})` },
+    { id: 'decisiones', label: `Revisión humana${data.decisionReviews.filter(item => ['requested', 'in_review'].includes(item.status)).length ? ` (${data.decisionReviews.filter(item => ['requested', 'in_review'].includes(item.status)).length})` : ''}` },
     { id: 'solicitudes', label: `Solicitudes${openRequests.length ? ` (${openRequests.length})` : ''}` },
     { id: 'incidentes', label: `Incidentes${openIncidents.length ? ` (${openIncidents.length})` : ''}` },
     { id: 'retencion', label: 'Retención' },
@@ -196,6 +199,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
             <Card title="Tratamientos" value={data.processingActivities.length} subtitle={`${data.processingActivities.filter(item => item.status === 'draft').length} pendientes de cierre jurídico`} icon={<Database size={18} />} />
             <Card title="Requisitos" value={data.requirementAssessments.length} subtitle={`${data.requirementAssessments.filter(item => item.status !== 'approved').length} sin aprobación de privacidad`} icon={<FileLock2 size={18} />} />
             <Card title="EIPD" value={data.impactAssessments.length} subtitle={`${data.impactAssessments.filter(item => item.required_by_internal_decision).length} requeridas internamente`} icon={<ShieldAlert size={18} />} />
+            <Card title="Revisión humana" value={data.decisionReviews.filter(item => ['requested', 'in_review'].includes(item.status)).length} subtitle="Solicitudes abiertas de intervención" icon={<UserRoundCheck size={18} />} />
             <Card title="Solicitudes abiertas" value={openRequests.length} subtitle={`${overdueRequests.length} fuera de plazo configurado`} icon={<UserRoundCheck size={18} />} />
             <Card title="Incidentes abiertos" value={openIncidents.length} subtitle="Detectados, investigando o contenidos" icon={<ShieldAlert size={18} />} />
             <Card title="Políticas" value={data.retentionPolicies.length} subtitle={`${data.retentionPolicies.filter(item => item.active).length} activas`} icon={<Database size={18} />} />
@@ -226,6 +230,7 @@ export default function PrivacyAdminConfig({ showToast }: { showToast: ToastFn }
       {section === 'tratamientos' && <ProcessingActivitiesPanel rows={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'requisitos' && <RequirementPrivacyPanel assessments={data.requirementAssessments} requirements={data.requirements} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'impacto' && <ImpactAssessmentsPanel rows={data.impactAssessments} activities={data.processingActivities} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
+      {section === 'decisiones' && <DecisionReviewsPanel rows={data.decisionReviews} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'solicitudes' && <RequestsPanel rows={data.requests} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'incidentes' && <IncidentsPanel rows={data.incidents} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
       {section === 'retencion' && <RetentionPanel rows={data.retentionPolicies} busy={busy} setBusy={setBusy} refresh={refresh} showToast={showToast} />}
@@ -413,6 +418,62 @@ function ImpactAssessmentsPanel({ rows, activities, busy, setBusy, refresh, show
       ))}
     </div>
   );
+}
+
+function DecisionReviewsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: DecisionReviewRow[]; busy: boolean; setBusy: (value: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [hours, setHours] = useState<Record<string, number>>({});
+
+  const decide = async (row: DecisionReviewRow, status: 'upheld' | 'overridden') => {
+    const reason = (reasons[row.id] || '').trim();
+    if (reason.length < 8) {
+      showToast('Escribe un fundamento de al menos 8 caracteres.', 'warning');
+      return;
+    }
+    setBusy(true);
+    try {
+      const overrideValue = row.decision_type === 'accreditation' ? 'Aprobado' : 'habilitado';
+      await resolveDecisionReview(row.id, { status, reason, overrideValue, overrideHours: hours[row.id] || 24 });
+      showToast(status === 'overridden' ? 'Excepción humana registrada con vigencia temporal.' : 'Decisión automática confirmada por revisión humana.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible resolver la revisión.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const open = rows.filter(item => ['requested', 'in_review'].includes(item.status));
+  const history = rows.filter(item => !['requested', 'in_review'].includes(item.status));
+
+  const card = (row: DecisionReviewRow, closed = false) => <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <strong className="text-[13.5px] text-navy">{row.decision_type === 'payment' ? 'Pago' : row.decision_type === 'access' ? 'Acceso' : row.decision_type === 'work' ? 'Trabajo' : row.decision_type === 'assignment' ? 'Asignación' : 'Acreditación'}</strong>
+        <Badge tone={row.status === 'overridden' ? 'good' : row.status === 'upheld' ? 'neutral' : 'warn'}>{row.status === 'requested' ? 'Solicitada' : row.status === 'in_review' ? 'En revisión' : row.status === 'overridden' ? 'Excepción aplicada' : row.status === 'upheld' ? 'Decisión confirmada' : 'Cerrada'}</Badge>
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Estado automático:</strong> {row.automated_state_snapshot}</p>
+      <p className="mt-1 text-[12px] leading-5 text-gray-600"><strong>Motivo:</strong> {row.request_reason}</p>
+      {row.requester_viewpoint && <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Punto de vista:</strong> {row.requester_viewpoint}</p>}
+      <p className="mt-2 text-[11px] text-gray-400">Solicitada {fmt(row.requested_at)}</p>
+      {closed && row.override_reason && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600"><strong>Fundamento humano:</strong> {row.override_reason}{row.override_until ? ` · vigente hasta ${fmt(row.override_until)}` : ''}</p>}
+    </div></div>
+    {!closed && <div className="mt-4 border-t border-cream3 pt-4">
+      <textarea value={reasons[row.id] || ''} onChange={event => setReasons({ ...reasons, [row.id]: event.target.value })} className="form-input w-full rounded-lg border border-cream3 px-3 py-2 text-[12.5px]" rows={2} maxLength={3000} placeholder="Fundamento de la revisión humana…" />
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="text-[11px] font-semibold text-gray-500">Vigencia de excepción
+          <select value={hours[row.id] || 24} onChange={event => setHours({ ...hours, [row.id]: Number(event.target.value) })} className="form-input mt-1 block rounded-lg border border-cream3 px-3 py-2 text-[12px] font-normal text-navy"><option value={4}>4 horas</option><option value={8}>8 horas</option><option value={24}>24 horas</option><option value={72}>72 horas</option><option value={168}>7 días</option></select>
+        </label>
+        <button disabled={busy} type="button" className="btn btn-ghost" onClick={() => void decide(row, 'upheld')}>Confirmar decisión</button>
+        <button disabled={busy} type="button" className="btn btn-primary" onClick={() => void decide(row, 'overridden')}>Autorizar excepción temporal</button>
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-gray-400">La excepción no modifica el documento original; sólo habilita temporalmente la compuerta revisada y conserva trazabilidad.</p>
+    </div>}
+  </div>;
+
+  return <div className="space-y-5">
+    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-[12px] leading-5 text-blue-900"><strong>Intervención humana.</strong> Revisa resultados automatizados, considera el punto de vista aportado y deja una decisión fundada y trazable.</div>
+    <section className="space-y-3"><h4 className="text-sm font-semibold text-navy">Pendientes ({open.length})</h4>{open.length ? open.map(row => card(row)) : <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay revisiones humanas pendientes.</div>}</section>
+    {history.length > 0 && <section className="space-y-3"><h4 className="text-sm font-semibold text-navy">Historial</h4>{history.slice(0, 20).map(row => card(row, true))}</section>}
+  </div>;
 }
 
 function RequestsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: PrivacyRequestRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
