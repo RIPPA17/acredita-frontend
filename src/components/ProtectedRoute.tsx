@@ -81,7 +81,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
     return () => {
       activeRef.current = false;
-      clearBusinessRuntimeSession();
+      // No limpiamos la proyección de negocio al desmontar la ruta.
+      // React StrictMode ejecuta cleanup/re-mount en desarrollo y además un
+      // cambio entre portales protegidos no equivale a cerrar sesión.
       if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
     };
   }, [synchronizeBusinessData]);
