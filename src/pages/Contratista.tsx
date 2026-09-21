@@ -94,7 +94,7 @@ export default function ContratistaPortal() {
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
-  // Load contractors, projects, and mandantes from localStorageDb
+  // Load contractors, projects, and mandantes from businessStore
   const allContratistas = getContratistas();
   const allProyectos = getProyectos();
   const allMandantes = getMandantes();
