@@ -9,7 +9,7 @@ import {
   esVencidoPorFecha,
   getRequisitos,
   obtenerDiasRestantes,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile } from '../../data/supabaseDocumentStorage';
 import { getEstadoDocumentoEfectivo, normalizarNombreDocumento } from '../contratista/documentosUtils';
