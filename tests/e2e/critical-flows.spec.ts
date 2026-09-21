@@ -666,18 +666,27 @@ test('07 operación muestra estados de pago gobernados por aprobación', async (
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
   await expect(page.getByText('Pendiente de aprobación')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Aprobaciones' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Marcar pagado' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Detalle e historial' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Registrar pago' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Liberar' })).toHaveCount(0);
 });
 
-test('08 un pago liberado permite únicamente confirmar Pagado', async ({ page }) => {
-  const { calls } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado' });
+test('08 un pago liberado permite registrar el pago con referencia', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado' });
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
-  await page.getByRole('button', { name: 'Marcar pagado' }).click();
-  await expect.poll(() => calls.some(call => call.includes('/rest/v1/rpc/mark_payment_paid'))).toBeTruthy();
+
+  let dialogIndex = 0;
+  page.on('dialog', async dialog => {
+    await dialog.accept(dialogIndex++ === 0 ? 'TRX-LEGACY-08' : 'Pago confirmado');
+  });
+  await page.getByRole('button', { name: 'Registrar pago' }).click();
+
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/mark_payment_paid'
+    && item.body?.p_reference === 'TRX-LEGACY-08'
+  )).toBeTruthy();
 });
 
 test('09 Contratista hidrata su empresa, mantiene proyecto activo visible y separa responsabilidades', async ({ page }) => {
@@ -917,8 +926,10 @@ test('10zb Mandante registra pago liberado con referencia obligatoria', async ({
   await page.getByRole('button', { name: /Estados de pago/ }).click();
 
   const row = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
-  page.once('dialog', dialog => dialog.accept('TRX-E2E-123'));
-  page.once('dialog', dialog => dialog.accept('Transferencia validada'));
+  let dialogIndex = 0;
+  page.on('dialog', async dialog => {
+    await dialog.accept(dialogIndex++ === 0 ? 'TRX-E2E-123' : 'Transferencia validada');
+  });
   await row.getByRole('button', { name: 'Registrar pago' }).click();
 
   await expect.poll(() => ctx.mutations.some(item =>
