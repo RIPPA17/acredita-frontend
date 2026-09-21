@@ -18,7 +18,7 @@ import ContratistasTab from './mandante/ContratistasTab';
 import ContractorInvitationModal from '../components/ContractorInvitationModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
-import { usePortalTab } from '../hooks/usePortalTab';
+import { usePortalTab } from '../hooks/usePortalTab';\nimport { useSidebarPreference } from '../hooks/useSidebarPreference';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
 import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
@@ -47,15 +47,7 @@ function InvalidMandanteSession() {
 function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandanteLogueado: Mandante; dataSyncRevision: number }) {
   const navigate = useNavigate();
   const session = getCurrentSession();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebar_collapsed') === 'true';
-  });
-
-  const toggleSidebar = () => {
-    const nextState = !sidebarCollapsed;
-    setSidebarCollapsed(nextState);
-    localStorage.setItem('sidebar_collapsed', String(nextState));
-  };
+  const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(false);
   const [activeTab, setActiveTab] = usePortalTab('mandante');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<ConfigTabId>('empresa');
