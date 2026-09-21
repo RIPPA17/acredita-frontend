@@ -90,6 +90,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
     && (configuracion?.account.profileActive ?? true)
     && (configuracion?.account.membershipActive ?? true),
   );
+  const accountStatus = configLoading ? 'Verificando…' : configError ? 'Sin verificar' : accountActive ? 'Activa' : 'Restringida';
 
   const guardarPreferencias = async () => {
     setGuardando(true);
@@ -117,7 +118,7 @@ export default function ConfigTab({ contratistaLogueado, misProyectos, allMandan
           <div className="cfg-company"><div className="cfg-company-icon">{iniciales(companyDisplayName)}</div><div><strong>{companyDisplayName}</strong><small>RUT {companyRut || '—'}</small></div></div>
           <div className="cfg-stat"><span>Portal</span><b>Contratista</b></div>
           <div className="cfg-stat"><span>Proyectos activos</span><b>{proyectosActivos.length}</b></div>
-          <div className="cfg-stat"><span>Estado de cuenta</span><div><span className={`cfg-status ${accountActive ? '' : 'warning'}`}>{configLoading ? 'Verificando…' : accountActive ? 'Activa' : 'Restringida'}</span></div></div>
+          <div className="cfg-stat"><span>Estado de cuenta</span><div><span className={`cfg-status ${!configLoading && (!accountActive || configError) ? 'warning' : ''}`}>{accountStatus}</span></div></div>
         </div>
 
         <div className="cfg-workspace">
