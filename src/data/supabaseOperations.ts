@@ -59,9 +59,11 @@ export interface PaymentCaseEventRecord {
   from_status?: string; to_status?: string; reason?: string;
   compliance_snapshot?: Record<string, unknown>; actor_profile_id?: string; created_at: string;
 }
+export type TicketStatus = 'abierto' | 'en_progreso' | 'esperando_usuario' | 'resuelto' | 'cerrado';
 export interface TicketRecord {
-  id: string; accreditation_id?: string; category: string; priority: string; status: string;
-  subject: string; description: string; resolution?: string; created_at: string; due_at?: string; resolved_at?: string;
+  id: string; accreditation_id?: string; category: string; priority: string; status: TicketStatus;
+  subject: string; description: string; resolution?: string; created_at: string; updated_at?: string;
+  assigned_to?: string; due_at?: string; resolved_at?: string; closed_at?: string;
 }
 export interface TicketMessageRecord {
   id: string; ticket_id: string; author_id: string; body: string; is_internal: boolean; created_at: string;
@@ -331,14 +333,18 @@ export async function createTicket(projectKey: string, contractorKey: string | u
   });
 }
 
-export async function updateTicketStatus(id: string, status: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado', resolution?: string) {
+export async function updateTicketStatus(id: string, status: TicketStatus, resolution?: string) {
   const session = await getSupabaseSessionForRequest();
   if (!session) throw new Error('Tu sesión expiró.');
   const resolved = status === 'resuelto' || status === 'cerrado';
+  const cleanResolution = resolution?.trim();
+  if (resolved && !cleanResolution) throw new Error('Debes indicar la resolución aplicada.');
+
   await request<void>(`support_tickets?id=eq.${id}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
-      status, resolution: resolution || null,
+      status,
+      resolution: resolved ? cleanResolution : null,
       assigned_to: status === 'en_progreso' ? session.profileId : undefined,
       resolved_at: resolved ? new Date().toISOString() : null,
       closed_at: status === 'cerrado' ? new Date().toISOString() : null,
@@ -353,9 +359,12 @@ export async function listTicketMessages(ticketId: string): Promise<TicketMessag
 export async function sendTicketMessage(ticketId: string, body: string, internal = false) {
   const session = await getSupabaseSessionForRequest();
   if (!session) throw new Error('Tu sesión expiró.');
+  const cleanBody = body.trim();
+  if (!cleanBody) throw new Error('Escribe un mensaje antes de enviarlo.');
+  if (cleanBody.length > 5000) throw new Error('El mensaje no puede superar los 5.000 caracteres.');
   await request<void>('support_ticket_messages', {
     method: 'POST', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ ticket_id: ticketId, author_id: session.profileId, body: body.trim(), is_internal: internal }),
+    body: JSON.stringify({ ticket_id: ticketId, author_id: session.profileId, body: cleanBody, is_internal: internal }),
   });
 }
 

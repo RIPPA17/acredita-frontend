@@ -29,6 +29,7 @@ export interface NotificacionContratista {
   actionPlanId?: string;
   evaluationId?: string;
   paymentCaseId?: string;
+  supportTicketId?: string;
 }
 
 interface Params {

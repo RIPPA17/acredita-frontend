@@ -239,6 +239,7 @@ export default function ContratistaPortal() {
         actionPlanId,
         evaluationId,
         paymentCaseId,
+        supportTicketId: item.supportTicketId,
       };
     });
 
@@ -273,12 +274,13 @@ export default function ContratistaPortal() {
     } else if (notificacion.destino.tipo === 'acreditacion') {
       setShowFichaAcreditacion(true);
     } else if (notificacion.destino.tipo === 'operacion') {
-      if (notificacion.actionPlanId || notificacion.evaluationId || notificacion.paymentCaseId) {
+      if (notificacion.actionPlanId || notificacion.evaluationId || notificacion.paymentCaseId || notificacion.supportTicketId) {
         const params = new URLSearchParams();
         params.set('proyecto', notificacion.proyectoId);
         if (notificacion.actionPlanId) params.set('plan', notificacion.actionPlanId);
         if (notificacion.evaluationId) params.set('evaluacion', notificacion.evaluationId);
         if (notificacion.paymentCaseId) params.set('pago', notificacion.paymentCaseId);
+        if (notificacion.supportTicketId) params.set('ticket', notificacion.supportTicketId);
         navigate({ pathname: '/contratista/operacion', search: `?${params.toString()}` });
       } else {
         setActiveTab('operacion');

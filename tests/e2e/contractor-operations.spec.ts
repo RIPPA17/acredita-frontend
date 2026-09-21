@@ -28,7 +28,10 @@ function session() {
   };
 }
 
-function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string; historicalPayment?: boolean } = {}) {
+type TicketFixtureStatus = 'abierto' | 'en_progreso' | 'esperando_usuario' | 'resuelto' | 'cerrado';
+type FixtureOptions = { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string; historicalPayment?: boolean; ticketStatus?: TicketFixtureStatus };
+
+function fixtures(options: FixtureOptions = {}) {
   return {
     profiles: [{ id: PROFILE, full_name: 'Contratista Operaciones QA' }],
     acredita_memberships: [],
@@ -144,9 +147,12 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
       project_id: PROJECT,
       category: 'operacion',
       priority: 'normal',
-      status: 'abierto',
+      status: options.ticketStatus || 'abierto',
       subject: 'Consulta de acreditación',
       description: 'Necesitamos aclarar el criterio de revisión.',
+      resolution: options.ticketStatus === 'resuelto' || options.ticketStatus === 'cerrado' ? 'Antecedentes revisados y solicitud atendida.' : null,
+      resolved_at: options.ticketStatus === 'resuelto' || options.ticketStatus === 'cerrado' ? '2026-09-16T12:00:00Z' : null,
+      closed_at: options.ticketStatus === 'cerrado' ? '2026-09-17T12:00:00Z' : null,
       created_at: '2026-09-15T12:00:00Z',
     }],
     support_ticket_messages: [{ id: 'a1000000-0000-4000-8000-000000000001', ticket_id: TICKET, author_id: PROFILE, body: 'Mensaje inicial de soporte.', is_internal: false, created_at: '2026-09-15T12:05:00Z' }],
@@ -160,7 +166,7 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
   } as Record<string, unknown[]>;
 }
 
-async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string; historicalPayment?: boolean } = {}) {
+async function mockContractor(page: Page, options: FixtureOptions = {}) {
   const data = fixtures(options);
   const calls: Array<{ method: string; path: string; body?: string | null }> = [];
 
@@ -348,4 +354,27 @@ test('Contratista ve estado de pago y conversa con soporte sin controles adminis
   await page.getByLabel('Descripción').fill('Necesitamos confirmar el plazo de revisión.');
   await page.getByRole('button', { name: 'Crear ticket' }).click();
   await expect.poll(() => calls.some(call => call.method === 'POST' && call.path === '/rest/v1/support_tickets')).toBeTruthy();
+});
+
+
+test('Enlace profundo de soporte abre directamente la conversación indicada', async ({ page }) => {
+  await mockContractor(page, { ticketStatus: 'esperando_usuario' });
+  await page.goto(`/contratista/operacion?proyecto=proyecto_ops_qa&ticket=${TICKET}`);
+
+  await expect(page.getByRole('heading', { name: 'Evaluaciones, pagos y soporte' })).toBeVisible();
+  await expect(page.getByText('Consulta de acreditación')).toBeVisible();
+  await expect(page.getByText('Mensaje inicial de soporte.')).toBeVisible();
+  await expect(page.getByText('Tu respuesta devolverá el ticket a En progreso para continuar la atención.')).toBeVisible();
+});
+
+test('Ticket cerrado conserva historial y bloquea nuevas respuestas del contratista', async ({ page }) => {
+  await mockContractor(page, { ticketStatus: 'cerrado' });
+  await openOperations(page);
+
+  await page.getByRole('button', { name: /Soporte/ }).click();
+  await expect(page.getByText('Cerrado', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Conversación' }).click();
+
+  await expect(page.getByText('Ticket cerrado. La conversación queda disponible como historial y no admite nuevas respuestas.')).toBeVisible();
+  await expect(page.getByPlaceholder('Escribe una respuesta para Mandante/Acredita…')).toHaveCount(0);
 });

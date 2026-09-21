@@ -34,6 +34,7 @@ import {
   type PaymentRecord,
   type TicketMessageRecord,
   type TicketRecord,
+  type TicketStatus,
 } from '../../data/supabaseOperations';
 import { updateContractorActionPlan } from '../../data/contractorOperations';
 import { getPaymentCaseCompliance } from '../../data/supabasePaymentState';
@@ -56,9 +57,10 @@ const paymentLabel: Record<string, string> = {
   anulado: 'Anulado',
 };
 
-const ticketLabel: Record<string, string> = {
+const ticketLabel: Record<TicketStatus, string> = {
   abierto: 'Abierto',
   en_progreso: 'En progreso',
+  esperando_usuario: 'Esperando respuesta',
   resuelto: 'Resuelto',
   cerrado: 'Cerrado',
 };
@@ -344,12 +346,16 @@ function ContractorPaymentDetail({
 
 function ContractorTicketConversation({
   ticketId,
+  status,
   readOnly = false,
   showToast,
+  onChanged,
 }: {
   ticketId: string;
+  status: TicketStatus;
   readOnly?: boolean;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+  onChanged?: () => void | Promise<void>;
 }) {
   const [items, setItems] = useState<TicketMessageRecord[]>([]);
   const [body, setBody] = useState('');
@@ -367,13 +373,14 @@ function ContractorTicketConversation({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!body.trim() || saving || readOnly) return;
+    if (!body.trim() || saving || readOnly || status === 'cerrado') return;
     setSaving(true);
     try {
       await sendTicketMessage(ticketId, body, false);
       setBody('');
       await load();
-      showToast('Mensaje enviado.');
+      await onChanged?.();
+      showToast(status === 'resuelto' || status === 'esperando_usuario' ? 'Mensaje enviado. El ticket volvió a En progreso.' : 'Mensaje enviado.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible enviar el mensaje.', 'error');
     } finally {
@@ -393,10 +400,14 @@ function ContractorTicketConversation({
         ))}
         {items.length === 0 && <p className="text-sm text-gray-500">Sin mensajes todavía.</p>}
       </div>
-      {!readOnly && <form onSubmit={submit} className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <textarea required maxLength={3000} value={body} onChange={event => setBody(event.target.value)} className="form-input min-h-[70px] flex-1" placeholder="Escribe una respuesta para Mandante/Acredita…" />
-        <button className="btn btn-primary self-end" disabled={saving || !body.trim()}><Send size={15} /> Enviar</button>
-      </form>}
+      {status === 'cerrado' && <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">Ticket cerrado. La conversación queda disponible como historial y no admite nuevas respuestas.</p>}
+      {!readOnly && status !== 'cerrado' && <>
+        {(status === 'resuelto' || status === 'esperando_usuario') && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{status === 'resuelto' ? 'Si respondes, el ticket volverá automáticamente a En progreso.' : 'Tu respuesta devolverá el ticket a En progreso para continuar la atención.'}</p>}
+        <form onSubmit={submit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} className="form-input min-h-[70px] flex-1" placeholder="Escribe una respuesta para Mandante/Acredita…" />
+          <button className="btn btn-primary self-end" disabled={saving || !body.trim()}><Send size={15} /> Enviar</button>
+        </form>
+      </>}
     </div>
   );
 }
@@ -426,6 +437,7 @@ export default function OperationsTab({
   const requestedPlanId = operationParams.get('plan') || undefined;
   const requestedEvaluationId = operationParams.get('evaluacion') || undefined;
   const requestedPaymentId = operationParams.get('pago') || undefined;
+  const requestedTicketId = operationParams.get('ticket') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
@@ -461,6 +473,13 @@ export default function OperationsTab({
       setExpandedPayment(requestedPaymentId);
     }
   }, [requestedPaymentId, project?.id]);
+
+  useEffect(() => {
+    if (requestedTicketId && project) {
+      setMode('soporte');
+      setExpandedTicket(requestedTicketId);
+    }
+  }, [requestedTicketId, project?.id]);
 
   useEffect(() => {
     if (!requestedPlanId || !project) return;
@@ -598,7 +617,7 @@ export default function OperationsTab({
                     <div><div className="flex flex-wrap items-center gap-2"><strong className="text-navy">{item.subject}</strong><span className="rounded-full bg-cream2 px-2 py-0.5 text-[11px] font-semibold text-gray-600">{ticketLabel[item.status] || item.status}</span></div><p className="mt-1 text-sm text-gray-600">{item.resolution || item.description}</p><small className="mt-1 block text-gray-500">Prioridad {item.priority} · creado {new Date(item.created_at).toLocaleString('es-CL')}</small></div>
                     <button type="button" className="btn btn-secondary" onClick={() => setExpandedTicket(current => current === item.id ? undefined : item.id)}>{expandedTicket === item.id ? 'Ocultar' : 'Conversación'}</button>
                   </div>
-                  {expandedTicket === item.id && <ContractorTicketConversation ticketId={item.id} readOnly={readOnly} showToast={showToast} />}
+                  {expandedTicket === item.id && <ContractorTicketConversation ticketId={item.id} status={item.status} readOnly={readOnly} showToast={showToast} onChanged={load} />}
                 </article>
               ))}
               {data.tickets.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">No tienes tickets en este proyecto.</div>}
