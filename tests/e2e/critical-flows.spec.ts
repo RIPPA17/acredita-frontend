@@ -370,6 +370,7 @@ function fixtures(role: Role, options: MockOptions) {
         project_key: 'proyecto_piloto',
         worker_rut: null,
         requirement_key: null,
+        payment_case_id: PAYMENT,
         occurred_at: '2026-09-20T17:30:00Z',
         resolved_at: null,
         occurrence_count: 1,
