@@ -266,9 +266,8 @@ test('revisión humana: solicitud → override temporal → documento sigue rech
   const { data } = await installSharedBackend(page);
   await page.addInitScript(value => {
     window.localStorage.setItem('acredita_session', JSON.stringify(value));
-  }, contractorSession());
+  }, adminSession());
 
-  await setSession(page, adminSession());
   await page.goto('/admin');
   await page.getByRole('button', { name: 'Configuración', exact: true }).first().click();
   await page.getByRole('button', { name: 'Privacidad', exact: true }).click();
