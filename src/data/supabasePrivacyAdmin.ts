@@ -1,4 +1,5 @@
 import { restoreSupabaseSession, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './supabaseAuth';
+import type { DecisionReviewRow } from './supabaseDecisionReviews';
 
 export type PrivacyRequestStatus = 'received' | 'identity_verification' | 'in_review' | 'blocked' | 'resolved' | 'rejected' | 'withdrawn';
 export type PrivacyIdentityStatus = 'pending' | 'verified' | 'rejected';
@@ -180,6 +181,7 @@ export interface PrivacyAdminSnapshot {
   impactAssessments: PrivacyImpactAssessmentRow[];
   requirements: RequirementSummaryRow[];
   requirementAssessments: RequirementPrivacyAssessmentRow[];
+  decisionReviews: DecisionReviewRow[];
 }
 
 function authHeaders(token: string, prefer?: string): HeadersInit {
@@ -237,7 +239,7 @@ async function patchRow<T>(table: string, id: string, body: Record<string, unkno
 
 export async function loadPrivacyAdminSnapshot(): Promise<PrivacyAdminSnapshot> {
   const { token } = await tokenAndProfile();
-  const [requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments] = await Promise.all([
+  const [requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments, decisionReviews] = await Promise.all([
     readRows<PrivacyRequestRow>('privacy_requests', token, 'received_at.desc'),
     readRows<SecurityIncidentRow>('security_incidents', token, 'detected_at.desc'),
     readRows<RetentionPolicyRow>('retention_policies', token, 'updated_at.desc'),
@@ -246,8 +248,9 @@ export async function loadPrivacyAdminSnapshot(): Promise<PrivacyAdminSnapshot> 
     readRows<PrivacyImpactAssessmentRow>('privacy_impact_assessments', token, 'updated_at.desc'),
     readRows<RequirementSummaryRow>('requirements', token, 'name.asc'),
     readRows<RequirementPrivacyAssessmentRow>('requirement_privacy_assessments', token, 'updated_at.desc'),
+    readRows<DecisionReviewRow>('privacy_decision_reviews', token, 'requested_at.desc'),
   ]);
-  return { requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments };
+  return { requests, incidents, retentionPolicies, legalHolds, processingActivities, impactAssessments, requirements, requirementAssessments, decisionReviews };
 }
 
 export function updateRequirementPrivacyAssessment(id: string, patch: Partial<Pick<RequirementPrivacyAssessmentRow,
@@ -263,6 +266,35 @@ export function updatePrivacyProcessingActivity(id: string, patch: Partial<Pick<
   'role_assessment' | 'status' | 'legal_basis' | 'notes'
 >>) {
   return patchRow<PrivacyProcessingActivityRow>('privacy_processing_activities', id, patch as Record<string, unknown>);
+}
+
+
+export async function resolveDecisionReview(id: string, input: {
+  status: 'upheld' | 'overridden' | 'closed';
+  reason: string;
+  overrideValue?: string;
+  overrideHours?: number;
+}) {
+  const { profileId } = await tokenAndProfile();
+  const reason = input.reason.trim();
+  if (reason.length < 8) throw new Error('Registra un fundamento suficiente para la decisión humana.');
+  const now = new Date();
+  const patch: Record<string, unknown> = {
+    status: input.status,
+    reviewed_by: profileId,
+    reviewed_at: now.toISOString(),
+  };
+  if (input.status === 'overridden') {
+    const hours = Math.min(168, Math.max(1, input.overrideHours || 24));
+    patch.override_value = input.overrideValue || 'habilitado';
+    patch.override_reason = reason;
+    patch.override_until = new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString();
+  } else {
+    patch.override_value = null;
+    patch.override_reason = reason;
+    patch.override_until = null;
+  }
+  return patchRow<DecisionReviewRow>('privacy_decision_reviews', id, patch);
 }
 
 export function updatePrivacyImpactAssessment(id: string, patch: Partial<Pick<PrivacyImpactAssessmentRow,
