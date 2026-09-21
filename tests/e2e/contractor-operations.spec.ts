@@ -28,7 +28,7 @@ function session() {
   };
 }
 
-function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
+function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string; historicalPayment?: boolean } = {}) {
   return {
     profiles: [{ id: PROFILE, full_name: 'Contratista Operaciones QA' }],
     acredita_memberships: [],
@@ -116,12 +116,15 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
       period_end: '2026-08-31',
       amount: 3500000,
       currency: 'CLP',
-      status: 'observado',
-      block_reason: 'Falta cierre de observación.',
+      status: options.historicalPayment ? 'pagado' : 'observado',
+      block_reason: options.historicalPayment ? null : 'Falta cierre de observación.',
       invoice_number: 'F-OPS-01',
       submitted_at: '2026-09-10T12:00:00Z',
       submission_note: 'Estado de pago agosto.',
       compliance_checked_at: '2026-09-12T12:00:00Z',
+      payment_reference: options.historicalPayment ? 'TRX-HIST-001' : null,
+      payment_note: options.historicalPayment ? 'Pago histórico confirmado.' : null,
+      paid_at: options.historicalPayment ? '2026-09-13T15:00:00Z' : null,
     }],
     payment_approvals: [],
     payment_case_events: [{
@@ -157,7 +160,7 @@ function fixtures(options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revi
   } as Record<string, unknown[]>;
 }
 
-async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string } = {}) {
+async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 'en_progreso' | 'en_revision' | 'completado'; reviewComment?: string; historicalPayment?: boolean } = {}) {
   const data = fixtures(options);
   const calls: Array<{ method: string; path: string; body?: string | null }> = [];
 
@@ -180,7 +183,17 @@ async function mockContractor(page: Page, options: { planStatus?: 'pendiente' | 
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
+        body: JSON.stringify(options.historicalPayment ? {
+          eligible: true,
+          periodStatus: 'cerrado',
+          compliancePercent: 100,
+          paymentBlockedCount: 0,
+          paymentPendingCount: 0,
+          source: 'payment_case_snapshot',
+          historical: true,
+          paymentStatus: 'pagado',
+          complianceCheckedAt: '2026-09-12T12:00:00Z',
+        } : {
           eligible: false,
           periodStatus: 'cerrado',
           compliancePercent: 75,
@@ -288,6 +301,19 @@ test('Contratista consulta snapshot e historial del estado de pago', async ({ pa
   await page.getByText('Historial del pago · 1', { exact: true }).click();
   await expect(page.getByText(/creado/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Registrar pago/i })).toHaveCount(0);
+});
+
+test('Pago finalizado conserva el snapshot histórico aunque cambie el cumplimiento posterior', async ({ page }) => {
+  await mockContractor(page, { historicalPayment: true });
+  await openOperations(page);
+
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+  await page.getByRole('button', { name: 'Ver detalle' }).click();
+
+  await expect(page.getByText('Snapshot histórico que justificó la decisión de pago.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Este registro no se recalcula con cambios documentales posteriores.', { exact: true })).toBeVisible();
+  await expect(page.getByText('TRX-HIST-001', { exact: false })).toBeVisible();
+  await expect(page.getByText('100%', { exact: true })).toBeVisible();
 });
 
 test('Enlace profundo abre directamente el pago indicado', async ({ page }) => {
