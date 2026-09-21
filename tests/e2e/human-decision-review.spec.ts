@@ -247,10 +247,8 @@ async function setSession(page: Page, value: ReturnType<typeof contractorSession
 
 test('revisión humana: pago bloqueado → solicitud → override temporal → documento sigue rechazado', async ({ page }) => {
   const { calls, data } = await installSharedBackend(page);
-  await page.addInitScript(value => {
-    window.localStorage.setItem('acredita_session', JSON.stringify(value));
-  }, contractorSession());
-
+  await page.goto('/');
+  await setSession(page, contractorSession());
   await page.goto('/contratista');
   await page.getByText('Documentos', { exact: true }).first().click();
   await expect(page.getByText('Certificado de Cumplimiento de Obligaciones Laborales y Previsionales (F30-1)').first()).toBeVisible();
@@ -278,7 +276,7 @@ test('revisión humana: pago bloqueado → solicitud → override temporal → d
 
   await setSession(page, adminSession());
   await page.goto('/admin');
-  await page.getByRole('button', { name: 'Configuración', exact: true }).first().click();
+  await page.locator('.sb-item:visible').filter({ hasText: 'Configuración' }).first().click();
   await page.getByRole('button', { name: 'Privacidad', exact: true }).click();
   await page.getByRole('button', { name: /Revisión humana/ }).click();
 
