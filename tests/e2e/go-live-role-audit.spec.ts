@@ -132,9 +132,11 @@ test('go-live Mandante: navegación completa y cuenta recuperable', async ({ pag
 
   await page.getByText('Proyectos', { exact: true }).first().click();
   await page.getByText('Proyecto Go Live QA', { exact: true }).first().click();
+  const projectTabs = page.getByLabel('Secciones del proyecto');
   for (const tab of ['Resumen', 'Contratistas', 'Servicios', 'Activos', 'Requisitos', 'Periodos', 'Operacion', 'Acreditaciones']) {
-    await page.getByRole('button', { name: tab, exact: true }).click();
-    await expect(page.getByRole('button', { name: tab, exact: true })).toHaveClass(/active/);
+    const button = projectTabs.getByRole('button', { name: tab, exact: true });
+    await button.click();
+    await expect(button).toHaveClass(/active/);
   }
 });
 
