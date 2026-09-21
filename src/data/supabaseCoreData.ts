@@ -1,5 +1,6 @@
 import type { Contratista, Mandante, Proyecto, Requisito, ServicioContrato } from '../types';
 import type { SupabaseUserSession } from './supabaseAuth';
+import type { RuntimeDecisionOverride } from './supabaseDecisionReviews';
 import { getRuntimeArray, purgeLegacyBusinessStorage, setRuntimeArray } from './runtimeDataStore';
 
 const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined)
@@ -66,6 +67,17 @@ type BackendRequirement = {
   due_days: number;
 };
 
+type BackendDecisionReview = {
+  accreditation_id: string;
+  worker_id: string | null;
+  decision_type: 'accreditation' | 'access' | 'payment' | 'work' | 'assignment';
+  status: 'requested' | 'in_review' | 'upheld' | 'overridden' | 'closed';
+  override_value: string | null;
+  override_reason: string | null;
+  override_until: string | null;
+  reviewed_at: string | null;
+};
+
 type BackendService = {
   id: string;
   accreditation_id: string;
@@ -88,6 +100,7 @@ type CoreRows = {
   accreditations: BackendAccreditation[];
   requirements: BackendRequirement[];
   services: BackendService[];
+  decisionReviews: BackendDecisionReview[];
 };
 
 function apiHeaders(accessToken: string, extra: HeadersInit = {}): HeadersInit {
@@ -206,15 +219,16 @@ function fallbackContractor(id: string): Contratista | undefined {
 }
 
 async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
-  const [mandantes, projects, contratistas, accreditations, requirements, services] = await Promise.all([
+  const [mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
     selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at'),
     selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
     selectRows<BackendService>('services', accessToken, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active'),
+    selectRows<BackendDecisionReview>('privacy_decision_reviews', accessToken, 'accreditation_id,worker_id,decision_type,status,override_value,override_reason,override_until,reviewed_at'),
   ]);
-  return { mandantes, projects, contratistas, accreditations, requirements, services };
+  return { mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews };
 }
 
 function scopeLocalProjects(session: SupabaseUserSession, projects: Proyecto[]): Proyecto[] {
@@ -370,11 +384,44 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
     };
   }).filter(row => row.proyectoId && row.contratistaId);
 
+  const accreditationScopeByUuid = new Map(
+    rows.accreditations.map(row => [row.id, {
+      contractorKey: contractorKeyByUuid.get(row.contratista_id),
+      projectKey: projectKeyByUuid.get(row.project_id),
+    }]),
+  );
+  const now = Date.now();
+  const frontendDecisionOverrides: RuntimeDecisionOverride[] = rows.decisionReviews
+    .filter(row =>
+      row.status === 'overridden'
+      && row.worker_id === null
+      && Boolean(row.override_value)
+      && Boolean(row.override_reason)
+      && Boolean(row.override_until)
+      && new Date(row.override_until as string).getTime() > now
+    )
+    .map((row): RuntimeDecisionOverride | null => {
+      const scope = accreditationScopeByUuid.get(row.accreditation_id);
+      if (!scope?.contractorKey || !scope.projectKey) return null;
+      return {
+        accreditationId: row.accreditation_id,
+        contractorKey: scope.contractorKey,
+        projectKey: scope.projectKey,
+        decisionType: row.decision_type,
+        overrideValue: row.override_value as string,
+        overrideReason: row.override_reason as string,
+        overrideUntil: row.override_until as string,
+        reviewedAt: row.reviewed_at,
+      };
+    })
+    .filter((row): row is RuntimeDecisionOverride => row !== null);
+
   writeArray('acredita_mandantes', frontendMandantes);
   writeArray('acredita_proyectos', frontendProjects);
   writeArray('acredita_contratistas', frontendContractors);
   writeArray('acredita_requisitos', frontendRequirements);
   writeArray('acredita_servicios', frontendServices);
+  writeArray('acredita_decision_overrides', frontendDecisionOverrides);
 }
 
 async function syncMandantes(
