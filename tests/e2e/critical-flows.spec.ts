@@ -27,6 +27,7 @@ const PAYMENT = 'a0000000-0000-4000-8000-000000000001';
 const EVALUATION_DRAFT = 'b0000000-0000-4000-8000-000000000001';
 const EVALUATION_REVIEW = 'b0000000-0000-4000-8000-000000000002';
 const ACTION_PLAN_REVIEW = 'c0000000-0000-4000-8000-000000000001';
+const PAYMENT_PERIOD = 'd0000000-0000-4000-8000-000000000001';
 
 type Role = 'admin' | 'mandante' | 'contratista';
 type WorkerDocumentScenario = 'pending' | 'review' | 'rejected' | 'renewal_review';
@@ -42,6 +43,7 @@ type MockOptions = {
   assetLifecycle?: boolean;
   notificationScenario?: boolean;
   evaluationWorkflow?: boolean;
+  paymentWorkflow?: boolean;
 };
 
 function appSession(role: Role) {
@@ -181,7 +183,18 @@ function fixtures(role: Role, options: MockOptions) {
       effective_status: workerScenario === 'review' ? 'revision' : workerScenario === 'rejected' ? 'rechazado' : 'por_vencer',
       version_number: workerScenario === 'renewal_review' ? 1 : 1,
     }] : [],
-    compliance_periods: [],
+    compliance_periods: options.paymentWorkflow ? [{
+      id: PAYMENT_PERIOD,
+      project_id: PROJECT,
+      period_start: '2026-08-01',
+      period_end: '2026-08-31',
+      upload_deadline: '2026-09-06',
+      review_deadline: '2026-09-11',
+      status: 'cerrado',
+      closed_at: '2026-09-12T10:00:00Z',
+      reopened_at: null,
+      reopen_reason: null,
+    }] : [],
     accreditation_statuses: [
       { accreditation_id: ACCREDITATION, status: 'en_proceso', total_required: 2, approved_required: 0, pending_required: 2, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false },
       ...(options.historicalProject ? [{ accreditation_id: ACCREDITATION_OLD, status: 'aprobado', total_required: 0, approved_required: 0, pending_required: 0, rejected_required: 0, expired_required: 0, near_expiry_required: 0, access_allowed: false, payment_allowed: false }] : []),
@@ -257,7 +270,42 @@ function fixtures(role: Role, options: MockOptions) {
       created_at: '2026-09-18T12:00:00Z',
     }] : [],
     operation_attachments: [],
-    payment_cases: [{ id: PAYMENT, accreditation_id: ACCREDITATION, period_start: '2026-09-01', period_end: '2026-09-30', amount: 2500000, currency: 'CLP', status: paymentStatus, block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null, invoice_number: 'F-100', submitted_at: '2026-09-15T00:00:00Z', paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null }],
+    payment_cases: [{
+      id: PAYMENT,
+      accreditation_id: ACCREDITATION,
+      compliance_period_id: options.paymentWorkflow ? PAYMENT_PERIOD : null,
+      period_start: options.paymentWorkflow ? '2026-08-01' : '2026-09-01',
+      period_end: options.paymentWorkflow ? '2026-08-31' : '2026-09-30',
+      amount: 2500000,
+      currency: 'CLP',
+      status: paymentStatus,
+      block_reason: paymentStatus === 'observado' ? 'Pendiente de aprobación' : null,
+      invoice_number: 'F-100',
+      submission_note: options.paymentWorkflow ? 'Pago mensual agosto.' : null,
+      submitted_at: '2026-09-15T00:00:00Z',
+      released_at: paymentStatus === 'liberado' || paymentStatus === 'pagado' ? '2026-09-15T00:30:00Z' : null,
+      paid_at: paymentStatus === 'pagado' ? '2026-09-15T01:00:00Z' : null,
+      payment_reference: paymentStatus === 'pagado' ? 'TRX-100' : null,
+    }],
+    payment_approvals: options.paymentWorkflow ? [{
+      id: 'd1000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      decision: paymentStatus === 'retenido' ? 'observado' : 'aprobado',
+      comment: paymentStatus === 'retenido' ? 'Falta antecedente.' : 'Cumplimiento conforme.',
+      decided_by: PROFILE,
+      created_at: '2026-09-15T00:20:00Z',
+    }] : [],
+    payment_case_events: options.paymentWorkflow ? [{
+      id: 'd2000000-0000-4000-8000-000000000001',
+      payment_case_id: PAYMENT,
+      event_type: 'creado',
+      from_status: null,
+      to_status: 'observado',
+      reason: 'Pago mensual agosto.',
+      compliance_snapshot: {},
+      actor_profile_id: PROFILE,
+      created_at: '2026-09-15T00:00:00Z',
+    }] : [],
     support_tickets: [],
     integration_configs: [],
     business_sync_control: [{ revision: 10 }],
@@ -309,6 +357,23 @@ function fixtures(role: Role, options: MockOptions) {
         resolved_at: null,
         occurrence_count: 1,
       },
+      ...(options.paymentWorkflow ? [{
+        notification_key: `payment_blocked:${PAYMENT}`,
+        event_type: 'payment_blocked',
+        category: 'accion',
+        severity: 'critical',
+        status: 'active',
+        title: 'Pago retenido agosto',
+        body: 'El período de agosto requiere revisión antes de liberar el pago.',
+        action_label: 'Ver pago',
+        action_kind: 'operacion',
+        project_key: 'proyecto_piloto',
+        worker_rut: null,
+        requirement_key: null,
+        occurred_at: '2026-09-20T17:30:00Z',
+        resolved_at: null,
+        occurrence_count: 1,
+      }] : []),
       ...(options.evaluationWorkflow ? [{
         notification_key: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
         event_type: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
@@ -464,7 +529,31 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
-      if (url.pathname === '/rest/v1/rpc/mark_payment_paid') {
+      if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(options.paymentWorkflow ? {
+            eligible: true,
+            periodStatus: 'cerrado',
+            compliancePercent: 100,
+            paymentBlockedCount: 0,
+            paymentPendingCount: 0,
+            eligibleReason: null,
+          } : {
+            eligible: false,
+            periodStatus: 'abierto',
+            compliancePercent: 0,
+            paymentBlockedCount: 0,
+            paymentPendingCount: 1,
+            reason: 'El período documental debe cerrarse antes de liberar el pago.',
+          }),
+        });
+      }
+      if (url.pathname === '/rest/v1/rpc/mark_payment_paid'
+          || url.pathname === '/rest/v1/rpc/void_payment_case'
+          || url.pathname === '/rest/v1/rpc/close_compliance_period'
+          || url.pathname === '/rest/v1/rpc/reopen_compliance_period') {
         return route.fulfill({ status: 204, body: '' });
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
@@ -577,18 +666,27 @@ test('07 operación muestra estados de pago gobernados por aprobación', async (
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
   await expect(page.getByText('Pendiente de aprobación')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Aprobaciones' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Marcar pagado' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Detalle e historial' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Registrar pago' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Liberar' })).toHaveCount(0);
 });
 
-test('08 un pago liberado permite únicamente confirmar Pagado', async ({ page }) => {
-  const { calls } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado' });
+test('08 un pago liberado permite registrar el pago con referencia', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { paymentStatus: 'liberado' });
   await openMandanteProject(page);
   await page.getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
-  await page.getByRole('button', { name: 'Marcar pagado' }).click();
-  await expect.poll(() => calls.some(call => call.includes('/rest/v1/rpc/mark_payment_paid'))).toBeTruthy();
+
+  let dialogIndex = 0;
+  page.on('dialog', async dialog => {
+    await dialog.accept(dialogIndex++ === 0 ? 'TRX-LEGACY-08' : 'Pago confirmado');
+  });
+  await page.getByRole('button', { name: 'Registrar pago' }).click();
+
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/mark_payment_paid'
+    && item.body?.p_reference === 'TRX-LEGACY-08'
+  )).toBeTruthy();
 });
 
 test('09 Contratista hidrata su empresa, mantiene proyecto activo visible y separa responsabilidades', async ({ page }) => {
@@ -794,6 +892,69 @@ test('10z Mandante publica evaluación y valida cierre de plan enviado por Contr
     item.path === '/rest/v1/rpc/review_evaluation_action_plan'
     && item.body?.p_plan_id === ACTION_PLAN_REVIEW
     && item.body?.p_decision === 'aprobar'
+  )).toBe(true);
+});
+
+test('10za Mandante solo libera pago observado con período cerrado y cumplimiento habilitado', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { paymentWorkflow: true, paymentStatus: 'observado' });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+
+  const row = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
+  await expect(row.getByText('observado', { exact: true })).toBeVisible();
+  await row.getByRole('button', { name: 'Detalle e historial' }).click();
+
+  await expect(page.getByText('Período habilitado para pago.', { exact: true })).toBeVisible();
+  await expect(page.getByText('100%', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Registrar decisión' }).click();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/rest/v1/payment_approvals'
+    && item.body?.payment_case_id === PAYMENT
+    && item.body?.decision === 'aprobado'
+  )).toBe(true);
+});
+
+test('10zb Mandante registra pago liberado con referencia obligatoria', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { paymentWorkflow: true, paymentStatus: 'liberado' });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+
+  const row = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
+  let dialogIndex = 0;
+  page.on('dialog', async dialog => {
+    await dialog.accept(dialogIndex++ === 0 ? 'TRX-E2E-123' : 'Transferencia validada');
+  });
+  await row.getByRole('button', { name: 'Registrar pago' }).click();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.path === '/rest/v1/rpc/mark_payment_paid'
+    && item.body?.p_payment_case_id === PAYMENT
+    && item.body?.p_reference === 'TRX-E2E-123'
+    && item.body?.p_note === 'Transferencia validada'
+  )).toBe(true);
+});
+
+test('10zc Mandante puede anular pago no pagado con motivo y conserva historial', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { paymentWorkflow: true, paymentStatus: 'retenido' });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+
+  const row = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
+  page.once('dialog', dialog => dialog.accept('Factura anulada y reemplazada'));
+  await row.getByRole('button', { name: 'Anular' }).click();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.path === '/rest/v1/rpc/void_payment_case'
+    && item.body?.p_payment_case_id === PAYMENT
+    && item.body?.p_reason === 'Factura anulada y reemplazada'
   )).toBe(true);
 });
 
@@ -1177,6 +1338,20 @@ test('13d notificación de plan abre el plan de acción exacto', async ({ page }
   await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*plan=${ACTION_PLAN_REVIEW}`));
   await expect(page.locator(`#action-plan-${ACTION_PLAN_REVIEW}`)).toBeVisible();
   await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
+});
+
+test('13e notificación de pago abre el estado de pago exacto', async ({ page }) => {
+  await protectedPage(page, 'contratista', { notificationScenario: true, paymentWorkflow: true });
+  await page.goto('/contratista');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones del contratista');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Pago retenido agosto' });
+  await item.getByRole('button', { name: 'Ver pago' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/contratista/operacion\\?.*proyecto=proyecto_piloto.*pago=${PAYMENT}`));
+  await expect(page.locator(`#payment-case-${PAYMENT}`)).toBeVisible();
+  await expect(page.getByText('100%', { exact: true })).toBeVisible();
 });
 
 test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) => {

@@ -19,6 +19,7 @@ import {
   listActionPlanAttachments,
   listActionPlanEvents,
   listActionPlans,
+  listPaymentCaseEvents,
   listTicketMessages,
   loadOperations,
   openOperationAttachment,
@@ -26,13 +27,16 @@ import {
   uploadActionPlanAttachment,
   type ActionPlanEventRecord,
   type ActionPlanRecord,
+  type CompliancePeriodRecord,
   type EvaluationRecord,
   type OperationAttachmentRecord,
+  type PaymentCaseEventRecord,
   type PaymentRecord,
   type TicketMessageRecord,
   type TicketRecord,
 } from '../../data/supabaseOperations';
 import { updateContractorActionPlan } from '../../data/contractorOperations';
+import { getPaymentCaseCompliance } from '../../data/supabasePaymentState';
 import { proyectoOperativoParaContratista } from '../../data/operationalCore';
 
 type Mode = 'evaluaciones' | 'pagos' | 'soporte';
@@ -40,6 +44,7 @@ type Mode = 'evaluaciones' | 'pagos' | 'soporte';
 type OperationsData = {
   evaluations: EvaluationRecord[];
   payments: PaymentRecord[];
+  periods: CompliancePeriodRecord[];
   tickets: TicketRecord[];
 };
 
@@ -48,6 +53,7 @@ const paymentLabel: Record<string, string> = {
   retenido: 'Retenido',
   liberado: 'Liberado',
   pagado: 'Pagado',
+  anulado: 'Anulado',
 };
 
 const ticketLabel: Record<string, string> = {
@@ -269,6 +275,69 @@ function ContractorActionPlans({
   </div>;
 }
 
+function ContractorPaymentDetail({
+  payment,
+  showToast,
+}: {
+  payment: PaymentRecord;
+  showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+}) {
+  const [events,setEvents]=useState<PaymentCaseEventRecord[]>([]);
+  const [compliance,setCompliance]=useState<Record<string, unknown> | null>(null);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    let cancelled=false;
+    setLoading(true);
+    Promise.all([
+      listPaymentCaseEvents(payment.id),
+      getPaymentCaseCompliance(payment.id),
+    ]).then(([history,context])=>{
+      if(cancelled)return;
+      setEvents(history);
+      setCompliance(context);
+    }).catch(error=>{
+      if(!cancelled) showToast(error instanceof Error?error.message:'No fue posible cargar el detalle del pago.','error');
+    }).finally(()=>{if(!cancelled)setLoading(false);});
+    return()=>{cancelled=true;};
+  },[payment.id,payment.status]);
+
+  if(loading) return <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-500">Cargando detalle del pago…</div>;
+
+  const eligible=compliance?.eligible===true;
+  const reason=String(compliance?.eligibleReason || compliance?.reason || '');
+  const percent=Number(compliance?.compliancePercent || 0);
+  const blockers=Number(compliance?.paymentBlockedCount || 0);
+  const pending=Number(compliance?.paymentPendingCount || 0);
+
+  return <div className="mt-3 rounded-xl border bg-cream2/30 p-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
+      <div className="rounded bg-white p-2"><span className="block text-gray-500">Cumplimiento</span><strong>{percent}%</strong></div>
+      <div className="rounded bg-white p-2"><span className="block text-gray-500">Bloqueos</span><strong>{blockers}</strong></div>
+      <div className="rounded bg-white p-2"><span className="block text-gray-500">Pendientes</span><strong>{pending}</strong></div>
+      <div className="rounded bg-white p-2"><span className="block text-gray-500">Período</span><strong className="capitalize">{String(compliance?.periodStatus || '—')}</strong></div>
+    </div>
+    <div className={`mt-2 rounded-lg border p-3 text-sm ${eligible?'border-green-200 bg-green-50 text-green-800':'border-orange-200 bg-orange-50 text-orange-800'}`}>
+      <strong>{eligible?'Snapshot habilitado para pago.':'Pago no habilitado por cumplimiento.'}</strong>{reason && <span> {reason}</span>}
+    </div>
+
+    {payment.submission_note && <p className="mt-3 text-sm text-gray-600"><strong>Nota del estado de pago:</strong> {payment.submission_note}</p>}
+    {payment.payment_reference && <p className="mt-2 text-sm text-green-800"><strong>Referencia de pago:</strong> {payment.payment_reference}{payment.paid_at?` · ${new Date(payment.paid_at).toLocaleString('es-CL')}`:''}</p>}
+    {payment.payment_note && <p className="mt-1 text-sm text-gray-600">{payment.payment_note}</p>}
+    {payment.void_reason && <p className="mt-2 text-sm text-red-700"><strong>Anulado:</strong> {payment.void_reason}</p>}
+
+    <details className="mt-3">
+      <summary className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-600"><History size={13}/>Historial del pago · {events.length}</summary>
+      <div className="mt-2 space-y-1">
+        {events.map(event=><div key={event.id} className="rounded bg-white px-2 py-1 text-xs text-gray-600">
+          <strong className="capitalize">{event.event_type.replaceAll('_',' ')}</strong> · {new Date(event.created_at).toLocaleString('es-CL')}
+          {event.reason?` · ${event.reason}`:''}
+        </div>)}
+      </div>
+    </details>
+  </div>;
+}
+
 function ContractorTicketConversation({
   ticketId,
   readOnly = false,
@@ -342,22 +411,24 @@ export default function OperationsTab({
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }) {
   const [mode, setMode] = useState<Mode>('evaluaciones');
-  const [data, setData] = useState<OperationsData>({ evaluations: [], payments: [], tickets: [] });
+  const [data, setData] = useState<OperationsData>({ evaluations: [], payments: [], periods: [], tickets: [] });
   const [loading, setLoading] = useState(true);
   const [expandedEvaluation, setExpandedEvaluation] = useState<string>();
+  const [expandedPayment, setExpandedPayment] = useState<string>();
   const [expandedTicket, setExpandedTicket] = useState<string>();
   const [ticketForm, setTicketForm] = useState({ subject: '', description: '', priority: 'normal' });
   const [savingTicket, setSavingTicket] = useState(false);
   const operationParams = new URLSearchParams(window.location.search);
   const requestedPlanId = operationParams.get('plan') || undefined;
   const requestedEvaluationId = operationParams.get('evaluacion') || undefined;
+  const requestedPaymentId = operationParams.get('pago') || undefined;
 
   const project = proyectos.find(item => item.id === selectedProyectoId) || proyectos[0];
   const readOnly = !proyectoOperativoParaContratista(project, contratista.id);
 
   const load = async () => {
     if (!project) {
-      setData({ evaluations: [], payments: [], tickets: [] });
+      setData({ evaluations: [], payments: [], periods: [], tickets: [] });
       setLoading(false);
       return;
     }
@@ -379,6 +450,13 @@ export default function OperationsTab({
       setExpandedEvaluation(requestedEvaluationId);
     }
   }, [requestedEvaluationId, project?.id]);
+
+  useEffect(() => {
+    if (requestedPaymentId && project) {
+      setMode('pagos');
+      setExpandedPayment(requestedPaymentId);
+    }
+  }, [requestedPaymentId, project?.id]);
 
   useEffect(() => {
     if (!requestedPlanId || !project) return;
@@ -429,7 +507,7 @@ export default function OperationsTab({
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Proyecto
-              <select value={project.id} onChange={event => { setSelectedProyectoId(event.target.value); setExpandedEvaluation(undefined); setExpandedTicket(undefined); }} className="form-input mt-1 block min-w-[220px]">
+              <select value={project.id} onChange={event => { setSelectedProyectoId(event.target.value); setExpandedEvaluation(undefined); setExpandedPayment(undefined); setExpandedTicket(undefined); }} className="form-input mt-1 block min-w-[220px]">
                 {proyectos.map(item => <option key={item.id} value={item.id}>{item.nombre}</option>)}
               </select>
             </label>
@@ -480,14 +558,23 @@ export default function OperationsTab({
             {data.evaluations.length === 0 && <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">Todavía no hay evaluaciones publicadas para este proyecto.</div>}
           </section>}
 
-          {mode === 'pagos' && <section className="rounded-xl border border-cream3 bg-white p-4">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
-                <thead><tr className="border-b text-xs uppercase tracking-wide text-gray-500"><th className="p-2">Período</th><th className="p-2">Monto</th><th className="p-2">Referencia</th><th className="p-2">Estado</th><th className="p-2">Observación</th></tr></thead>
-                <tbody>{data.payments.map(item => <tr key={item.id} className="border-b last:border-0"><td className="p-2">{item.period_start} — {item.period_end}</td><td className="p-2">{item.amount ? `$${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}</td><td className="p-2">{item.invoice_number || '—'}</td><td className="p-2"><strong>{paymentLabel[item.status] || item.status}</strong></td><td className="p-2 text-gray-500">{item.block_reason || (item.status === 'pagado' ? 'Pago registrado' : 'Sin observaciones')}</td></tr>)}</tbody>
-              </table>
-            </div>
-            {data.payments.length === 0 && <p className="p-4 text-center text-sm text-gray-500">Todavía no hay estados de pago registrados para este proyecto.</p>}
+          {mode === 'pagos' && <section className="space-y-3">
+            {data.payments.map(item => <article id={`payment-case-${item.id}`} key={item.id} className={`rounded-xl border bg-white p-4 ${requestedPaymentId===item.id?'ring-2 ring-brown/40':'border-cream3'}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <strong className="text-navy">{item.period_start} — {item.period_end}</strong>
+                  <p className="mt-1 text-sm text-gray-600">{item.amount ? `${Number(item.amount).toLocaleString('es-CL')} ${item.currency}` : 'Sin monto'}{item.invoice_number?` · Ref. ${item.invoice_number}`:''}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-cream2 px-2 py-1 text-xs font-semibold">{paymentLabel[item.status] || item.status}</span>
+                    {item.payment_reference && <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700">Pago {item.payment_reference}</span>}
+                  </div>
+                  {item.block_reason && <p className="mt-2 text-sm text-red-700">{item.block_reason}</p>}
+                </div>
+                <button type="button" className="btn btn-secondary" onClick={() => setExpandedPayment(current => current===item.id?undefined:item.id)}>{expandedPayment===item.id?'Ocultar detalle':'Ver detalle'}</button>
+              </div>
+              {expandedPayment===item.id && <ContractorPaymentDetail payment={item} showToast={showToast}/>}
+            </article>)}
+            {data.payments.length === 0 && <div className="rounded-xl border bg-white p-6 text-center text-sm text-gray-500">Todavía no hay estados de pago registrados para este proyecto.</div>}
           </section>}
 
           {mode === 'soporte' && <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_1.4fr]">

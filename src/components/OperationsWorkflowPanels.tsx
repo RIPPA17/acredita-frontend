@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Clock3, FileText, MessageSquare, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
+import { getPaymentCaseCompliance } from '../data/supabasePaymentState';
 import {
   createActionPlan,
   createPaymentApproval,
@@ -7,6 +8,7 @@ import {
   listActionPlanEvents,
   listActionPlans,
   listPaymentApprovals,
+  listPaymentCaseEvents,
   listTicketMessages,
   openOperationAttachment,
   reviewActionPlan,
@@ -16,6 +18,8 @@ import {
   type EvaluationStatus,
   type OperationAttachmentRecord,
   type PaymentApprovalRecord,
+  type PaymentCaseEventRecord,
+  type PaymentRecord,
   type TicketMessageRecord,
 } from '../data/supabaseOperations';
 
@@ -195,12 +199,111 @@ export function EvaluationActionPlans({
   </div>;
 }
 
-export function PaymentApprovals({ paymentId, showToast, onChanged }: { paymentId: string; showToast: (message: string, type?: 'success'|'error'|'warning') => void; onChanged: () => void }) {
-  const [items,setItems]=useState<PaymentApprovalRecord[]>([]); const [decision,setDecision]=useState<PaymentApprovalRecord['decision']>('aprobado'); const [comment,setComment]=useState(''); const [saving,setSaving]=useState(false);
-  const load=async()=>{try{setItems(await listPaymentApprovals(paymentId));}catch(error){showToast(error instanceof Error?error.message:'No fue posible cargar aprobaciones.','error');}};
-  useEffect(()=>{void load();},[paymentId]);
-  const submit=async(event:FormEvent)=>{event.preventDefault();if(saving)return;setSaving(true);try{await createPaymentApproval(paymentId,decision,comment||undefined);setComment('');await load();onChanged();showToast(decision==='aprobado'?'Pago aprobado y liberado.':'Pago observado/retenido.');}catch(error){showToast(error instanceof Error?error.message:'No fue posible registrar la aprobación.','error');}finally{setSaving(false);}};
-  return <div className="border rounded-xl p-4 mt-3"><h4 className="font-semibold text-navy">Aprobaciones de pago</h4><p className="text-sm text-gray-500">Cada decisión queda trazada y actualiza automáticamente el estado del pago.</p><form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3"><select value={decision} onChange={e=>setDecision(e.target.value as PaymentApprovalRecord['decision'])} className="form-input p-2 border rounded"><option value="aprobado">Aprobar</option><option value="observado">Observar</option><option value="rechazado">Rechazar</option></select><input value={comment} onChange={e=>setComment(e.target.value)} className="form-input p-2 border rounded sm:col-span-2" placeholder="Comentario o fundamento"/><button className="btn btn-primary sm:col-span-3" disabled={saving}>Registrar decisión</button></form><div className="space-y-2 mt-3">{items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong>{item.decision}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.comment?` · ${item.comment}`:''}</span></div>)}{items.length===0&&<p className="text-sm text-gray-500">Aún no hay decisiones registradas.</p>}</div></div>;
+export function PaymentApprovals({
+  payment,
+  readOnly = false,
+  showToast,
+  onChanged,
+}: {
+  payment: PaymentRecord;
+  readOnly?: boolean;
+  showToast: (message: string, type?: 'success'|'error'|'warning') => void;
+  onChanged: () => void;
+}) {
+  const [items,setItems]=useState<PaymentApprovalRecord[]>([]);
+  const [events,setEvents]=useState<PaymentCaseEventRecord[]>([]);
+  const [compliance,setCompliance]=useState<Record<string, unknown> | null>(null);
+  const [decision,setDecision]=useState<PaymentApprovalRecord['decision']>('aprobado');
+  const [comment,setComment]=useState('');
+  const [saving,setSaving]=useState(false);
+
+  const load=async()=>{
+    try{
+      const [approvals, history, context]=await Promise.all([
+        listPaymentApprovals(payment.id),
+        listPaymentCaseEvents(payment.id),
+        getPaymentCaseCompliance(payment.id),
+      ]);
+      setItems(approvals);
+      setEvents(history);
+      setCompliance(context);
+    }catch(error){
+      showToast(error instanceof Error?error.message:'No fue posible cargar el detalle del pago.','error');
+    }
+  };
+  useEffect(()=>{void load();},[payment.id,payment.status]);
+
+  const submit=async(event:FormEvent)=>{
+    event.preventDefault();
+    if(saving || readOnly || !['observado','retenido'].includes(payment.status)) return;
+    if(decision!=='aprobado' && comment.trim().length<3){
+      showToast('Indica el fundamento de la observación o rechazo.','warning');
+      return;
+    }
+    setSaving(true);
+    try{
+      await createPaymentApproval(payment.id,decision,comment||undefined);
+      setComment('');
+      await load();
+      onChanged();
+      showToast(decision==='aprobado'?'Pago aprobado y liberado.':'Pago observado/retenido.');
+    }catch(error){
+      showToast(error instanceof Error?error.message:'No fue posible registrar la decisión.','error');
+    }finally{setSaving(false);}
+  };
+
+  const eligible=compliance?.eligible===true;
+  const reason=String(compliance?.eligibleReason || compliance?.reason || '');
+  const periodStatus=String(compliance?.periodStatus || '');
+  const compliancePercent=Number(compliance?.compliancePercent || 0);
+  const blockedCount=Number(compliance?.paymentBlockedCount || 0);
+  const pendingCount=Number(compliance?.paymentPendingCount || 0);
+  const decisionOpen=!readOnly && ['observado','retenido'].includes(payment.status);
+
+  return <div className="border rounded-xl p-4 mt-3">
+    <h4 className="font-semibold text-navy">Aprobaciones y cumplimiento del pago</h4>
+    <p className="text-sm text-gray-500">La liberación solo es posible con el período documental cerrado y un snapshot que habilite pago.</p>
+
+    <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+      <div className="rounded-lg bg-cream2 p-2"><span className="block text-gray-500">Período</span><strong className="capitalize">{periodStatus || '—'}</strong></div>
+      <div className="rounded-lg bg-cream2 p-2"><span className="block text-gray-500">Cumplimiento</span><strong>{compliancePercent}%</strong></div>
+      <div className="rounded-lg bg-cream2 p-2"><span className="block text-gray-500">Bloqueos</span><strong>{blockedCount}</strong></div>
+      <div className="rounded-lg bg-cream2 p-2"><span className="block text-gray-500">Pendientes</span><strong>{pendingCount}</strong></div>
+    </div>
+    <div className={`mt-2 rounded-lg border p-3 text-sm ${eligible?'border-green-200 bg-green-50 text-green-800':'border-orange-200 bg-orange-50 text-orange-800'}`}>
+      <strong>{eligible?'Período habilitado para pago.':'Pago aún no habilitado.'}</strong>
+      {reason && <span> {reason}</span>}
+    </div>
+
+    {decisionOpen && <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+      <select value={decision} onChange={e=>setDecision(e.target.value as PaymentApprovalRecord['decision'])} className="form-input p-2 border rounded">
+        <option value="aprobado">Aprobar y liberar</option>
+        <option value="observado">Observar / retener</option>
+        <option value="rechazado">Rechazar / retener</option>
+      </select>
+      <input value={comment} onChange={e=>setComment(e.target.value)} className="form-input p-2 border rounded sm:col-span-2" placeholder={decision==='aprobado'?'Comentario opcional':'Fundamento obligatorio'}/>
+      <button className="btn btn-primary sm:col-span-3" disabled={saving || (decision==='aprobado' && !eligible)}>Registrar decisión</button>
+    </form>}
+
+    {!decisionOpen && <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600">
+      {payment.status==='liberado' ? 'Pago liberado · ya no admite nuevas aprobaciones. Falta registrar el pago efectivo.'
+        : payment.status==='pagado' ? 'Pago finalizado · historial inmutable.'
+        : payment.status==='anulado' ? 'Pago anulado · historial inmutable.'
+        : readOnly ? 'Modo histórico · solo consulta.'
+        : 'Este pago no admite una nueva decisión en su estado actual.'}
+    </div>}
+
+    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div>
+        <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Decisiones</h5>
+        <div className="space-y-2 mt-2">{items.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong className="capitalize">{item.decision}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.comment?` · ${item.comment}`:''}</span></div>)}{items.length===0&&<p className="text-sm text-gray-500">Aún no hay decisiones registradas.</p>}</div>
+      </div>
+      <div>
+        <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Historial</h5>
+        <div className="space-y-2 mt-2">{events.map(item=><div key={item.id} className="border rounded-lg p-2 text-sm"><strong className="capitalize">{item.event_type.replaceAll('_',' ')}</strong><span className="block text-gray-500">{new Date(item.created_at).toLocaleString('es-CL')}{item.reason?` · ${item.reason}`:''}</span></div>)}{events.length===0&&<p className="text-sm text-gray-500">Sin eventos todavía.</p>}</div>
+      </div>
+    </div>
+  </div>;
 }
 
 export function TicketConversation({ ticketId, showToast }: { ticketId: string; showToast: (message: string, type?: 'success'|'error'|'warning') => void }) {

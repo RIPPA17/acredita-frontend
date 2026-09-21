@@ -34,12 +34,30 @@ export interface OperationAttachmentRecord {
   id: string; action_plan_id?: string; file_name: string; mime_type: string; file_size: number;
   storage_bucket: string; storage_path: string; uploaded_by: string; created_at: string;
 }
+export type PaymentStatus = 'observado' | 'retenido' | 'liberado' | 'pagado' | 'anulado';
+export interface CompliancePeriodRecord {
+  id: string; project_id: string; period_start: string; period_end: string;
+  upload_deadline?: string; review_deadline?: string;
+  status: 'abierto' | 'cerrado' | 'reabierto';
+  closed_at?: string; reopened_at?: string; reopen_reason?: string;
+}
 export interface PaymentRecord {
-  id: string; accreditation_id: string; period_start: string; period_end: string; amount?: number; currency: string;
-  status: string; block_reason?: string; invoice_number?: string; submitted_at?: string; paid_at?: string;
+  id: string; accreditation_id: string; compliance_period_id: string;
+  period_start: string; period_end: string; amount?: number; currency: string;
+  status: PaymentStatus; block_reason?: string; invoice_number?: string; submission_note?: string;
+  submitted_at?: string; released_at?: string; paid_at?: string;
+  payment_reference?: string; payment_note?: string; voided_at?: string; void_reason?: string;
+  compliance_snapshot?: Record<string, unknown>; compliance_checked_at?: string;
+  contratista_id?: string; accreditation_active?: boolean;
 }
 export interface PaymentApprovalRecord {
-  id: string; payment_case_id: string; decision: 'aprobado' | 'observado' | 'rechazado'; comment?: string; created_at: string;
+  id: string; payment_case_id: string; decision: 'aprobado' | 'observado' | 'rechazado'; comment?: string;
+  decided_by?: string; created_at: string;
+}
+export interface PaymentCaseEventRecord {
+  id: string; payment_case_id: string; event_type: string;
+  from_status?: string; to_status?: string; reason?: string;
+  compliance_snapshot?: Record<string, unknown>; actor_profile_id?: string; created_at: string;
 }
 export interface TicketRecord {
   id: string; accreditation_id?: string; category: string; priority: string; status: string;
@@ -91,9 +109,10 @@ export async function loadOperations(projectKey: string) {
   const ids = accreditations.map(item => item.id);
   const accreditationMap = new Map(accreditations.map(item => [item.id, item]));
   const filter = ids.length ? `&accreditation_id=in.(${ids.join(',')})` : '';
-  const [rawEvaluations, payments, tickets] = await Promise.all([
+  const [rawEvaluations, rawPayments, periods, tickets] = await Promise.all([
     ids.length ? request<EvaluationRecord[]>(`contractor_evaluations?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
     ids.length ? request<PaymentRecord[]>(`payment_cases?select=*&order=period_end.desc${filter}`) : Promise.resolve([]),
+    request<CompliancePeriodRecord[]>(`compliance_periods?select=*&project_id=eq.${projectId}&order=period_start.desc`),
     request<TicketRecord[]>(`support_tickets?select=*&project_id=eq.${projectId}&order=created_at.desc`),
   ]);
   const evaluations = rawEvaluations.map(item => ({
@@ -101,7 +120,12 @@ export async function loadOperations(projectKey: string) {
     contratista_id: accreditationMap.get(item.accreditation_id)?.contratista_id,
     accreditation_active: accreditationMap.get(item.accreditation_id)?.is_active === true,
   }));
-  return { evaluations, payments, tickets };
+  const payments = rawPayments.map(item => ({
+    ...item,
+    contratista_id: accreditationMap.get(item.accreditation_id)?.contratista_id,
+    accreditation_active: accreditationMap.get(item.accreditation_id)?.is_active === true,
+  }));
+  return { evaluations, payments, periods, tickets };
 }
 
 export type EvaluationInput = {
@@ -245,19 +269,42 @@ export async function openOperationAttachment(item: OperationAttachmentRecord): 
 }
 
 export async function createPayment(projectKey: string, contractorKey: string, input: {
-  start: string; end: string; amount?: number; status: string; reason?: string; invoiceNumber?: string;
+  period: CompliancePeriodRecord; amount: number; invoiceNumber?: string; note?: string;
 }) {
   const session = await getSupabaseSessionForRequest();
   if (!session) throw new Error('Tu sesión expiró.');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('Ingresa un monto de pago mayor que cero.');
   const accreditation_id = await resolveAccreditation(projectKey, contractorKey);
   await request<void>('payment_cases', {
     method: 'POST', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
-      accreditation_id, period_start: input.start, period_end: input.end,
-      amount: input.amount || null, status: input.status, block_reason: input.reason || null,
-      invoice_number: input.invoiceNumber || null, submitted_by: session.profileId, submitted_at: new Date().toISOString(),
+      accreditation_id,
+      period_start: input.period.period_start,
+      period_end: input.period.period_end,
+      amount: input.amount,
+      status: 'observado',
+      submission_note: input.note?.trim() || null,
+      invoice_number: input.invoiceNumber?.trim() || null,
+      submitted_by: session.profileId,
+      submitted_at: new Date().toISOString(),
     }),
   });
+}
+
+export async function updatePaymentDetails(paymentCaseId: string, input: { amount: number; invoiceNumber?: string; note?: string }) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('Ingresa un monto de pago mayor que cero.');
+  await request<void>(`payment_cases?id=eq.${paymentCaseId}`, {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      amount: input.amount,
+      invoice_number: input.invoiceNumber?.trim() || null,
+      submission_note: input.note?.trim() || null,
+    }),
+  });
+}
+
+export async function listPaymentCaseEvents(paymentCaseId: string): Promise<PaymentCaseEventRecord[]> {
+  return request<PaymentCaseEventRecord[]>(`payment_case_events?select=*&payment_case_id=eq.${paymentCaseId}&order=created_at.desc`);
 }
 
 export async function listPaymentApprovals(paymentCaseId: string): Promise<PaymentApprovalRecord[]> {
