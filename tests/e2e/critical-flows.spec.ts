@@ -628,6 +628,16 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
           if (existing) Object.assign(existing, body);
           return route.fulfill({ status: 204, body: '' });
         }
+        if (request.method() === 'POST' && table === 'requirements') {
+          const payload = Array.isArray(body) ? body : [body];
+          const requirementRows = data.requirements as any[];
+          for (const item of payload) {
+            const existing = requirementRows.find(row => row.integration_key === item.integration_key);
+            if (existing) Object.assign(existing, item);
+            else requirementRows.push({ id: `99000000-0000-4000-8000-${String(requirementRows.length + 1).padStart(12, '0')}`, ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
         if (request.method() === 'POST' && table === 'workers') {
           const payload = Array.isArray(body) ? body : [body];
           const workerRows = data.workers as any[];
@@ -777,6 +787,56 @@ test('05b Mandante no puede volver opcional un requisito que bloquea una operaci
 
   await expect(requiredSwitch).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByText('Un requisito que bloquea una operación no puede ser opcional.')).toBeVisible();
+});
+
+test('05c Mandante crea requisito con alerta propia, evita duplicados y conserva el ciclo de vida', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante');
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Requisitos', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Agregar requisito' }).click();
+  await page.getByPlaceholder('Ej. F30 SII').fill('Certificado Especial QA');
+  await page.getByLabel('Alerta preventiva').fill('21');
+  await page.getByRole('button', { name: 'Agregar requisito', exact: true }).last().click();
+
+  await expect(page.getByText('Requisito agregado con éxito')).toBeVisible();
+  const row = page.locator('.mandante-proyectos-requirement').filter({ hasText: 'Certificado Especial QA' });
+  await expect(row).toContainText('Alerta 21 días');
+  await expect.poll(() => mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/rest/v1/requirements'
+    && (Array.isArray(item.body) ? item.body : [item.body]).some((req: any) =>
+      req.name === 'Certificado Especial QA' && req.alert_days === 21
+    )
+  )).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Agregar requisito' }).click();
+  await page.getByPlaceholder('Ej. F30 SII').fill('Certificado Especial QA');
+  await page.getByRole('button', { name: 'Agregar requisito', exact: true }).last().click();
+  await expect(page.getByText('Ya existe un requisito activo con ese nombre, destino y ámbito.')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).last().click();
+
+  page.once('dialog', dialog => dialog.accept());
+  await row.getByRole('button', { name: 'Retirar' }).click();
+  await expect(page.getByRole('heading', { name: 'Requisitos retirados' })).toBeVisible();
+  const retired = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Certificado Especial QA' });
+  await expect(retired).toBeVisible();
+  await retired.getByRole('button', { name: 'Reactivar' }).click();
+  await expect(page.locator('.mandante-proyectos-requirement').filter({ hasText: 'Certificado Especial QA' })).toBeVisible();
+});
+
+test('05d Proyecto archivado mantiene la matriz documental en solo lectura', async ({ page }) => {
+  await protectedPage(page, 'mandante', { historicalProject: true });
+  await page.goto('/mandante');
+  await page.getByText('Proyectos', { exact: true }).first().click();
+  await page.getByText('Proyecto Histórico QA').first().click();
+  await page.getByRole('button', { name: 'Requisitos', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: 'Solo lectura' })).toBeDisabled();
+  const row = page.locator('.mandante-proyectos-requirement').filter({ hasText: 'Documento Histórico QA' });
+  await expect(row.getByRole('button', { name: 'Editar' })).toBeDisabled();
+  await expect(row.getByRole('button', { name: 'Retirar' })).toBeDisabled();
+  await expect(page.getByText('Proyecto archivado: la matriz se conserva para consulta e historial.')).toBeVisible();
 });
 
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {

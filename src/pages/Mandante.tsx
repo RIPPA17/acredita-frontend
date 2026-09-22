@@ -127,7 +127,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
   const [isAddDocModalOpen, setIsAddDocModalOpen] = useState(false);
   const [savingRequirement, setSavingRequirement] = useState(false);
-  const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5 });
+  const [newDocForm, setNewDocForm] = useState({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', alertDays: 7, dueDays: 5 });
 
   const [showInvitarModal, setShowInvitarModal] = useState(false);
   const [formInvitacion, setFormInvitacion] = useState({correo: '', contratistaId: '', proyectoId: '', mensaje: ''});
@@ -154,10 +154,35 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
   const handleAddRequirement = async () => {
     if (!newDocForm.name.trim() || !activeProjectId || savingRequirement) return;
-    const newId = `${activeProjectId}_${newDocForm.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const project = getProyectos().find(item => item.id === activeProjectId);
+    if (!project || project.estado === 'Archivado') {
+      showToast('Un proyecto archivado se mantiene solo para consulta.', 'warning');
+      return;
+    }
+
+    const normalizedName = newDocForm.name.trim().toLocaleLowerCase('es');
+    const duplicate = getRequisitos().some(item =>
+      item.proyectoId === activeProjectId
+      && item.activo !== false
+      && item.destino === newDocForm.destino
+      && (item.servicioId || '') === (newDocForm.servicioId || '')
+      && item.nombre.trim().toLocaleLowerCase('es') === normalizedName
+    );
+    if (duplicate) {
+      showToast('Ya existe un requisito activo con ese nombre, destino y ámbito.', 'warning');
+      return;
+    }
+
+    const uniqueValues = (value: string) => Array.from(new Map(
+      value.split(/[,\n]/).map(item => item.trim()).filter(Boolean).map(item => [item.toLocaleLowerCase('es'), item])
+    ).values());
+    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replaceAll('-', '')
+      : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const newId = `requisito_${activeProjectId}_${randomPart}`;
     const newReq = {
       id: newId,
-      nombre: newDocForm.name,
+      nombre: newDocForm.name.trim(),
       categoria: (newDocForm.category === 'Prevención de Riesgos' ? 'Prevención' : newDocForm.category) as 'Laboral' | 'Tributario' | 'Prevención',
       destino: newDocForm.destino as 'empresa' | 'trabajador',
       obligatorio: configuracionRequisitoRequiereObligatoriedad(
@@ -166,13 +191,13 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
         newDocForm.bloqueaAsignacion,
       ) ? true : newDocForm.obligatorio,
       frecuencia: newDocForm.frequency,
-      alertaDias: newDocForm.destino === 'trabajador' ? 15 : 7,
+      alertaDias: Math.min(365, Math.max(0, Number(newDocForm.alertDays) || 0)),
       criticidad: newDocForm.criticidad as 'bloquea_pago' | 'bloquea_acceso' | 'bloquea_ambas' | 'advertencia',
       proyectoId: activeProjectId,
       activo: true,
       descripcion: newDocForm.description.trim() || undefined,
-      checklistRevision: newDocForm.checklist.split('\n').map(item => item.trim()).filter(Boolean),
-      categoriasAplicables: newDocForm.categories.split(',').map(item => item.trim()).filter(Boolean),
+      checklistRevision: uniqueValues(newDocForm.checklist),
+      categoriasAplicables: newDocForm.destino === 'trabajador' ? uniqueValues(newDocForm.categories) : [],
       bloqueaTrabajo: newDocForm.bloqueaTrabajo,
       bloqueaAsignacion: newDocForm.bloqueaAsignacion,
       servicioId: newDocForm.servicioId || undefined,
@@ -187,7 +212,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
       setDocumentRequirements(updatedReqs.map(r => ({ id: r.id, name: r.nombre, category: r.categoria, frequency: r.frecuencia, obligatorio: r.obligatorio, destino: r.destino, criticidad: r.criticidad, alertaDias: r.alertaDias })));
       setContractorsData(buildMandanteContractorsData(allContratistas, activeProjectId));
       setIsAddDocModalOpen(false);
-      setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5 });
+      setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', alertDays: 7, dueDays: 5 });
       showToast('Requisito agregado con éxito');
     } catch (error) {
       const restored = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
@@ -465,14 +490,17 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
               <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Nombre</label><input value={newDocForm.name} onChange={event => setNewDocForm({ ...newDocForm, name: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="Ej. F30 SII" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Categoría</label><select value={newDocForm.category} onChange={event => setNewDocForm({ ...newDocForm, category: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Laboral</option><option>Tributario</option><option>Prevención de Riesgos</option></select></div>
-                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Destino</label><select value={newDocForm.destino} onChange={event => setNewDocForm({ ...newDocForm, destino: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="empresa">Empresa</option><option value="trabajador">Trabajador</option></select></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Destino</label><select value={newDocForm.destino} onChange={event => { const destino = event.target.value; setNewDocForm({ ...newDocForm, destino, alertDays: destino === 'trabajador' ? 15 : 7, categories: destino === 'trabajador' ? newDocForm.categories : '' }); }} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="empresa">Empresa</option><option value="trabajador">Trabajador</option></select></div>
               </div>
               <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Ámbito del requisito</label><select value={newDocForm.servicioId} onChange={event => setNewDocForm({ ...newDocForm, servicioId: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="">Todo el proyecto</option>{getServiciosProyecto(activeProjectId).map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}</select></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Frecuencia</label><select value={newDocForm.frequency} onChange={event => setNewDocForm({ ...newDocForm, frequency: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option>Mensual</option><option>Bimensual</option><option>Trimestral</option><option>Por Proyecto</option><option>6 meses</option><option>1 año</option><option>Indefinido</option></select></div>
                 <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Criticidad</label><select value={newDocForm.criticidad} onChange={event => { const criticidad = event.target.value; setNewDocForm({ ...newDocForm, criticidad, obligatorio: configuracionRequisitoRequiereObligatoriedad(criticidad as any, newDocForm.bloqueaTrabajo, newDocForm.bloqueaAsignacion) ? true : newDocForm.obligatorio }); }} className="form-input w-full p-2.5 border border-cream3 rounded-lg"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea acceso</option><option value="bloquea_ambas">Bloquea acceso y pago</option><option value="advertencia">Solo advertencia</option></select></div>
               </div>
-              <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Días de plazo después del período</label><input type="number" min="0" max="90" value={newDocForm.dueDays} onChange={event => setNewDocForm({ ...newDocForm, dueDays: Number(event.target.value) })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" /><p className="text-[10.5px] text-gray-500 mt-1">Define la fecha límite automática de cada obligación.</p></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Alerta preventiva (días)</label><input aria-label="Alerta preventiva" type="number" min="0" max="365" value={newDocForm.alertDays} onChange={event => setNewDocForm({ ...newDocForm, alertDays: Number(event.target.value) })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" /><p className="text-[10.5px] text-gray-500 mt-1">Cuántos días antes del vencimiento se avisará.</p></div>
+                <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Plazo después del período</label><input aria-label="Plazo después del período" type="number" min="0" max="90" value={newDocForm.dueDays} onChange={event => setNewDocForm({ ...newDocForm, dueDays: Number(event.target.value) })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" /><p className="text-[10.5px] text-gray-500 mt-1">Define la fecha límite automática de cada obligación.</p></div>
+              </div>
               <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Descripción para el contratista</label><textarea value={newDocForm.description} onChange={event => setNewDocForm({ ...newDocForm, description: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg min-h-20" placeholder="Qué debe presentar y a qué período debe corresponder." /></div>
               <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Checklist de revisión</label><textarea value={newDocForm.checklist} onChange={event => setNewDocForm({ ...newDocForm, checklist: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg min-h-24" placeholder={'Un criterio por línea\nRUT correcto\nPeríodo correcto\nDocumento íntegro y legible'} /><p className="text-[10.5px] text-gray-500 mt-1">La misma pauta será visible para quien carga y quien revisa.</p></div>
               {newDocForm.destino === 'trabajador' && <div><label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Categorías aplicables</label><input value={newDocForm.categories} onChange={event => setNewDocForm({ ...newDocForm, categories: event.target.value })} className="form-input w-full p-2.5 border border-cream3 rounded-lg" placeholder="General, Conductor, Trabajo en altura" /><p className="text-[10.5px] text-gray-500 mt-1">Sepáralas por coma. Vacío significa que aplica a todos.</p></div>}
