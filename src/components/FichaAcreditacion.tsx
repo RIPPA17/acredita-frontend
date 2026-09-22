@@ -6,7 +6,10 @@ import {
 import { 
   calcularEstadoTrabajador, 
   calcularEstadoAcreditacion, 
-  calcularAccesoPago, 
+  calcularAccesoPago,
+  evaluarHabilitacionOperativaAdicional,
+  evaluarHabilitacionTrabajador,
+  getImpactosRequisito,
   getRequisitos,
   esVencidoPorFecha,
   esPorVencerPorFecha,
@@ -62,8 +65,12 @@ function LegacyFichaAcreditacion({
   let accesoBloqueado = false;
   let pagoBloqueado = false;
   let accesoEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
+  let trabajoEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
+  let asignacionEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
   let pagoEstado: 'habilitado' | 'pendiente' | 'bloqueado' = 'pendiente';
   let motivoAccesoStr = '';
+  let motivoTrabajoStr = '';
+  let motivoAsignacionStr = '';
   let motivoPagoStr = '';
 
   if (currentTipo === 'trabajador' && currentTrabajador) {
@@ -236,26 +243,54 @@ function LegacyFichaAcreditacion({
       ? (pendientes[0] || 'Acreditación en proceso')
       : '';
 
-  if (currentTipo === 'trabajador') {
-    accesoEstado = statusText === 'Acreditado' ? 'habilitado' : statusText === 'Vencido/Bloqueado' ? 'bloqueado' : 'pendiente';
-    pagoEstado = accesoEstado;
+  if (currentTipo === 'trabajador' && currentTrabajador) {
+    const acceso = evaluarHabilitacionTrabajador(currentTrabajador, proyectoId, 'acceso', contratista.id);
+    const trabajo = evaluarHabilitacionTrabajador(currentTrabajador, proyectoId, 'trabajo', contratista.id);
+    const asignacion = evaluarHabilitacionTrabajador(currentTrabajador, proyectoId, 'asignacion', contratista.id);
+    const pago = evaluarHabilitacionTrabajador(currentTrabajador, proyectoId, 'pago', contratista.id);
+    accesoEstado = acceso.estado;
+    trabajoEstado = trabajo.estado;
+    asignacionEstado = asignacion.estado;
+    pagoEstado = pago.estado;
     accesoBloqueado = accesoEstado === 'bloqueado';
     pagoBloqueado = pagoEstado === 'bloqueado';
-    motivoAccesoStr = accesoEstado !== 'habilitado' ? motivoTexto : '';
-    motivoPagoStr = pagoEstado !== 'habilitado' ? motivoTexto : '';
+    motivoAccesoStr = acceso.motivo || '';
+    motivoTrabajoStr = trabajo.motivo || '';
+    motivoAsignacionStr = asignacion.motivo || '';
+    motivoPagoStr = pago.motivo || '';
   } else {
     const accPago = calcularAccesoPago(contratista, proyectoId);
+    const trabajo = evaluarHabilitacionOperativaAdicional(contratista, proyectoId, 'trabajo');
+    const asignacion = evaluarHabilitacionOperativaAdicional(contratista, proyectoId, 'asignacion');
     accesoEstado = accPago.accesoEstado;
+    trabajoEstado = trabajo.estado;
+    asignacionEstado = asignacion.estado;
     pagoEstado = accPago.pagoEstado;
     accesoBloqueado = accPago.accesoBloqueado;
     pagoBloqueado = accPago.pagoBloqueado;
     motivoAccesoStr = accPago.accesoEstado !== 'habilitado' ? (accPago.motivoAcceso || motivoTexto) : '';
+    motivoTrabajoStr = trabajo.motivo || '';
+    motivoAsignacionStr = asignacion.motivo || '';
     motivoPagoStr = accPago.pagoEstado !== 'habilitado' ? (accPago.motivoPago || motivoTexto) : '';
   }
 
-  const accesoTone = accesoEstado === 'bloqueado' ? 'bg-red-50/40 border-red-200 text-red-900' : accesoEstado === 'pendiente' ? 'bg-amber-50/40 border-amber-200 text-amber-900' : 'bg-green-50/40 border-green-200 text-green-900';
-  const pagoTone = pagoEstado === 'bloqueado' ? 'bg-red-50/40 border-red-200 text-red-900' : pagoEstado === 'pendiente' ? 'bg-amber-50/40 border-amber-200 text-amber-900' : 'bg-green-50/40 border-green-200 text-green-900';
-  const accesoLabel = accesoEstado === 'bloqueado' ? '✗ Bloqueado' : accesoEstado === 'pendiente' ? '⏳ Pendiente' : '✓ Habilitado';
+  const toneFor = (estado: 'habilitado' | 'pendiente' | 'bloqueado') => estado === 'bloqueado'
+    ? 'bg-red-50/40 border-red-200 text-red-900'
+    : estado === 'pendiente'
+      ? 'bg-amber-50/40 border-amber-200 text-amber-900'
+      : 'bg-green-50/40 border-green-200 text-green-900';
+  const labelFor = (estado: 'habilitado' | 'pendiente' | 'bloqueado') => estado === 'bloqueado'
+    ? '✗ Bloqueado'
+    : estado === 'pendiente'
+      ? '⏳ Pendiente'
+      : '✓ Habilitado';
+  const accesoTone = toneFor(accesoEstado);
+  const trabajoTone = toneFor(trabajoEstado);
+  const asignacionTone = toneFor(asignacionEstado);
+  const pagoTone = toneFor(pagoEstado);
+  const accesoLabel = labelFor(accesoEstado);
+  const trabajoLabel = labelFor(trabajoEstado);
+  const asignacionLabel = labelFor(asignacionEstado);
   const pagoLabel = pagoEstado === 'bloqueado' ? '✗ Retenido' : pagoEstado === 'pendiente' ? '⏳ Pendiente' : '✓ Habilitado';
 
   // Filtrar trabajadores asignados al proyecto para mostrarlos si es Empresa
@@ -408,24 +443,26 @@ function LegacyFichaAcreditacion({
                 <span className="font-bold">{accesoLabel}</span>
               </div>
 
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoTone}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${trabajoTone}`}>
                 <div className="flex items-center gap-2">
-                  <Briefcase size={16} className={accesoEstado === 'bloqueado' ? 'text-red-500' : accesoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
+                  <Briefcase size={16} className={trabajoEstado === 'bloqueado' ? 'text-red-500' : trabajoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Trabajar en faena</span>
+                    {trabajoEstado !== 'habilitado' && motivoTrabajoStr && <div className="text-[10.5px] font-sans mt-0.5">{trabajoEstado === 'bloqueado' ? 'Bloqueo por' : 'Pendiente por'}: {motivoTrabajoStr}</div>}
                   </div>
                 </div>
-                <span className="font-bold">{accesoLabel}</span>
+                <span className="font-bold">{trabajoLabel}</span>
               </div>
 
-              <div className={`p-3 border rounded-xl flex items-center justify-between ${accesoTone}`}>
+              <div className={`p-3 border rounded-xl flex items-center justify-between ${asignacionTone}`}>
                 <div className="flex items-center gap-2">
-                  <CheckCircle size={16} className={accesoEstado === 'bloqueado' ? 'text-red-500' : accesoEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
+                  <CheckCircle size={16} className={asignacionEstado === 'bloqueado' ? 'text-red-500' : asignacionEstado === 'pendiente' ? 'text-amber-600' : 'text-green-600'} />
                   <div>
                     <span className="font-semibold">Asignación a obra</span>
+                    {asignacionEstado !== 'habilitado' && motivoAsignacionStr && <div className="text-[10.5px] font-sans mt-0.5">{asignacionEstado === 'bloqueado' ? 'Bloqueo por' : 'Pendiente por'}: {motivoAsignacionStr}</div>}
                   </div>
                 </div>
-                <span className="font-bold">{accesoLabel}</span>
+                <span className="font-bold">{asignacionLabel}</span>
               </div>
 
               <div className={`p-3 border rounded-xl flex items-center justify-between ${pagoTone}`}>
@@ -446,17 +483,17 @@ function LegacyFichaAcreditacion({
           <div className="flex flex-col gap-3">
             <h4 className="text-[12px] font-bold uppercase tracking-wider text-gray-400">Estado operativo</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px] font-medium">
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${asignacionTone}`}>
                 <span>Asignación</span>
-                <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
+                <span className="font-bold text-[14px]">{asignacionEstado === 'habilitado' ? '✓' : asignacionEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
               <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
                 <span>Ingreso</span>
                 <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
-              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${accesoTone}`}>
+              <div className={`p-2.5 rounded-lg flex items-center justify-between border ${trabajoTone}`}>
                 <span>Trabajo</span>
-                <span className="font-bold text-[14px]">{accesoEstado === 'habilitado' ? '✓' : accesoEstado === 'pendiente' ? '⏳' : '✕'}</span>
+                <span className="font-bold text-[14px]">{trabajoEstado === 'habilitado' ? '✓' : trabajoEstado === 'pendiente' ? '⏳' : '✕'}</span>
               </div>
               <div className={`p-2.5 rounded-lg flex items-center justify-between border ${pagoTone}`}>
                 <span>Pago</span>
@@ -556,6 +593,7 @@ function LegacyFichaAcreditacion({
                           const showRevisor = rol === 'admin';
                           const showImpact = rol === 'admin' || rol === 'mandante';
                           const hasImpact = req.obligatorio && (docEstado === 'rechazado' || docEstado === 'vencido');
+                          const configuredImpacts = getImpactosRequisito(req);
 
                           return (
                             <div className="space-y-3">
@@ -605,21 +643,12 @@ function LegacyFichaAcreditacion({
                               {showImpact && (
                                 <div className="border-t border-cream pt-2.5">
                                   <div className="font-semibold text-navy mb-1.5">Impacto:</div>
-                                  {hasImpact ? (
-                                    <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea ingreso</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea trabajo</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea asignación</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea pago</span>
-                                    </div>
-                                  ) : (
-                                    <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado ingreso</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado trabajo</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado asignación</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado pago</span>
-                                    </div>
-                                  )}
+                                  <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
+                                    <span className={`${hasImpact && configuredImpacts.acceso ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.acceso ? '🔴 Bloquea ingreso' : '🟢 No bloquea ingreso'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.trabajo ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.trabajo ? '🔴 Bloquea trabajo' : '🟢 No bloquea trabajo'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.asignacion ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.asignacion ? '🔴 Bloquea asignación' : '🟢 No bloquea asignación'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.pago ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.pago ? '🔴 Bloquea pago' : '🟢 No bloquea pago'}</span>
+                                  </div>
                                 </div>
                               )}
                             </div>

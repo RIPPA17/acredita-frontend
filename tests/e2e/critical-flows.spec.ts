@@ -699,6 +699,20 @@ test('05 Mandante dispone de Servicios, Activos, Requisitos, Períodos y Operaci
   }
 });
 
+test('05b Mandante no puede volver opcional un requisito que bloquea una operación', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Requisitos', exact: true }).click();
+
+  const row = page.locator('.mandante-proyectos-requirement').filter({ hasText: 'F30 / F31 SII' });
+  const requiredSwitch = row.getByRole('switch');
+  await expect(requiredSwitch).toHaveAttribute('aria-checked', 'true');
+  await requiredSwitch.click();
+
+  await expect(requiredSwitch).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('Un requisito que bloquea una operación no puede ser opcional.')).toBeVisible();
+});
+
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await openMandanteProject(page);
@@ -1407,9 +1421,21 @@ test('14 rol Contratista no puede entrar al portal Mandante', async ({ page }) =
   await expect(page).toHaveURL(/\/contratista/);
 });
 
+test('14b rol Contratista no puede entrar al panel interno Acredita', async ({ page }) => {
+  await protectedPage(page, 'contratista');
+  await page.goto('/admin');
+  await expect(page).toHaveURL(/\/contratista/);
+});
+
 test('15 rol Mandante no puede entrar al portal Contratista', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await page.goto('/contratista');
+  await expect(page).toHaveURL(/\/mandante/);
+});
+
+test('15b rol Mandante no puede entrar al panel interno Acredita', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await page.goto('/admin');
   await expect(page).toHaveURL(/\/mandante/);
 });
 

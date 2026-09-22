@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, Download, KeyRound, MapPin, Pencil, Plus, Save, Settings2, UsersRound, WalletCards, X } from 'lucide-react';
-import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/businessStore';
+import { calcularAccesoPago, calcularAccesoTrabajador, calcularEstadoAcreditacion, configuracionRequisitoRequiereObligatoriedad, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/businessStore';
 import { Contratista, Proyecto, Requisito } from '../../types';
 import { buildMandanteProjectSummaries } from './inicio/inicioUtils';
 import { buildProjectPresentations, companyObligationSummary, projectStateRank, ProjectPresentation } from './proyectos/proyectosUtils';
@@ -187,9 +187,15 @@ function ContractorsPanel({ selected, projects, onOpen, onChanged, showToast }: 
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Contratistas del proyecto</h2><p>Organiza contratistas principales y subcontratistas, manteniendo una acreditación independiente por empresa.</p><div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Contratista</th><th>Relación</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acción</th></tr></thead><tbody>{selected.contractors.map(contractor => {
     const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
     const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
-    const enabled = assigned.filter(worker => ['aprobado', 'por_vencer'].includes(calcularEstadoTrabajador(worker, selected.project.id))).length;
+    const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
+    const enabled = workerAccess.filter(state => state === 'habilitado').length;
     const result = calcularAccesoPago(contractor, selected.project.id);
-    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><select aria-label={`Relación de ${contractor.nombre}`} value={contractor.contratistaPadreId || ''} disabled={savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{result.accesoEstado === 'bloqueado' ? 'Con bloqueos' : result.accesoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
+    const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado')
+      ? 'Con bloqueos'
+      : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente')
+        ? 'Pendiente'
+        : 'Habilitado';
+    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><select aria-label={`Relación de ${contractor.nombre}`} value={contractor.contratistaPadreId || ''} disabled={savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{accessState}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
   })}</tbody></table></div></article>;
 }
 
@@ -200,6 +206,13 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
 
   const toggleRequired = async (requirement: Requisito) => {
     if (savingRequirementId) return;
+    if (
+      requirement.obligatorio
+      && configuracionRequisitoRequiereObligatoriedad(requirement.criticidad, Boolean(requirement.bloqueaTrabajo), Boolean(requirement.bloqueaAsignacion))
+    ) {
+      showToast('Un requisito que bloquea una operación no puede ser opcional.', 'warning');
+      return;
+    }
     const list = getRequisitos();
     const index = list.findIndex(item => item.id === requirement.id);
     if (index < 0) return;
@@ -241,8 +254,14 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
     const index = list.findIndex(item => item.id === editingRequirement.id);
     if (index < 0) return;
     setSavingRequirementId(editingRequirement.id);
+    const mustBeRequired = configuracionRequisitoRequiereObligatoriedad(
+      editForm.criticidad,
+      editForm.bloqueaTrabajo,
+      editForm.bloqueaAsignacion,
+    );
     list[index] = {
       ...list[index],
+      obligatorio: mustBeRequired ? true : list[index].obligatorio,
       frecuencia: editForm.frequency,
       criticidad: editForm.criticidad,
       alertaDias: Math.min(365, Math.max(0, Number(editForm.alertaDias) || 0)),
@@ -294,6 +313,7 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
           <label className="text-[12px] font-medium text-gray-700">Checklist de revisión<textarea value={editForm.checklist} onChange={event => setEditForm({ ...editForm, checklist: event.target.value })} className="form-input mt-1.5 min-h-24 w-full rounded-lg border border-cream3 p-2.5" placeholder="Un criterio por línea" /></label>
           {editingRequirement.destino === 'trabajador' && <label className="text-[12px] font-medium text-gray-700">Categorías aplicables<input value={editForm.categories} onChange={event => setEditForm({ ...editForm, categories: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" placeholder="Conductor, Trabajo en altura" /><span className="mt-1 block text-[10.5px] font-normal text-gray-500">Sepáralas por coma. Estas categorías aparecerán como opciones al asignar trabajadores.</span></label>}
           <div className="grid grid-cols-1 gap-2 rounded-lg bg-cream2 p-3 sm:grid-cols-2"><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaTrabajo} onChange={event => setEditForm({ ...editForm, bloqueaTrabajo: event.target.checked })} /> Bloquea trabajo</label><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaAsignacion} onChange={event => setEditForm({ ...editForm, bloqueaAsignacion: event.target.checked })} /> Bloquea asignación</label></div>
+          {configuracionRequisitoRequiereObligatoriedad(editForm.criticidad, editForm.bloqueaTrabajo, editForm.bloqueaAsignacion) && <p className="text-[10.5px] text-gray-500">Esta configuración implica bloqueo operativo, por lo que el requisito se mantendrá obligatorio.</p>}
           <div className="flex justify-end gap-3 border-t border-cream pt-4"><button type="button" className="btn btn-ghost" disabled={Boolean(savingRequirementId)} onClick={() => setEditingRequirement(null)}>Cancelar</button><button type="button" className="btn btn-primary" disabled={Boolean(savingRequirementId)} onClick={() => void saveEdit()}><Save size={15} /> {savingRequirementId ? 'Guardando…' : 'Guardar cambios'}</button></div>
         </div>
       </div>
@@ -308,7 +328,7 @@ function AccreditationsPanel({ selected, requirements, onOpen }: { selected: Pro
     await downloadProjectPackage(selected.project, selected.contractors, requirements, obligations);
   };
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Acreditaciones del proyecto</h2><p>Vista consolidada de Contratista + Mandante + Proyecto.</p></div><button type="button" onClick={() => void exportReport()}><Download /> Exportar paquete</button></div><div className="mandante-proyectos-accreditations">{selected.contractors.map(contractor => {
-    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id)); const workers = selected.workers.filter(item => item.contractor.id === contractor.id); const enabled = workers.filter(item => ['aprobado', 'por_vencer'].includes(calcularEstadoTrabajador(item.worker, selected.project.id))).length; const result = calcularAccesoPago(contractor, selected.project.id);
-    return <div key={contractor.id}><span><strong>{contractor.nombre}</strong><small>{selected.project.nombre}</small></span><span><small>Estado</small><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></span><span><small>Empresa</small><strong>{companyObligationSummary(contractor, selected.project.id, requirements)}</strong></span><span><small>Trabajadores</small><strong>{enabled}/{workers.length}</strong></span><span><small>Acceso</small><strong>{result.accesoEstado === 'bloqueado' ? 'Bloqueado' : result.accesoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><span><small>Pago</small><strong>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Abrir</button></div>;
+    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id)); const workers = selected.workers.filter(item => item.contractor.id === contractor.id); const workerAccess = workers.map(item => calcularAccesoTrabajador(item.worker, selected.project.id, contractor.id)); const enabled = workerAccess.filter(state => state === 'habilitado').length; const result = calcularAccesoPago(contractor, selected.project.id); const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado') ? 'Con bloqueos' : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente') ? 'Pendiente' : 'Habilitado';
+    return <div key={contractor.id}><span><strong>{contractor.nombre}</strong><small>{selected.project.nombre}</small></span><span><small>Estado</small><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></span><span><small>Empresa</small><strong>{companyObligationSummary(contractor, selected.project.id, requirements)}</strong></span><span><small>Trabajadores</small><strong>{enabled}/{workers.length}</strong></span><span><small>Acceso</small><strong>{accessState === 'Con bloqueos' ? 'Bloqueado' : accessState}</strong></span><span><small>Pago</small><strong>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Abrir</button></div>;
   })}</div></article>;
 }

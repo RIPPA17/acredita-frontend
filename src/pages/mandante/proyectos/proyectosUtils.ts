@@ -1,7 +1,7 @@
 import {
   calcularAccesoPago,
+  calcularAccesoTrabajador,
   calcularEstadoAcreditacion,
-  calcularEstadoTrabajador,
   esTrabajadorAsignado,
   getRequisitos,
 } from '../../../data/businessStore';
@@ -109,6 +109,7 @@ export function buildProjectPresentations(
     );
     const accreditationStates = contractors.map(contractor => calcularEstadoAcreditacion(contractor, project.id));
     const accessPayment = contractors.map(contractor => calcularAccesoPago(contractor, project.id));
+    const workerAccess = workers.map(({ contractor, worker }) => calcularAccesoTrabajador(worker, project.id, contractor.id));
     const executiveSummary = executive.get(project.id);
 
     return {
@@ -116,11 +117,14 @@ export function buildProjectPresentations(
       state: executiveSummary?.state || 'En proceso',
       contractors,
       workers,
-      workersEnabled: workers.filter(({ worker }) => {
-        const state = calcularEstadoTrabajador(worker, project.id);
-        return state === 'aprobado' || state === 'por_vencer';
-      }).length,
-      access: accessPayment.some(item => item.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayment.some(item => item.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
+      workersEnabled: workers.filter(({ contractor, worker }) =>
+        calcularAccesoTrabajador(worker, project.id, contractor.id) === 'habilitado'
+      ).length,
+      access: accessPayment.some(item => item.accesoEstado === 'bloqueado') || workerAccess.some(state => state === 'bloqueado')
+        ? 'Con bloqueos'
+        : accessPayment.some(item => item.accesoEstado === 'pendiente') || workerAccess.some(state => state === 'pendiente')
+          ? 'Pendiente'
+          : 'Habilitado',
       payment: accessPayment.some(item => item.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayment.some(item => item.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       obligations,
       approvedAccreditations: accreditationStates.filter(state => state === 'Aprobado').length,

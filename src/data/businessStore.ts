@@ -197,6 +197,41 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   if (hasPorVencer) return 'por_vencer';
   return 'aprobado';
 }
+export function calcularAccesoTrabajador(
+  w: Trabajador,
+  proyectoId: string,
+  contratistaId?: string,
+): 'habilitado' | 'pendiente' | 'bloqueado' {
+  const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
+  if (backendState) {
+    if (backendState.accessAllowed) return 'habilitado';
+    if (backendState.accessBlockedCount > 0 || backendState.status === 'vencido_bloqueado') return 'bloqueado';
+    return 'pendiente';
+  }
+
+  if (getStoredSupabaseSession()) return 'pendiente';
+  if (contratoTrabajadorVencido(w)) return 'bloqueado';
+  if (getProblemasFichaTrabajador(w, proyectoId, contratistaId).length > 0) return 'pendiente';
+
+  const accessRequirements = getRequisitos().filter(req =>
+    req.proyectoId === proyectoId
+    && req.destino === 'trabajador'
+    && req.activo !== false
+    && req.obligatorio
+    && requisitoAplicaATrabajador(req, w, proyectoId)
+    && getImpactosRequisito(req).acceso
+  );
+
+  for (const req of accessRequirements) {
+    const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
+    if (!doc) return 'pendiente';
+    if (doc.estado === 'rechazado' || esVencidoPorFecha(doc.vencimiento)) return 'bloqueado';
+    if (doc.estado !== 'aprobado' && doc.estado !== 'por_vencer') return 'pendiente';
+  }
+
+  return 'habilitado';
+}
+
 export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyectos?: Proyecto[]): boolean {
   if (w.asignaciones !== undefined) return Boolean(getAsignacionProyecto(w, proyectoId));
   const hasDocs = w.documentos?.some(d => d.proyectoId === proyectoId);
@@ -369,8 +404,36 @@ function estadoRequisitoCompuerta(req: Requisito, doc: Documento | undefined): E
   return 'pendiente';
 }
 
+export type ImpactosRequisito = {
+  acceso: boolean;
+  trabajo: boolean;
+  asignacion: boolean;
+  pago: boolean;
+};
+
+export function getImpactosRequisito(req: Pick<Requisito, 'criticidad' | 'bloqueaTrabajo' | 'bloqueaAsignacion'>): ImpactosRequisito {
+  const acceso = req.criticidad === 'bloquea_acceso' || req.criticidad === 'bloquea_ambas';
+  const pago = req.criticidad === 'bloquea_pago' || req.criticidad === 'bloquea_ambas';
+  return {
+    acceso,
+    // Sin ingreso a faena tampoco es posible trabajar ni materializar una asignación.
+    trabajo: acceso || Boolean(req.bloqueaTrabajo),
+    asignacion: acceso || Boolean(req.bloqueaAsignacion),
+    pago,
+  };
+}
+
+export function configuracionRequisitoRequiereObligatoriedad(
+  criticidad: Requisito['criticidad'],
+  bloqueaTrabajo = false,
+  bloqueaAsignacion = false,
+): boolean {
+  return criticidad !== 'advertencia' || bloqueaTrabajo || bloqueaAsignacion;
+}
+
 function requisitoAplicaACompuerta(req: Requisito, compuerta: 'acceso' | 'pago'): boolean {
-  return req.criticidad === 'bloquea_ambas' || req.criticidad === `bloquea_${compuerta}`;
+  const impactos = getImpactosRequisito(req);
+  return impactos[compuerta];
 }
 
 function buscarDocumentoRequisito(documentos: Documento[], req: Requisito, proyectoId: string): Documento | undefined {
@@ -510,6 +573,129 @@ export interface HabilitacionResultado {
     documentoNombre: string;
     diasRestantes: number;
     fechaVencimiento: string;
+  };
+}
+
+export function evaluarHabilitacionTrabajador(
+  w: Trabajador,
+  proyectoId: string,
+  compuerta: 'acceso' | 'trabajo' | 'asignacion' | 'pago',
+  contratistaId?: string,
+): HabilitacionResultado {
+  if (compuerta === 'acceso') {
+    const estado = calcularAccesoTrabajador(w, proyectoId, contratistaId);
+    return {
+      estado,
+      motivo: estado === 'habilitado'
+        ? undefined
+        : estado === 'bloqueado'
+          ? 'El trabajador tiene un impedimento vigente para ingresar.'
+          : 'El trabajador aún tiene antecedentes de acceso pendientes.',
+      responsable: 'contratista',
+    };
+  }
+
+  const acceso = calcularAccesoTrabajador(w, proyectoId, contratistaId);
+  if ((compuerta === 'trabajo' || compuerta === 'asignacion') && acceso !== 'habilitado') {
+    return {
+      estado: acceso,
+      motivo: acceso === 'bloqueado'
+        ? 'Sin ingreso habilitado no puede trabajar ni materializar una asignación en faena.'
+        : 'El ingreso a faena aún está pendiente.',
+      responsable: 'contratista',
+    };
+  }
+
+  const reqs = getRequisitos().filter(req =>
+    req.proyectoId === proyectoId
+    && req.destino === 'trabajador'
+    && req.activo !== false
+    && req.obligatorio
+    && requisitoAplicaATrabajador(req, w, proyectoId)
+    && getImpactosRequisito(req)[compuerta]
+  );
+
+  let estado: EstadoCompuerta = 'habilitado';
+  const motivos: string[] = [];
+  let responsable: 'interno' | 'contratista' | undefined;
+
+  for (const req of reqs) {
+    const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
+    const bloqueante = estadoBloqueanteRequisito(req, doc);
+    const estadoReq = estadoRequisitoCompuerta(req, doc);
+
+    if (bloqueante) {
+      estado = 'bloqueado';
+      motivos.push(`"${req.nombre}" ${bloqueante.toLowerCase()}`);
+      responsable = 'contratista';
+    } else if (estadoReq === 'pendiente' && estado !== 'bloqueado') {
+      estado = 'pendiente';
+      const detalle = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión' : 'pendiente de aprobación';
+      motivos.push(`"${req.nombre}" ${detalle}`);
+      responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
+    }
+  }
+
+  return {
+    estado,
+    motivo: motivos.length ? motivos.join('; ') : undefined,
+    responsable,
+  };
+}
+
+export function evaluarHabilitacionOperativaAdicional(
+  c: Contratista,
+  proyectoId: string,
+  compuerta: 'trabajo' | 'asignacion',
+): HabilitacionResultado {
+  const acceso = calcularAccesoPago(c, proyectoId);
+  if (acceso.accesoEstado !== 'habilitado') {
+    return {
+      estado: acceso.accesoEstado,
+      motivo: acceso.motivoAcceso || 'El acceso a faena no está habilitado.',
+      responsable: 'contratista',
+    };
+  }
+
+  const reqs = getRequisitos().filter(req =>
+    req.proyectoId === proyectoId
+    && req.activo !== false
+    && req.obligatorio
+    && getImpactosRequisito(req)[compuerta]
+  );
+  const proyectos = getProyectos();
+  const trabajadores = (c.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, proyectoId, proyectos));
+  let estado: EstadoCompuerta = 'habilitado';
+  const motivos: string[] = [];
+  let responsable: 'interno' | 'contratista' | undefined;
+
+  const evaluar = (req: Requisito, docs: Documento[], prefijo: string) => {
+    const doc = buscarDocumentoRequisito(docs, req, proyectoId);
+    const bloqueante = estadoBloqueanteRequisito(req, doc);
+    const estadoReq = estadoRequisitoCompuerta(req, doc);
+    if (bloqueante) {
+      estado = 'bloqueado';
+      motivos.push(`${prefijo}"${req.nombre}" ${bloqueante.toLowerCase()}`);
+      responsable = 'contratista';
+    } else if (estadoReq === 'pendiente' && estado !== 'bloqueado') {
+      estado = 'pendiente';
+      const detalle = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión' : 'pendiente de aprobación';
+      motivos.push(`${prefijo}"${req.nombre}" ${detalle}`);
+      if (responsable !== 'contratista') responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
+    }
+  };
+
+  reqs.filter(req => req.destino === 'empresa').forEach(req => evaluar(req, c.documentos || [], 'Empresa: '));
+  trabajadores.forEach(worker => {
+    reqs
+      .filter(req => req.destino === 'trabajador' && requisitoAplicaATrabajador(req, worker, proyectoId))
+      .forEach(req => evaluar(req, worker.documentos || [], `${worker.nombre}: `));
+  });
+
+  return {
+    estado,
+    motivo: motivos.length ? motivos.join('; ') : undefined,
+    responsable,
   };
 }
 

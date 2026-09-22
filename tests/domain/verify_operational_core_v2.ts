@@ -1,7 +1,11 @@
 import {
   calcularAccesoPago,
+  calcularAccesoTrabajador,
   calcularEstadoAcreditacion,
   calcularEstadoTrabajador,
+  configuracionRequisitoRequiereObligatoriedad,
+  evaluarHabilitacionTrabajador,
+  getImpactosRequisito,
   requisitoAplicaATrabajador,
   saveContratistas,
   saveProyectos,
@@ -72,6 +76,13 @@ const guardRequirement: Requisito = {
   id: 'req-guardia',
   nombre: 'Curso OS10',
   categoriasAplicables: ['guardia'],
+};
+const workerPaymentRequirement: Requisito = {
+  ...driverRequirement,
+  id: 'req-worker-pago',
+  nombre: 'Liquidación individual',
+  criticidad: 'bloquea_pago',
+  categoriasAplicables: ['conductor'],
 };
 const document = (
   id: string,
@@ -193,6 +204,36 @@ const noApplicableRequirementsWorker: Trabajador = {
   documentos: [],
 };
 assert(calcularEstadoTrabajador(noApplicableRequirementsWorker, project.id) === 'pendiente', 'Una combinación sin requisitos aplicables debe quedar en proceso y nunca aprobarse por omisión.');
+
+const accessImpacts = getImpactosRequisito(accessRequirement);
+assert(accessImpacts.acceso && accessImpacts.trabajo && accessImpacts.asignacion && !accessImpacts.pago, 'Un requisito de acceso no debe bloquear pago.');
+
+const paymentImpacts = getImpactosRequisito(paymentRequirement);
+assert(!paymentImpacts.acceso && !paymentImpacts.trabajo && !paymentImpacts.asignacion && paymentImpacts.pago, 'Un requisito solo de pago no debe inventar bloqueos de ingreso, trabajo o asignación.');
+
+const workOnlyWarning: Requisito = {
+  ...accessRequirement,
+  id: 'req-trabajo-especifico',
+  criticidad: 'advertencia',
+  obligatorio: true,
+  bloqueaTrabajo: true,
+};
+const workImpacts = getImpactosRequisito(workOnlyWarning);
+assert(!workImpacts.acceso && workImpacts.trabajo && !workImpacts.asignacion && !workImpacts.pago, 'Bloquea trabajo debe respetarse sin bloquear otras consecuencias.');
+assert(configuracionRequisitoRequiereObligatoriedad('advertencia', true, false), 'Un requisito que bloquea trabajo debe ser obligatorio.');
+assert(!configuracionRequisitoRequiereObligatoriedad('advertencia', false, false), 'Una advertencia sin bloqueos puede ser opcional.');
+
+saveRequisitos([accessRequirement, paymentRequirement, driverRequirement, guardRequirement, workerPaymentRequirement]);
+const workerPaymentBlocked: Trabajador = {
+  ...approvedWorker,
+  documentos: [
+    document('doc-licencia-ok-pago-worker', driverRequirement, 'aprobado'),
+    document('doc-worker-pago-rechazado', workerPaymentRequirement, 'rechazado'),
+  ],
+};
+assert(calcularEstadoTrabajador(workerPaymentBlocked, project.id) === 'rechazado', 'Un requisito obligatorio rechazado mantiene bloqueada la acreditación general del trabajador.');
+assert(calcularAccesoTrabajador(workerPaymentBlocked, project.id, contractor.id) === 'habilitado', 'Un rechazo que solo afecta pago no debe quitar el ingreso a faena.');
+assert(evaluarHabilitacionTrabajador(workerPaymentBlocked, project.id, 'pago', contractor.id).estado === 'bloqueado', 'El mismo rechazo sí debe bloquear el efecto de pago configurado.');
 
 assert(formatPeriodo('2026-09-01', '2026-09-30') === 'Septiembre de 2026', 'El período mensual debe tener una etiqueta legible.');
 const csv = buildComplianceCsv([

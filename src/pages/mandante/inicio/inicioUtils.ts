@@ -1,10 +1,12 @@
 import {
   calcularAccesoPago,
+  calcularAccesoTrabajador,
   calcularEstadoAcreditacion,
   calcularEstadoTrabajador,
   esPorVencerPorFecha,
   esTrabajadorAsignado,
   esVencidoPorFecha,
+  getImpactosRequisito,
   getRequisitos,
   obtenerDiasRestantes,
 } from '../../../data/businessStore';
@@ -118,6 +120,7 @@ const buildWorkerPriority = (
   requirements: Requisito[],
 ): MandantePriority | null => {
   const workerState = calcularEstadoTrabajador(worker, project.id);
+  const workerAccess = calcularAccesoTrabajador(worker, project.id, contractor.id);
   const candidates = requirements
     .filter(requirement => requirement.destino === 'trabajador' && requirement.obligatorio)
     .map(requirement => {
@@ -132,6 +135,14 @@ const buildWorkerPriority = (
   const { requirement, document, problem } = candidate;
   const days = document ? obtenerDiasRestantes(document.vencimiento) : null;
   const isExpiring = problem === 'por_vencer' || workerState === 'por_vencer';
+  const impacts = getImpactosRequisito(requirement);
+  const blocked = problem === 'rechazado' || problem === 'vencido';
+  const effects: string[] = [];
+  if (impacts.acceso) effects.push(workerAccess === 'bloqueado' ? 'acceso bloqueado' : workerAccess === 'pendiente' ? 'acceso pendiente' : 'acceso habilitado');
+  if (!impacts.acceso && impacts.trabajo) effects.push(blocked ? 'trabajo bloqueado' : 'trabajo pendiente');
+  if (!impacts.acceso && impacts.asignacion) effects.push(blocked ? 'asignación bloqueada' : 'asignación pendiente');
+  if (impacts.pago) effects.push(blocked ? 'pago retenido' : 'pago pendiente');
+  const effectDetail = effects.length ? effects.join(' · ') : 'sin bloqueo operativo';
   return {
     key: `${project.id}:${contractor.id}:worker:${worker.rut}`,
     kind: isExpiring ? 'por_vencer' : 'trabajador',
@@ -142,8 +153,8 @@ const buildWorkerPriority = (
     workerRut: worker.rut,
     title: `${worker.nombre} · ${project.nombre}`,
     detail: isExpiring
-      ? `${requirement.nombre} vence en ${days} día${days === 1 ? '' : 's'} · acceso todavía habilitado`
-      : `${requirement.nombre} ${problem} · ${workerState === 'rechazado' ? 'acceso bloqueado' : 'acceso pendiente'}`,
+      ? `${requirement.nombre} vence en ${days} día${days === 1 ? '' : 's'} · operación todavía habilitada`
+      : `${requirement.nombre} ${problem} · ${effectDetail}`,
   };
 };
 
@@ -158,6 +169,9 @@ export function buildMandanteProjectSummaries(
     const assignedWorkers = contractors.flatMap(contractor => (contractor.trabajadores || [])
       .filter(worker => esTrabajadorAsignado(worker, project.id, projects))
       .map(worker => ({ contractor, worker })));
+    const workerAccess = assignedWorkers.map(({ contractor, worker }) =>
+      calcularAccesoTrabajador(worker, project.id, contractor.id)
+    );
     const workerPriorities = assignedWorkers
       .map(({ contractor, worker }) => buildWorkerPriority(project, contractor, worker, requirements))
       .filter((priority): priority is MandantePriority => priority !== null);
@@ -169,12 +183,15 @@ export function buildMandanteProjectSummaries(
       project,
       state: projectState(contractors, project.id),
       contractors,
-      workersEnabled: assignedWorkers.filter(({ worker }) => {
-        const state = calcularEstadoTrabajador(worker, project.id);
-        return state === 'aprobado' || state === 'por_vencer';
-      }).length,
+      workersEnabled: assignedWorkers.filter(({ contractor, worker }) =>
+        calcularAccesoTrabajador(worker, project.id, contractor.id) === 'habilitado'
+      ).length,
       workersTotal: assignedWorkers.length,
-      access: accessPayments.some(result => result.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayments.some(result => result.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
+      access: accessPayments.some(result => result.accesoEstado === 'bloqueado') || workerAccess.some(state => state === 'bloqueado')
+        ? 'Con bloqueos'
+        : accessPayments.some(result => result.accesoEstado === 'pendiente') || workerAccess.some(state => state === 'pendiente')
+          ? 'Pendiente'
+          : 'Habilitado',
       payment: accessPayments.some(result => result.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayments.some(result => result.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       attentionCount: priorities.length,
       priorities,
