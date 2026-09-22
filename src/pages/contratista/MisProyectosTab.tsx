@@ -6,7 +6,7 @@ import {
   esTrabajadorAsignado,
   getMotivoBloqueoTrabajador,
   getRequisitos,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { Contratista, Proyecto, Mandante, Requisito, Trabajador } from '../../types';
 import AssetsPanel from '../../components/AssetsPanel';
 import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
