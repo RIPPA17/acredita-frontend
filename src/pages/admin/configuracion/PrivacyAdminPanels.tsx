@@ -1,0 +1,464 @@
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Download,
+  FileLock2,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+  UserRoundCheck,
+} from 'lucide-react';
+import {
+  buildWorkerPortabilityExport,
+  createLegalHold,
+  createRetentionPolicy,
+  createSecurityIncident,
+  downloadJsonFile,
+  loadPrivacyAdminSnapshot,
+  releaseLegalHold,
+  resolveDecisionReview,
+  updatePrivacyImpactAssessment,
+  updatePrivacyProcessingActivity,
+  updateRequirementPrivacyAssessment,
+  updatePrivacyRequest,
+  updateRetentionPolicy,
+  updateSecurityIncident,
+  type IncidentSeverity,
+  type IncidentStatus,
+  type LegalHoldRow,
+  type PrivacyAdminSnapshot,
+  type PrivacyImpactAssessmentRow,
+  type PrivacyProcessingActivityRow,
+  type PrivacyRequestRow,
+  type ProcessingRoleAssessment,
+  type RequirementPrivacyAssessmentRow,
+  type RequirementSummaryRow,
+  type MinimizationStrategy,
+  type RetentionAction,
+  type RetentionPolicyRow,
+  type SecurityIncidentRow,
+} from '../../../data/supabasePrivacyAdmin';
+import type { DecisionReviewRow } from '../../../data/supabaseDecisionReviews';
+
+
+type Section = 'resumen' | 'tratamientos' | 'requisitos' | 'impacto' | 'decisiones' | 'solicitudes' | 'incidentes' | 'retencion' | 'holds' | 'exportar';
+
+type ToastFn = (msg: string, type?: 'success' | 'error' | 'warning') => void;
+
+const EMPTY: PrivacyAdminSnapshot = { requests: [], incidents: [], retentionPolicies: [], legalHolds: [], processingActivities: [], impactAssessments: [], requirements: [], requirementAssessments: [], decisionReviews: [] };
+
+const requestLabels: Record<PrivacyRequestRow['request_type'], string> = {
+  access: 'Acceso',
+  rectification: 'Rectificación',
+  deletion: 'Supresión',
+  opposition: 'Oposición',
+  portability: 'Portabilidad',
+  blocking: 'Bloqueo',
+};
+
+const requestStatusLabels: Record<PrivacyRequestRow['status'], string> = {
+  received: 'Recibida',
+  identity_verification: 'Verificando identidad',
+  in_review: 'En revisión',
+  blocked: 'Bloqueada temporalmente',
+  resolved: 'Resuelta',
+  rejected: 'Rechazada',
+  withdrawn: 'Retirada',
+};
+
+const incidentStatusLabels: Record<IncidentStatus, string> = {
+  detected: 'Detectado',
+  investigating: 'Investigando',
+  contained: 'Contenido',
+  resolved: 'Resuelto',
+  closed: 'Cerrado',
+};
+
+const roleLabels: Record<ProcessingRoleAssessment, string> = {
+  controller: 'Responsable',
+  processor: 'Encargado',
+  joint_or_mixed: 'Rol mixto',
+  tbd: 'Por definir',
+};
+
+const impactStatusLabels: Record<PrivacyImpactAssessmentRow['status'], string> = {
+  screening: 'Screening',
+  draft: 'EIPD en borrador',
+  review: 'En revisión',
+  approved: 'Aprobada',
+  not_required: 'No requerida',
+};
+
+const minimizationLabels: Record<MinimizationStrategy, string> = {
+  pending: 'Por definir',
+  full_document_justified: 'Documento completo justificado',
+  extract_fields: 'Extraer solo campos necesarios',
+  verification_only: 'Verificar sin conservar documento',
+  no_collection: 'No recopilar',
+};
+
+function fmt(value: string | null | undefined) {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' }) {
+  const tones = {
+    neutral: 'bg-gray-100 text-gray-600',
+    good: 'bg-green-100 text-green-700',
+    warn: 'bg-amber-100 text-amber-700',
+    bad: 'bg-red-100 text-red-700',
+    info: 'bg-blue-100 text-blue-700',
+  };
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
+}
+
+function Card({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-cream3 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-[1px] text-gray-400">{title}</span>
+        <span className="text-brown">{icon}</span>
+      </div>
+      <div className="text-2xl font-semibold text-navy">{value}</div>
+      <div className="mt-1 text-[11.5px] text-gray-400">{subtitle}</div>
+    </div>
+  );
+}
+
+
+export function ProcessingActivitiesPanel({ rows, busy, setBusy, refresh, showToast }: { rows: PrivacyProcessingActivityRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const setRole = async (row: PrivacyProcessingActivityRow, role: ProcessingRoleAssessment) => {
+    setBusy(true);
+    try {
+      await updatePrivacyProcessingActivity(row.id, { role_assessment: role });
+      showToast('Rol preliminar del tratamiento actualizado.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar el tratamiento.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        <strong>ROPA de preparación.</strong> Las bases de legitimidad y roles que aparecen aquí son evaluaciones preliminares para revisión jurídica/contractual. No deben marcarse como aprobadas hasta cerrar contratos, requisitos y política pública.
+      </div>
+      {rows.map(row => (
+        <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-[13.5px] text-navy">{row.name}</strong>
+                <Badge tone={row.status === 'approved' ? 'good' : 'warn'}>{row.status === 'approved' ? 'Aprobado' : 'Borrador'}</Badge>
+                {row.sensitive_data_possible && <Badge tone="warn">Puede incluir datos sensibles</Badge>}
+                {row.international_transfer && <Badge tone="info">Transferencia internacional</Badge>}
+              </div>
+              <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Finalidad:</strong> {row.purpose}</p>
+              <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Base preliminar:</strong> {row.legal_basis}</p>
+              <p className="mt-2 text-[12px] leading-5 text-gray-500"><strong>Titulares:</strong> {row.subject_categories.join(', ')}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Datos:</strong> {row.data_categories.join(', ')}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Destinatarios:</strong> {row.recipients.join(', ') || '—'}</p>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Fuente:</strong> {row.data_source}</p>
+              {row.international_transfer && <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Destinos registrados:</strong> {row.destination_countries.join(', ') || 'Por confirmar'}</p>}
+              {row.notes && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600">{row.notes}</p>}
+            </div>
+            <label className="shrink-0 text-[11px] font-semibold uppercase tracking-[.8px] text-gray-400">
+              Rol preliminar
+              <select disabled={busy} value={row.role_assessment} onChange={e => void setRole(row, e.target.value as ProcessingRoleAssessment)} className="form-input mt-1 block rounded-lg border border-cream3 px-3 py-2 text-[12px] normal-case tracking-normal text-navy">
+                {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+export function RequirementPrivacyPanel({ assessments, requirements, busy, setBusy, refresh, showToast }: { assessments: RequirementPrivacyAssessmentRow[]; requirements: RequirementSummaryRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [filter, setFilter] = useState<'pending' | 'effects' | 'special' | 'all'>('pending');
+  const requirementById = useMemo(() => new Map(requirements.map(item => [item.id, item])), [requirements]);
+  const visible = assessments.filter(item => {
+    if (filter === 'pending') return item.status !== 'approved';
+    if (filter === 'effects') return item.decision_effects.length > 0;
+    if (filter === 'special') return Boolean(item.special_category_notes) || item.sensitive_data_possible === true;
+    return true;
+  });
+  const patch = async (row: RequirementPrivacyAssessmentRow, value: Partial<RequirementPrivacyAssessmentRow>, success: string) => {
+    setBusy(true);
+    try {
+      await updateRequirementPrivacyAssessment(row.id, value);
+      showToast(success);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar la evaluación del requisito.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        <strong>Matriz por requisito.</strong> No se presume que un documento sea lícito o necesario solo porque el Mandante lo solicite. Antes de aprobarlo para producción debe quedar documentada su base, necesidad, minimización, destinatarios, retención y revisión humana.
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {([['pending','Pendientes'],['effects','Con efecto'],['special','Revisión reforzada'],['all','Todos']] as const).map(([value,label]) => (
+          <button type="button" key={value} onClick={() => setFilter(value)} className={`rounded-lg px-3 py-2 text-[12px] ${filter === value ? 'bg-navy text-white' : 'bg-white text-gray-500 border border-cream3'}`}>{label}</button>
+        ))}
+      </div>
+      {visible.map(row => {
+        const req = requirementById.get(row.requirement_id);
+        return (
+          <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-[13.5px] text-navy">{req?.name || 'Requisito'}</strong>
+                  <Badge tone={row.status === 'approved' ? 'good' : row.status === 'review' ? 'info' : 'warn'}>{row.status === 'approved' ? 'Privacidad aprobada' : row.status === 'review' ? 'En revisión' : 'Borrador'}</Badge>
+                  {req?.target && <Badge>{req.target}</Badge>}
+                  {row.decision_effects.map(effect => <span key={effect}><Badge tone="bad">{`Puede afectar ${effect}`}</Badge></span>)}
+                  {row.special_category_notes && <Badge tone="warn">Revisión reforzada</Badge>}
+                </div>
+                <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Finalidad:</strong> {row.purpose}</p>
+                <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Base:</strong> {row.legal_basis}</p>
+                <p className="mt-2 text-[12px] leading-5 text-gray-500"><strong>Necesidad:</strong> {row.necessity_assessment}</p>
+                {row.special_category_notes && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[11.5px] leading-5 text-amber-900">{row.special_category_notes}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11.5px] text-gray-500">
+                  <span>Minimización: <strong className="text-navy">{minimizationLabels[row.minimization_strategy]}</strong></span>
+                  <span>·</span>
+                  <span>Datos sensibles: <strong className="text-navy">{row.sensitive_data_possible === null ? 'por evaluar' : row.sensitive_data_possible ? 'posibles' : 'no esperados'}</strong></span>
+                  <span>·</span>
+                  <span>Revisión humana: <strong className="text-navy">{row.human_review_required ? 'sí' : 'no'}</strong></span>
+                  <span>·</span>
+                  <span>Override: <strong className="text-navy">{row.human_override_available ? 'documentado' : 'pendiente'}</strong></span>
+                </div>
+              </div>
+              <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:w-[360px]">
+                <label className="text-[11px] font-semibold text-gray-500">Minimización
+                  <select disabled={busy} value={row.minimization_strategy} onChange={e => void patch(row, { minimization_strategy: e.target.value as MinimizationStrategy }, 'Estrategia de minimización actualizada.')} className="form-input mt-1 w-full rounded-lg border border-cream3 px-2 py-2 text-[12px] font-normal text-navy">
+                    {Object.entries(minimizationLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className="text-[11px] font-semibold text-gray-500">Datos sensibles
+                  <select disabled={busy} value={row.sensitive_data_possible === null ? 'unknown' : row.sensitive_data_possible ? 'yes' : 'no'} onChange={e => void patch(row, { sensitive_data_possible: e.target.value === 'unknown' ? null : e.target.value === 'yes' }, 'Evaluación de datos sensibles actualizada.')} className="form-input mt-1 w-full rounded-lg border border-cream3 px-2 py-2 text-[12px] font-normal text-navy">
+                    <option value="unknown">Por evaluar</option><option value="yes">Puede contenerlos</option><option value="no">No esperados</option>
+                  </select>
+                </label>
+                {row.status === 'draft' && <button disabled={busy} type="button" className="btn btn-ghost sm:col-span-2" onClick={() => void patch(row, { status: 'review' }, 'Requisito enviado a revisión de privacidad.')}>Pasar a revisión</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ImpactAssessmentsPanel({ rows, activities, busy, setBusy, refresh, showToast }: { rows: PrivacyImpactAssessmentRow[]; activities: PrivacyProcessingActivityRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const activityName = (id: string) => activities.find(item => item.id === id)?.name || 'Tratamiento';
+  const sendToReview = async (row: PrivacyImpactAssessmentRow) => {
+    setBusy(true);
+    try {
+      await updatePrivacyImpactAssessment(row.id, { status: 'review' });
+      showToast('EIPD enviada a revisión.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible actualizar la EIPD.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900">
+        La acreditación de trabajadores se mantiene como EIPD requerida por decisión interna conservadora antes del go-live. La aprobación final debe documentar necesidad, proporcionalidad, riesgos, mitigaciones y riesgo residual.
+      </div>
+      {rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay evaluaciones de impacto.</div> : rows.map(row => (
+        <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-[13.5px] text-navy">{activityName(row.activity_id)}</strong>
+                <Badge tone={row.status === 'approved' ? 'good' : row.required_by_internal_decision ? 'warn' : 'neutral'}>{impactStatusLabels[row.status]}</Badge>
+                {row.required_by_internal_decision && <Badge tone="bad">EIPD requerida internamente</Badge>}
+              </div>
+              {row.screening_reason && <p className="mt-2 text-[12px] leading-5 text-gray-600">{row.screening_reason}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {row.significant_automated_decision && <Badge tone="warn">Decisión automatizada significativa: evaluar</Badge>}
+                {row.systematic_evaluation && <Badge tone="warn">Evaluación sistemática</Badge>}
+                {row.large_scale && <Badge tone="warn">Gran escala</Badge>}
+                {row.sensitive_data_exception && <Badge tone="warn">Datos sensibles</Badge>}
+                {row.other_high_risk && <Badge tone="warn">Otro alto riesgo</Badge>}
+              </div>
+              {row.processing_description && <p className="mt-3 text-[12px] leading-5 text-gray-500"><strong>Tratamiento:</strong> {row.processing_description}</p>}
+              {row.risks.length > 0 && <div className="mt-3"><strong className="text-[12px] text-navy">Riesgos</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-[11.5px] leading-5 text-gray-500">{row.risks.map(risk => <li key={risk}>{risk}</li>)}</ul></div>}
+              {row.mitigations.length > 0 && <div className="mt-3"><strong className="text-[12px] text-navy">Mitigaciones existentes</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-[11.5px] leading-5 text-gray-500">{row.mitigations.map(item => <li key={item}>{item}</li>)}</ul></div>}
+              {row.decision_notes && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600">{row.decision_notes}</p>}
+            </div>
+            {row.status === 'draft' && <button disabled={busy} type="button" className="btn btn-ghost shrink-0" onClick={() => void sendToReview(row)}>Pasar a revisión</button>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function DecisionReviewsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: DecisionReviewRow[]; busy: boolean; setBusy: (value: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [hours, setHours] = useState<Record<string, number>>({});
+
+  const decide = async (row: DecisionReviewRow, status: 'upheld' | 'overridden') => {
+    const reason = (reasons[row.id] || '').trim();
+    if (reason.length < 8) {
+      showToast('Escribe un fundamento de al menos 8 caracteres.', 'warning');
+      return;
+    }
+    setBusy(true);
+    try {
+      const overrideValue = row.decision_type === 'accreditation' ? 'Aprobado' : 'habilitado';
+      await resolveDecisionReview(row.id, { status, reason, overrideValue, overrideHours: hours[row.id] || 24 });
+      showToast(status === 'overridden' ? 'Excepción humana registrada con vigencia temporal.' : 'Decisión automática confirmada por revisión humana.');
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No fue posible resolver la revisión.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const open = rows.filter(item => ['requested', 'in_review'].includes(item.status));
+  const history = rows.filter(item => !['requested', 'in_review'].includes(item.status));
+
+  const card = (row: DecisionReviewRow, closed = false) => <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <strong className="text-[13.5px] text-navy">{row.decision_type === 'payment' ? 'Pago' : row.decision_type === 'access' ? 'Acceso' : row.decision_type === 'work' ? 'Trabajo' : row.decision_type === 'assignment' ? 'Asignación' : 'Acreditación'}</strong>
+        <Badge tone={row.status === 'overridden' ? 'good' : row.status === 'upheld' ? 'neutral' : 'warn'}>{row.status === 'requested' ? 'Solicitada' : row.status === 'in_review' ? 'En revisión' : row.status === 'overridden' ? 'Excepción aplicada' : row.status === 'upheld' ? 'Decisión confirmada' : 'Cerrada'}</Badge>
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-gray-600"><strong>Estado automático:</strong> {row.automated_state_snapshot}</p>
+      <p className="mt-1 text-[12px] leading-5 text-gray-600"><strong>Motivo:</strong> {row.request_reason}</p>
+      {row.requester_viewpoint && <p className="mt-1 text-[12px] leading-5 text-gray-500"><strong>Punto de vista:</strong> {row.requester_viewpoint}</p>}
+      <p className="mt-2 text-[11px] text-gray-400">Solicitada {fmt(row.requested_at)}</p>
+      {closed && row.override_reason && <p className="mt-3 rounded-lg bg-cream2 p-3 text-[11.5px] leading-5 text-gray-600"><strong>Fundamento humano:</strong> {row.override_reason}{row.override_until ? ` · vigente hasta ${fmt(row.override_until)}` : ''}</p>}
+    </div></div>
+    {!closed && <div className="mt-4 border-t border-cream3 pt-4">
+      <textarea value={reasons[row.id] || ''} onChange={event => setReasons({ ...reasons, [row.id]: event.target.value })} className="form-input w-full rounded-lg border border-cream3 px-3 py-2 text-[12.5px]" rows={2} maxLength={3000} placeholder="Fundamento de la revisión humana…" />
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="text-[11px] font-semibold text-gray-500">Vigencia de excepción
+          <select value={hours[row.id] || 24} onChange={event => setHours({ ...hours, [row.id]: Number(event.target.value) })} className="form-input mt-1 block rounded-lg border border-cream3 px-3 py-2 text-[12px] font-normal text-navy"><option value={4}>4 horas</option><option value={8}>8 horas</option><option value={24}>24 horas</option><option value={72}>72 horas</option><option value={168}>7 días</option></select>
+        </label>
+        <button disabled={busy} type="button" className="btn btn-ghost" onClick={() => void decide(row, 'upheld')}>Confirmar decisión</button>
+        <button disabled={busy} type="button" className="btn btn-primary" onClick={() => void decide(row, 'overridden')}>Autorizar excepción temporal</button>
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-gray-400">La excepción no modifica el documento original; sólo habilita temporalmente la compuerta revisada y conserva trazabilidad.</p>
+    </div>}
+  </div>;
+
+  return <div className="space-y-5">
+    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-[12px] leading-5 text-blue-900"><strong>Intervención humana.</strong> Revisa resultados automatizados, considera el punto de vista aportado y deja una decisión fundada y trazable.</div>
+    <section className="space-y-3"><h4 className="text-sm font-semibold text-navy">Pendientes ({open.length})</h4>{open.length ? open.map(row => card(row)) : <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay revisiones humanas pendientes.</div>}</section>
+    {history.length > 0 && <section className="space-y-3"><h4 className="text-sm font-semibold text-navy">Historial</h4>{history.slice(0, 20).map(row => card(row, true))}</section>}
+  </div>;
+}
+
+export function RequestsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: PrivacyRequestRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [resolution, setResolution] = useState<Record<string, string>>({});
+  const act = async (id: string, patch: Parameters<typeof updatePrivacyRequest>[1], success: string) => {
+    setBusy(true);
+    try { await updatePrivacyRequest(id, patch); showToast(success); await refresh(); }
+    catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible actualizar la solicitud.', 'error'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-3">
+      {rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">Aún no hay solicitudes de privacidad.</div> : rows.map(row => {
+        const closed = ['resolved', 'rejected', 'withdrawn'].includes(row.status);
+        return (
+          <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2"><strong className="text-[13.5px] text-navy">{row.requester_name}</strong><Badge tone="info">{requestLabels[row.request_type]}</Badge><Badge tone={closed ? 'good' : row.status === 'blocked' ? 'warn' : 'neutral'}>{requestStatusLabels[row.status]}</Badge>{row.identity_status === 'verified' && <Badge tone="good">Identidad verificada</Badge>}</div>
+                <p className="mt-1 text-[11.5px] text-gray-400">{row.requester_email} · recibida {fmt(row.received_at)} · vencimiento {fmt(row.due_at)}</p>
+                <p className="mt-3 text-[12.5px] leading-5 text-gray-600"><strong className="text-navy">Alcance:</strong> {row.scope}</p>
+                {row.details && <p className="mt-1 text-[12px] leading-5 text-gray-500">{row.details}</p>}
+              </div>
+            </div>
+            {!closed && (
+              <div className="mt-4 border-t border-cream3 pt-4">
+                <div className="flex flex-wrap gap-2">
+                  {row.identity_status !== 'verified' && <button disabled={busy} className="btn btn-ghost" onClick={() => void act(row.id, { identity_status: 'verified', status: 'in_review', acknowledged_at: row.acknowledged_at || new Date().toISOString() }, 'Identidad marcada como verificada.')}>Verificar identidad</button>}
+                  {row.identity_status === 'verified' && row.status !== 'in_review' && <button disabled={busy} className="btn btn-ghost" onClick={() => void act(row.id, { status: 'in_review' }, 'Solicitud enviada a revisión.')}>Iniciar revisión</button>}
+                  {row.temporary_block_requested && row.temporary_block_status !== 'accepted' && <button disabled={busy} className="btn btn-ghost" onClick={() => void act(row.id, { temporary_block_status: 'accepted', status: 'blocked' }, 'Bloqueo temporal registrado.')}>Aceptar bloqueo</button>}
+                </div>
+                <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                  <input value={resolution[row.id] || ''} onChange={e => setResolution({ ...resolution, [row.id]: e.target.value })} className="form-input min-w-0 flex-1 rounded-lg border border-cream3 px-3 py-2 text-[12.5px]" placeholder="Resumen de respuesta / fundamento" maxLength={5000} />
+                  <button disabled={busy || !(resolution[row.id] || '').trim()} className="btn btn-primary" onClick={() => void act(row.id, { status: 'resolved', resolved_at: new Date().toISOString(), response_sent_at: new Date().toISOString(), resolution_summary: resolution[row.id].trim() }, 'Solicitud resuelta y trazada.')}>Resolver</button>
+                  <button disabled={busy || !(resolution[row.id] || '').trim()} className="btn btn-ghost" onClick={() => void act(row.id, { status: 'rejected', resolved_at: new Date().toISOString(), response_sent_at: new Date().toISOString(), denial_reason: resolution[row.id].trim() }, 'Rechazo registrado.')}>Rechazar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function IncidentsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: SecurityIncidentRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [form, setForm] = useState({ title: '', severity: 'S2' as IncidentSeverity, systems: '', categories: '', affected: '' });
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true);
+    try {
+      await createSecurityIncident({ severity: form.severity, title: form.title, affectedSystems: form.systems.split(',').map(v => v.trim()).filter(Boolean), dataCategories: form.categories.split(',').map(v => v.trim()).filter(Boolean), affectedSubjectsEstimate: form.affected ? Number(form.affected) : null });
+      setForm({ title: '', severity: 'S2', systems: '', categories: '', affected: '' }); showToast('Incidente registrado.'); await refresh();
+    } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible registrar el incidente.', 'error'); }
+    finally { setBusy(false); }
+  };
+  const setStatus = async (row: SecurityIncidentRow, status: IncidentStatus) => {
+    setBusy(true); try { await updateSecurityIncident(row.id, { status }); showToast('Estado del incidente actualizado.'); await refresh(); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible actualizar.', 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="space-y-5">
+      <form onSubmit={submit} className="rounded-xl border border-cream3 bg-white p-4">
+        <div className="mb-3 flex items-center gap-2"><Plus size={16} className="text-brown" /><h4 className="text-sm font-semibold">Registrar incidente</h4></div>
+        <div className="grid gap-3 lg:grid-cols-5">
+          <input required minLength={3} maxLength={250} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm lg:col-span-2" placeholder="Título del incidente" />
+          <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value as IncidentSeverity })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm"><option>S1</option><option>S2</option><option>S3</option><option>S4</option></select>
+          <input value={form.systems} onChange={e => setForm({ ...form, systems: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Sistemas, separados por coma" />
+          <input value={form.affected} onChange={e => setForm({ ...form, affected: e.target.value })} type="number" min="0" className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Afectados estimados" />
+        </div>
+        <input value={form.categories} onChange={e => setForm({ ...form, categories: e.target.value })} className="form-input mt-3 w-full rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Categorías de datos, separadas por coma" />
+        <button disabled={busy} className="btn btn-primary mt-3" type="submit">Registrar incidente</button>
+      </form>
+      <div className="space-y-3">
+        {rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay incidentes registrados.</div> : rows.map(row => <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="flex items-center gap-2"><Badge tone={row.severity === 'S4' ? 'bad' : row.severity === 'S3' ? 'warn' : 'neutral'}>{row.severity}</Badge><strong className="text-[13.5px]">{row.title}</strong></div><p className="mt-1 text-[11.5px] text-gray-400">Detectado {fmt(row.detected_at)} · afectados {row.affected_subjects_estimate ?? 'sin estimar'}</p></div><select disabled={busy} value={row.status} onChange={e => void setStatus(row, e.target.value as IncidentStatus)} className="form-input rounded-lg border border-cream3 px-3 py-2 text-[12px]">{Object.entries(incidentStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>{row.affected_systems.length > 0 && <p className="mt-3 text-[12px] text-gray-500"><strong>Sistemas:</strong> {row.affected_systems.join(', ')}</p>}{row.data_categories.length > 0 && <p className="mt-1 text-[12px] text-gray-500"><strong>Datos:</strong> {row.data_categories.join(', ')}</p>}</div>)}
+      </div>
+    </div>
+  );
+}
+
+export function RetentionPanel({ rows, busy, setBusy, refresh, showToast }: { rows: RetentionPolicyRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [form, setForm] = useState({ category: '', purpose: '', trigger: '', days: '', action: 'review_hold' as RetentionAction, notes: '' });
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); try { await createRetentionPolicy({ dataCategory: form.category, purpose: form.purpose, triggerEvent: form.trigger, retentionDays: form.days === '' ? null : Number(form.days), finalAction: form.action, legalBasisNotes: form.notes }); setForm({ category: '', purpose: '', trigger: '', days: '', action: 'review_hold', notes: '' }); showToast('Política creada como borrador.'); await refresh(); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible crear la política.', 'error'); } finally { setBusy(false); } };
+  const patch = async (row: RetentionPolicyRow, value: Partial<RetentionPolicyRow>, success: string) => { setBusy(true); try { await updateRetentionPolicy(row.id, value); showToast(success); await refresh(); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible actualizar la política.', 'error'); } finally { setBusy(false); } };
+  return <div className="space-y-5"><form onSubmit={submit} className="rounded-xl border border-cream3 bg-white p-4"><h4 className="mb-3 text-sm font-semibold">Nueva política de retención</h4><div className="grid gap-3 lg:grid-cols-2"><input required minLength={2} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Categoría de datos" /><input required minLength={2} value={form.trigger} onChange={e => setForm({ ...form, trigger: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Evento inicial (ej. fin de contrato)" /><input required minLength={2} value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm lg:col-span-2" placeholder="Finalidad y justificación operacional" /><input type="number" min="0" value={form.days} onChange={e => setForm({ ...form, days: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Días de conservación (vacío = por definir)" /><select value={form.action} onChange={e => setForm({ ...form, action: e.target.value as RetentionAction })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm"><option value="review_hold">Revisar / conservar</option><option value="anonymize">Anonimizar</option><option value="delete">Eliminar</option></select><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm lg:col-span-2" rows={2} placeholder="Notas de base legal / criterio de revisión" /></div><button disabled={busy} type="submit" className="btn btn-primary mt-3">Crear borrador</button></form><div className="space-y-3">{rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay políticas de retención.</div> : rows.map(row => <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><strong className="text-[13.5px]">{row.data_category}</strong><p className="mt-1 text-[11.5px] text-gray-400">{row.trigger_event} · {row.retention_days === null ? 'plazo por definir' : `${row.retention_days} días`} · v{row.version}</p><p className="mt-2 text-[12px] text-gray-600">{row.purpose}</p></div><div className="flex flex-wrap items-center gap-2"><select disabled={busy} value={row.legal_review_status} onChange={e => void patch(row, { legal_review_status: e.target.value as any, active: e.target.value === 'approved' ? row.active : false }, 'Estado de revisión actualizado.')} className="form-input rounded-lg border border-cream3 px-2 py-2 text-[12px]"><option value="draft">Borrador</option><option value="approved">Aprobada jurídicamente</option><option value="rejected">Rechazada</option></select><button disabled={busy || row.legal_review_status !== 'approved'} type="button" onClick={() => void patch(row, { active: !row.active }, row.active ? 'Política desactivada.' : 'Política activada.')} className="btn btn-ghost">{row.active ? 'Desactivar' : 'Activar'}</button><Badge tone={row.dry_run_required ? 'warn' : 'good'}>{row.dry_run_required ? 'Dry-run obligatorio' : 'Dry-run cerrado'}</Badge></div></div></div>)}</div></div>;
+}
+
+export function HoldsPanel({ rows, busy, setBusy, refresh, showToast }: { rows: LegalHoldRow[]; busy: boolean; setBusy: (v: boolean) => void; refresh: () => Promise<void>; showToast: ToastFn }) {
+  const [form, setForm] = useState({ scopeType: 'worker' as LegalHoldRow['scope_type'], scopeId: '', reason: '' });
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); try { await createLegalHold({ scopeType: form.scopeType, scopeId: form.scopeId.trim(), reason: form.reason }); setForm({ scopeType: 'worker', scopeId: '', reason: '' }); showToast('Legal hold creado.'); await refresh(); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible crear el legal hold.', 'error'); } finally { setBusy(false); } };
+  const release = async (id: string) => { setBusy(true); try { await releaseLegalHold(id); showToast('Legal hold liberado.'); await refresh(); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible liberar el legal hold.', 'error'); } finally { setBusy(false); } };
+  return <div className="space-y-5"><form onSubmit={submit} className="rounded-xl border border-cream3 bg-white p-4"><h4 className="mb-3 text-sm font-semibold">Crear conservación especial</h4><div className="grid gap-3 lg:grid-cols-[180px_1fr_2fr]"><select value={form.scopeType} onChange={e => setForm({ ...form, scopeType: e.target.value as LegalHoldRow['scope_type'] })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm"><option value="profile">Perfil</option><option value="worker">Trabajador</option><option value="project">Proyecto</option><option value="accreditation">Acreditación</option><option value="document">Documento</option><option value="document_version">Versión documental</option><option value="contractor">Contratista</option><option value="other">Otro</option></select><input required value={form.scopeId} onChange={e => setForm({ ...form, scopeId: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="UUID del recurso" /><input required minLength={3} maxLength={3000} value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} className="form-input rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="Motivo de conservación" /></div><button disabled={busy} type="submit" className="btn btn-primary mt-3">Crear legal hold</button></form><div className="space-y-3">{rows.length === 0 ? <div className="rounded-xl border border-cream3 bg-white p-8 text-center text-sm text-gray-400">No hay legal holds.</div> : rows.map(row => <div key={row.id} className="rounded-xl border border-cream3 bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="flex items-center gap-2"><Badge tone={row.active ? 'warn' : 'neutral'}>{row.active ? 'Activo' : 'Liberado'}</Badge><strong className="text-[13px]">{row.scope_type}</strong><code className="text-[11px] text-gray-400">{row.scope_id}</code></div><p className="mt-2 text-[12px] text-gray-600">{row.reason}</p><p className="mt-1 text-[11px] text-gray-400">Creado {fmt(row.created_at)}{row.released_at ? ` · liberado ${fmt(row.released_at)}` : ''}</p></div>{row.active && <button disabled={busy} type="button" className="btn btn-ghost" onClick={() => void release(row.id)}>Liberar</button>}</div></div>)}</div></div>;
+}
+
+export function ExportPanel({ busy, setBusy, showToast }: { busy: boolean; setBusy: (v: boolean) => void; showToast: ToastFn }) {
+  const [identifier, setIdentifier] = useState('');
+  const safeName = useMemo(() => identifier.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 50), [identifier]);
+  const exportData = async () => { setBusy(true); try { const payload = await buildWorkerPortabilityExport(identifier); downloadJsonFile(`acredita-portabilidad-${safeName || 'trabajador'}.json`, payload); showToast('Exportación JSON generada.'); } catch (err) { showToast(err instanceof Error ? err.message : 'No fue posible generar la exportación.', 'error'); } finally { setBusy(false); } };
+  return <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]"><div className="rounded-xl border border-cream3 bg-white p-5"><div className="flex items-center gap-2"><Download size={17} className="text-brown" /><h4 className="text-sm font-semibold">Portabilidad de trabajador</h4></div><p className="mt-2 text-[12px] leading-5 text-gray-500">Genera un archivo JSON estructurado con el registro del trabajador, asignaciones y metadatos documentales. No descarga automáticamente los archivos binarios del Storage.</p><label className="mt-5 block text-[12px] font-semibold text-gray-600">UUID o RUT verificado del trabajador</label><div className="mt-2 flex flex-col gap-2 sm:flex-row"><input value={identifier} onChange={e => setIdentifier(e.target.value)} className="form-input min-w-0 flex-1 rounded-lg border border-cream3 px-3 py-2 text-sm" placeholder="12.345.678-9 o UUID" /><button disabled={busy || !identifier.trim()} type="button" className="btn btn-primary" onClick={() => void exportData()}><Download size={15} /> Exportar JSON</button></div></div><div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-center gap-2 text-amber-800"><Clock3 size={17} /><h4 className="text-sm font-semibold">Control humano obligatorio</h4></div><p className="mt-3 text-[12px] leading-5 text-amber-800">Antes de entregar una exportación, Acredita debe verificar identidad, revisar el alcance de la solicitud y confirmar que el archivo no incluya datos de terceros que no correspondan al titular.</p></div></div>;
+}
