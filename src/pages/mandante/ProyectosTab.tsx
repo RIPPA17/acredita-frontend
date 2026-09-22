@@ -319,7 +319,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   if (!selected) return <>
     <section className="mandante-proyectos fade-in">
       <header className="mandante-proyectos-page-head">
-        <div><h1>Proyectos</h1><p>Crea, configura y revisa los proyectos de tu organización.</p></div>
+        <div><h1>Proyectos</h1><p>Vista general de tus proyectos. Crea, configura y revisa cada proyecto desde aquí.</p></div>
         <div className="mandante-proyectos-toolbar">
           <button type="button" className="mandante-proyectos-primary-action" onClick={() => { setProjectForm(emptyProjectForm()); setIsCreateProjectOpen(true); }}><Plus /> Nuevo proyecto</button>
           <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
