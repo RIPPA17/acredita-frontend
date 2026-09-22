@@ -6,6 +6,7 @@ import {
   esPorVencerPorFecha,
   esTrabajadorAsignado,
   esVencidoPorFecha,
+  getImpactosRequisito,
   getRequisitos,
   obtenerDiasRestantes,
 } from '../../../data/businessStore';
@@ -134,6 +135,14 @@ const buildWorkerPriority = (
   const { requirement, document, problem } = candidate;
   const days = document ? obtenerDiasRestantes(document.vencimiento) : null;
   const isExpiring = problem === 'por_vencer' || workerState === 'por_vencer';
+  const impacts = getImpactosRequisito(requirement);
+  const blocked = problem === 'rechazado' || problem === 'vencido';
+  const effects: string[] = [];
+  if (impacts.acceso) effects.push(workerAccess === 'bloqueado' ? 'acceso bloqueado' : workerAccess === 'pendiente' ? 'acceso pendiente' : 'acceso habilitado');
+  if (!impacts.acceso && impacts.trabajo) effects.push(blocked ? 'trabajo bloqueado' : 'trabajo pendiente');
+  if (!impacts.acceso && impacts.asignacion) effects.push(blocked ? 'asignación bloqueada' : 'asignación pendiente');
+  if (impacts.pago) effects.push(blocked ? 'pago retenido' : 'pago pendiente');
+  const effectDetail = effects.length ? effects.join(' · ') : 'sin bloqueo operativo';
   return {
     key: `${project.id}:${contractor.id}:worker:${worker.rut}`,
     kind: isExpiring ? 'por_vencer' : 'trabajador',
@@ -144,8 +153,8 @@ const buildWorkerPriority = (
     workerRut: worker.rut,
     title: `${worker.nombre} · ${project.nombre}`,
     detail: isExpiring
-      ? `${requirement.nombre} vence en ${days} día${days === 1 ? '' : 's'} · acceso todavía habilitado`
-      : `${requirement.nombre} ${problem} · ${workerAccess === 'bloqueado' ? 'acceso bloqueado' : workerAccess === 'pendiente' ? 'acceso pendiente' : 'acceso habilitado'}`,
+      ? `${requirement.nombre} vence en ${days} día${days === 1 ? '' : 's'} · operación todavía habilitada`
+      : `${requirement.nombre} ${problem} · ${effectDetail}`,
   };
 };
 
