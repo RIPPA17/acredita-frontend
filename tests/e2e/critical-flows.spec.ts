@@ -933,7 +933,7 @@ test('05d Proyecto archivado mantiene la matriz documental en solo lectura', asy
 test('05e Mandante administra jerarquía, baja, historial y reactivación por proyecto', async ({ page }) => {
   const { mutations } = await protectedPage(page, 'mandante', { contractorHierarchy: true });
   await openMandanteProject(page);
-  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
 
   const rowA = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
   const rowB = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto B' }).first();
@@ -970,7 +970,7 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await expect(page.getByRole('heading', { name: 'Servicios y contratos finalizados' })).toBeVisible();
   await expect(page.getByText('SRV-01', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
   const historicalAgain = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Contratista Piloto A' });
   await historicalAgain.getByRole('button', { name: 'Reactivar' }).click();
   const restoredRow = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
@@ -986,7 +986,7 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
 test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async ({ page }) => {
   const { mutations } = await protectedPage(page, 'mandante', { invitationFlow: true });
   await openMandanteProject(page);
-  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
   await page.getByRole('button', { name: 'Invitar contratista' }).click();
 
   await expect(page.getByText('pendiente@contratista.invalid')).toBeVisible();
