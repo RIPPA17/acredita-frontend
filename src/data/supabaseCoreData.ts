@@ -290,11 +290,11 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
     }
   });
 
-  const accreditationById = new Map(rows.accreditations.map(row => [row.id, row]));
+  const accreditationRowById = new Map(rows.accreditations.map(row => [row.id, row]));
   const parentByContractorProject = new Map<string, string>();
   rows.accreditations.forEach(row => {
     if (!row.parent_accreditation_id) return;
-    const parent = accreditationById.get(row.parent_accreditation_id);
+    const parent = accreditationRowById.get(row.parent_accreditation_id);
     const projectKey = projectKeyByUuid.get(row.project_id);
     const contractorKey = contractorKeyByUuid.get(row.contratista_id);
     const parentContractorKey = parent ? contractorKeyByUuid.get(parent.contratista_id) : undefined;
