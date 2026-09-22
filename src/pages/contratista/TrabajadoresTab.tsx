@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Pencil, Search, UserMinus, UserPlus } from 'lucide-react';
 import {
+  calcularAccesoTrabajador,
   calcularEstadoTrabajador,
   contratoTrabajadorVencido,
   esTrabajadorAsignado,
@@ -297,8 +298,8 @@ export default function TrabajadoresTab({
     const historialAsignaciones = [...(selected.trabajador.asignaciones || [])]
       .filter(item => item.proyectoId === selectedProyectoId)
       .sort((a, b) => (b.fechaIngreso || '').localeCompare(a.fechaIngreso || ''));
-    const acreditacionHabilita = !modoConsulta && (selected.estado === 'aprobado' || selected.estado === 'por_vencer');
-    const accesoHabilitado = acreditacionHabilita && asignacion?.estadoAcceso !== 'bloqueado';
+    const estadoAccesoTrabajador = modoConsulta ? 'pendiente' : calcularAccesoTrabajador(selected.trabajador, selectedProyectoId, contratistaLogueado.id);
+    const accesoHabilitado = !modoConsulta && estadoAccesoTrabajador === 'habilitado' && asignacion?.estadoAcceso !== 'bloqueado';
     const candidatosVencimiento = selected.checklist
       .filter(item => item.documento && documentoVigente(item.documento, item.requisito))
       .map(item => ({ item, dias: obtenerDiasRestantes(item.documento!.vencimiento) }))
@@ -500,7 +501,7 @@ export default function TrabajadoresTab({
           </div>
           <div className="tw-table-head"><span>Trabajador</span><span>Cargo</span><span>Estado</span><span>Documentos</span><span>Acceso</span><span /></div>
           {filtrados.length === 0 ? <div className="tw-empty">No hay trabajadores que coincidan con los filtros.</div> : trabajadoresVisibles.map(item => {
-            const acceso = !modoConsulta && (item.estado === 'aprobado' || item.estado === 'por_vencer');
+            const acceso = !modoConsulta && calcularAccesoTrabajador(item.trabajador, selectedProyectoId, contratistaLogueado.id) === 'habilitado';
             const problemasFicha = modoConsulta ? [] : getProblemasFichaTrabajador(item.trabajador, selectedProyectoId, contratistaLogueado.id);
             const motivo = !modoConsulta && item.estado === 'rechazado' ? getMotivoBloqueoTrabajador(item.trabajador, selectedProyectoId) : undefined;
             const estadoVisible = modoConsulta ? 'Histórico' : problemasFicha.length > 0 && item.estado === 'pendiente' ? 'Ficha incompleta' : ESTADO_UI[item.estado].label;
