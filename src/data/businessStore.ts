@@ -197,6 +197,41 @@ export function calcularEstadoTrabajador(w: Trabajador, proyectoId: string): 'ap
   if (hasPorVencer) return 'por_vencer';
   return 'aprobado';
 }
+export function calcularAccesoTrabajador(
+  w: Trabajador,
+  proyectoId: string,
+  contratistaId?: string,
+): 'habilitado' | 'pendiente' | 'bloqueado' {
+  const backendState = getBackendWorkerStateForProject(proyectoId, w.rut);
+  if (backendState) {
+    if (backendState.accessAllowed) return 'habilitado';
+    if (backendState.accessBlockedCount > 0 || backendState.status === 'vencido_bloqueado') return 'bloqueado';
+    return 'pendiente';
+  }
+
+  if (getStoredSupabaseSession()) return 'pendiente';
+  if (contratoTrabajadorVencido(w)) return 'bloqueado';
+  if (getProblemasFichaTrabajador(w, proyectoId, contratistaId).length > 0) return 'pendiente';
+
+  const accessRequirements = getRequisitos().filter(req =>
+    req.proyectoId === proyectoId
+    && req.destino === 'trabajador'
+    && req.activo !== false
+    && req.obligatorio
+    && requisitoAplicaATrabajador(req, w, proyectoId)
+    && getImpactosRequisito(req).acceso
+  );
+
+  for (const req of accessRequirements) {
+    const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
+    if (!doc) return 'pendiente';
+    if (doc.estado === 'rechazado' || esVencidoPorFecha(doc.vencimiento)) return 'bloqueado';
+    if (doc.estado !== 'aprobado' && doc.estado !== 'por_vencer') return 'pendiente';
+  }
+
+  return 'habilitado';
+}
+
 export function esTrabajadorAsignado(w: Trabajador, proyectoId: string, proyectos?: Proyecto[]): boolean {
   if (w.asignaciones !== undefined) return Boolean(getAsignacionProyecto(w, proyectoId));
   const hasDocs = w.documentos?.some(d => d.proyectoId === proyectoId);
