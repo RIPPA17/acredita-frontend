@@ -26,6 +26,10 @@ type BackendProject = {
   location: string | null;
   starts_at: string | null;
   ends_at: string | null;
+  description: string | null;
+  responsible_name: string | null;
+  responsible_email: string | null;
+  responsible_phone: string | null;
 };
 
 type BackendContratista = {
@@ -221,7 +225,7 @@ function fallbackContractor(id: string): Contratista | undefined {
 async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
   const [mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
-    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at'),
+    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone'),
     selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
@@ -314,6 +318,10 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         ubicacion: row.location || fallback?.ubicacion,
         fechaInicio: row.starts_at || fallback?.fechaInicio,
         fechaTermino: row.ends_at || fallback?.fechaTermino,
+        descripcion: row.description || fallback?.descripcion,
+        responsableNombre: row.responsible_name || fallback?.responsableNombre,
+        responsableEmail: row.responsible_email || fallback?.responsableEmail,
+        responsableTelefono: row.responsible_phone || fallback?.responsableTelefono,
       };
     });
 
@@ -529,6 +537,10 @@ async function syncProjects(
         location: project.ubicacion || null,
         starts_at: project.fechaInicio || null,
         ends_at: project.fechaTermino || null,
+        description: project.descripcion || null,
+        responsible_name: project.responsableNombre || null,
+        responsible_email: project.responsableEmail || null,
+        responsible_phone: project.responsableTelefono || null,
       });
     } else {
       await insertRows('projects', token, {
@@ -540,6 +552,10 @@ async function syncProjects(
         location: project.ubicacion || null,
         starts_at: project.fechaInicio || null,
         ends_at: project.fechaTermino || null,
+        description: project.descripcion || null,
+        responsible_name: project.responsableNombre || null,
+        responsible_email: project.responsableEmail || null,
+        responsible_phone: project.responsableTelefono || null,
       }, 'integration_key');
     }
   }
