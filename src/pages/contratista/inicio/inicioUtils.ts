@@ -12,7 +12,7 @@ import {
   calcularAccesoPago,
   calcularEstadoTrabajador,
   requisitoAplicaATrabajador,
-} from '../../../data/localStorageDb';
+} from '../../../data/businessStore';
 import { docEstadoLabel, DocEstado } from '../../admin/acreditacionUtils';
 import { matchDocumentoRequisito } from '../documentosUtils';
 
