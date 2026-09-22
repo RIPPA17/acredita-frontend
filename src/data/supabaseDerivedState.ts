@@ -34,6 +34,9 @@ type BackendWorkerStatus = {
   blocked_count: number;
   near_expiry_count: number;
   compliance_percent: number | string;
+  access_allowed: boolean;
+  access_blocked_count: number;
+  access_pending_count: number;
 };
 
 type BackendProject = { id: string; integration_key: string | null };
@@ -60,6 +63,9 @@ export type DerivedWorkerState = {
   blockedCount: number;
   nearExpiryCount: number;
   compliancePercent: number;
+  accessAllowed: boolean;
+  accessBlockedCount: number;
+  accessPendingCount: number;
 };
 
 type DerivedStateCache = {
@@ -145,7 +151,7 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
     selectRows<BackendWorkerStatus>(
       'worker_accreditation_statuses',
       token,
-      'accreditation_id,project_id,contratista_id,worker_id,worker_rut,status,required_count,submitted_count,satisfied_count,pending_count,blocked_count,near_expiry_count,compliance_percent',
+      'accreditation_id,project_id,contratista_id,worker_id,worker_rut,status,required_count,submitted_count,satisfied_count,pending_count,blocked_count,near_expiry_count,compliance_percent,access_allowed,access_blocked_count,access_pending_count',
     ),
   ]);
 
@@ -184,6 +190,9 @@ export async function refreshDerivedStateCache(session: SupabaseUserSession): Pr
       blockedCount: Number(row.blocked_count || 0),
       nearExpiryCount: Number(row.near_expiry_count || 0),
       compliancePercent: Number(row.compliance_percent || 0),
+      accessAllowed: Boolean(row.access_allowed),
+      accessBlockedCount: Number(row.access_blocked_count || 0),
+      accessPendingCount: Number(row.access_pending_count || 0),
     };
   }
 
