@@ -221,6 +221,10 @@ export default function TrabajadoresTab({
   const servicios = getServiciosProyecto(selectedProyectoId, contratistaLogueado.id);
   const servicioPorId = new Map(servicios.map(item => [item.id, item]));
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, filtro, selectedProyectoId, modoConsulta]);
+
   const cambiarProyecto = (id: string) => {
     setSelectedProyectoId(id);
     setSelectedWorkerForDocs(null);
@@ -446,10 +450,6 @@ export default function TrabajadoresTab({
   const safePage = Math.min(page, totalPages);
   const trabajadoresVisibles = filtrados.slice((safePage - 1) * pageSize, safePage * pageSize);
   const hayFiltros = Boolean(search.trim()) || (!modoConsulta && filtro !== 'todos');
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, filtro, selectedProyectoId, modoConsulta]);
 
   return (
     <>
