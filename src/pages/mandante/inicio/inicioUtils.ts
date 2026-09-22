@@ -7,7 +7,7 @@ import {
   esVencidoPorFecha,
   getRequisitos,
   obtenerDiasRestantes,
-} from '../../../data/localStorageDb';
+} from '../../../data/businessStore';
 import { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../../types';
 
 export type ProjectExecutiveState = 'Acreditado' | 'En proceso' | 'Bloqueado';
