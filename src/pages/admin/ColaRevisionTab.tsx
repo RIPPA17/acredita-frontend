@@ -9,6 +9,7 @@ import {
 import type { ClaimRevision, Verificador } from '../../types';
 import { buildColaDocs, buildCorrectionDocs } from './colaUtils';
 import DocumentPreview from './DocumentPreview';
+import ListPagination from '../../components/ListPagination';
 
 type Tab = 'pending' | 'review' | 'correction';
 
@@ -84,6 +85,7 @@ export default function ColaRevisionTab({
   const [expiresAt, setExpiresAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
+  const [page, setPage] = useState(1);
 
   const proyectos = getProyectos();
   const mandantes = getMandantes();
@@ -115,10 +117,22 @@ export default function ColaRevisionTab({
     return a.timeSort - b.timeSort;
   });
 
-  const current = filtered.find(item => item.key === selectedKey) || filtered[0];
+  const pageSize = 30;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const selectedIndex = selectedKey ? filtered.findIndex(item => item.key === selectedKey) : -1;
+  const requestedPage = selectedIndex >= 0 ? Math.floor(selectedIndex / pageSize) + 1 : page;
+  const safePage = Math.min(Math.max(1, requestedPage), totalPages);
+  const pageItems = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hayFiltros = Boolean(search.trim()) || Boolean(projectFilter);
+  const current = pageItems.find(item => item.key === selectedKey) || pageItems[0];
   const currentClaim = current ? claimsRevision.find(item => item.documentoKey === current.key) : undefined;
   const isMine = Boolean(currentClaim && currentReviewer && currentClaim.verificadorId === currentReviewer.id);
   const isOther = Boolean(currentClaim && currentReviewer && currentClaim.verificadorId !== currentReviewer.id);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedKey(null);
+  }, [search, projectFilter]);
 
   useEffect(() => {
     setIssuedAt(current?.issuedAt || '');
@@ -299,7 +313,7 @@ export default function ColaRevisionTab({
         <div>
           <div className="text-[11px] tracking-[1.8px] uppercase font-bold text-brown">Operación Acredita</div>
           <h2 className="text-2xl font-semibold text-navy mt-1">Cola de revisión</h2>
-          <p className="text-[13px] text-gray-500 mt-1">Las tomas se coordinan de forma atómica en Supabase. Usa Actualizar para refrescar la vista compartida.</p>
+          <p className="text-[13px] text-gray-500 mt-1">Cuando una persona toma un documento, queda reservado para ella y así evitamos revisiones duplicadas. Usa Actualizar para ver los cambios del equipo.</p>
         </div>
         <div className="flex gap-2 text-[11px]">
           <span className={`badge border ${BADGE.green}`}>{aprobadosHoy} aprobados hoy</span>
@@ -336,6 +350,7 @@ export default function ColaRevisionTab({
           <option value="">Todos los proyectos</option>
           {projectNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
+        {hayFiltros && <button type="button" onClick={() => { setSearch(''); setProjectFilter(''); }} className="px-3 py-2 rounded-lg border border-cream3 bg-white text-gray-600 text-[12px] font-semibold hover:bg-cream2">Limpiar filtros</button>}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[310px_1fr_300px] gap-4 items-start">
@@ -345,7 +360,7 @@ export default function ColaRevisionTab({
             <span className={`badge border ${BADGE.gray}`}>{filtered.length}</span>
           </div>
           <div className="max-h-[650px] overflow-y-auto">
-            {filtered.map(item => {
+            {pageItems.map(item => {
               const claim = claimsRevision.find(row => row.documentoKey === item.key);
               return (
                 <button
@@ -366,6 +381,7 @@ export default function ColaRevisionTab({
             })}
             {filtered.length === 0 && <div className="p-8 text-center text-[12px] text-gray-400">No hay documentos en esta vista.</div>}
           </div>
+          <ListPagination page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={next => { setPage(next); setSelectedKey(null); }} label="documentos" />
         </section>
 
         <section className="bg-white border border-cream3 rounded-xl overflow-hidden shadow-sm min-w-0">

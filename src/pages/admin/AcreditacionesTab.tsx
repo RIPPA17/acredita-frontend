@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Contratista, Proyecto, Mandante } from '../../types';
 import { AcredRow, Blocker, buildAcreditacionRows, badgeClass } from './acreditacionUtils';
+import ListPagination from '../../components/ListPagination';
 
 export default function AcreditacionesTab({
   GLOBAL_CONTRATISTAS,
@@ -23,6 +24,7 @@ export default function AcreditacionesTab({
   const [proyectoFilter, setProyectoFilter] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [miniTab, setMiniTab] = useState<'workers' | 'company'>('workers');
+  const [page, setPage] = useState(1);
 
   const rows: AcredRow[] = buildAcreditacionRows(GLOBAL_CONTRATISTAS, GLOBAL_PROYECTOS, GLOBAL_MANDANTES);
 
@@ -56,7 +58,17 @@ export default function AcreditacionesTab({
     return true;
   });
 
-  const current = filtered.find(r => r.key === selectedKey) ?? filtered[0];
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hayFiltros = Boolean(search.trim()) || Boolean(statusFilter) || Boolean(mandanteFilter) || Boolean(proyectoFilter);
+  const current = pageRows.find(r => r.key === selectedKey) ?? pageRows[0];
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedKey(null);
+  }, [search, statusFilter, mandanteFilter, proyectoFilter]);
 
   const selectRow = (key: string) => setSelectedKey(key);
 
@@ -210,6 +222,7 @@ export default function AcreditacionesTab({
             <option value="">Todos los proyectos</option>
             {proyectosFiltrables.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </select>
+          {hayFiltros && <button type="button" className="btn" onClick={() => { setSearch(''); setStatusFilter(''); setMandanteFilter(''); setProyectoFilter(''); }}>Limpiar filtros</button>}
         </div>
       </div>
 
@@ -236,7 +249,7 @@ export default function AcreditacionesTab({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(r => {
+                {pageRows.map(r => {
                   const cp = r.company.total > 0 ? Math.round((r.company.ok / r.company.total) * 100) : 100;
                   const wp = r.workers.total > 0 ? Math.round((r.workers.ok / r.workers.total) * 100) : 100;
                   return (
@@ -275,6 +288,7 @@ export default function AcreditacionesTab({
               </tbody>
             </table>
           </div>
+          <ListPagination page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={next => { setPage(next); setSelectedKey(null); }} label="acreditaciones" />
           <div className="footer">
             <span className="muted">Una acreditación corresponde siempre a un contratista dentro de un proyecto específico.</span>
           </div>
