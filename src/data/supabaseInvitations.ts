@@ -23,6 +23,19 @@ export type InvitationPreview = {
   requirement_names: string[];
 };
 
+export type ProjectInvitation = {
+  id: string;
+  invited_email: string | null;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'cancelled';
+  invited_at: string;
+  responded_at: string | null;
+  expires_at: string | null;
+  contractor_name: string | null;
+  contractor_rut: string | null;
+  sent_at: string | null;
+  send_error: string | null;
+};
+
 type CreateInvitationResult = {
   invitation_id: string;
   token: string;
@@ -98,6 +111,28 @@ export async function createContractorInvitation(input: {
   }, token);
   if (!rows[0]) throw new Error('Supabase no devolvió la invitación creada');
   return rows[0];
+}
+
+export async function getProjectInvitations(input: {
+  session: SupabaseUserSession;
+  projectKey: string;
+}): Promise<ProjectInvitation[]> {
+  const token = input.session._supabase.accessToken;
+  const projectId = await lookupBackendId('projects', input.projectKey, token);
+  const url = new URL(`${SUPABASE_URL}/rest/v1/invitations`);
+  url.searchParams.set('select', 'id,invited_email,status,invited_at,responded_at,expires_at,contractor_name,contractor_rut,sent_at,send_error');
+  url.searchParams.set('project_id', `eq.${projectId}`);
+  url.searchParams.set('order', 'invited_at.desc');
+  url.searchParams.set('limit', '20');
+  const response = await fetch(url.toString(), { headers: headers(token) });
+  return parseResponse<ProjectInvitation[]>(response);
+}
+
+export async function cancelContractorInvitation(
+  session: SupabaseUserSession,
+  invitationId: string,
+): Promise<void> {
+  await rpc<boolean>('cancel_contractor_invitation', { p_invitation_id: invitationId }, session._supabase.accessToken);
 }
 
 export async function sendContractorInvitationEmail(
