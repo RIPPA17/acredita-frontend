@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, UserPlus, Eye } from 'lucide-react';
 import { Contratista, Proyecto, Mandante } from '../../types';
 import { parseVencimientoDate } from '../../data/businessStore';
 import { buildAcreditacionRows, AcredRow, estadoUILabel, badgeClass } from './acreditacionUtils';
+import ListPagination from '../../components/ListPagination';
 
 type Filtro = 'todos' | 'bloqueados' | 'proceso' | 'acreditados';
 
@@ -79,6 +80,7 @@ export default function ContratistasTab({
   const [busqueda, setBusqueda] = useState('');
   const [proyectoFiltro, setProyectoFiltro] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
+  const [page, setPage] = useState(1);
 
   // Misma fuente de verdad que Acreditaciones y Mandantes: una fila por
   // (contratista, proyecto asignado), con su estado real de acreditación.
@@ -123,7 +125,15 @@ export default function ContratistasTab({
     })
     .sort((a, b) => a.rank - b.rank || a.contratista.nombre.localeCompare(b.contratista.nombre));
 
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(visibles.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visiblesPagina = visibles.slice((safePage - 1) * pageSize, safePage * pageSize);
   const hayFiltros = termino !== '' || proyectoFiltro !== '' || filtro !== 'todos';
+
+  useEffect(() => {
+    setPage(1);
+  }, [busqueda, proyectoFiltro, filtro]);
 
   const limpiarFiltros = () => {
     setBusqueda('');
@@ -252,7 +262,7 @@ export default function ContratistasTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {visibles.map(cv => {
+                {visiblesPagina.map(cv => {
                   const c = cv.contratista;
                   const avatarBg = getAvatarBgColor(c.nombre);
                   const trabajadoresCount = (c.trabajadores || []).length;
@@ -351,9 +361,12 @@ export default function ContratistasTab({
             </div>
           )}
 
-          <div className="text-[12px] text-gray-400 px-4 py-3.5 border-t border-cream2 font-medium">
-            Mostrando {visibles.length} de {contratistas.length} contratistas
-          </div>
+          {visibles.length > 0 && <>
+            <div className="text-[12px] text-gray-400 px-4 py-3 border-t border-cream2 font-medium">
+              {hayFiltros ? `${visibles.length} de ${contratistas.length} contratistas coinciden con los filtros` : `${contratistas.length} contratistas registrados`}
+            </div>
+            <ListPagination page={safePage} pageSize={pageSize} total={visibles.length} onPageChange={setPage} label="contratistas" />
+          </>}
 
         </div>
 
