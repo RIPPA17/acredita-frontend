@@ -6,7 +6,10 @@ const MANDANTE = '20000000-0000-4000-8000-000000000001';
 const PROJECT = '30000000-0000-4000-8000-000000000001';
 const PROJECT_OLD = '30000000-0000-4000-8000-000000000002';
 const CONTRACTOR = '40000000-0000-4000-8000-000000000001';
+const CONTRACTOR_B = '40000000-0000-4000-8000-000000000002';
 const ACCREDITATION = '50000000-0000-4000-8000-000000000001';
+const ACCREDITATION_B = '50000000-0000-4000-8000-000000000003';
+const INVITATION = '51000000-0000-4000-8000-000000000001';
 const ACCREDITATION_OLD = '50000000-0000-4000-8000-000000000002';
 const SERVICE = '60000000-0000-4000-8000-000000000001';
 const WORKER = '70000000-0000-4000-8000-000000000001';
@@ -44,6 +47,8 @@ type MockOptions = {
   notificationScenario?: boolean;
   evaluationWorkflow?: boolean;
   paymentWorkflow?: boolean;
+  contractorHierarchy?: boolean;
+  invitationFlow?: boolean;
 };
 
 function appSession(role: Role) {
@@ -81,11 +86,33 @@ function fixtures(role: Role, options: MockOptions) {
       { id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null, description: null, responsible_name: 'Administrador Mandante', responsible_email: 'admin@mandante.invalid', responsible_phone: null },
       ...(options.historicalProject ? [{ id: PROJECT_OLD, mandante_id: MANDANTE, name: 'Proyecto Histórico QA', code: 'HIST-QA', status: 'archived', integration_key: 'proyecto_historico', location: 'Santiago', starts_at: '2025-01-01', ends_at: '2025-12-31' }] : []),
     ],
-    contratistas: [{ id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null }],
-    accreditations: [
-      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject },
-      ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false }] : []),
+    contratistas: [
+      { id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null },
+      ...(options.contractorHierarchy ? [{ id: CONTRACTOR_B, name: 'Contratista Piloto B', rut: '77.000.000-2', legal_name: 'Contratista Piloto B SpA', integration_key: 'contratista_piloto_b', is_active: true, parent_contratista_id: null }] : []),
     ],
+    accreditations: [
+      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject, parent_accreditation_id: null },
+      ...(options.contractorHierarchy ? [{ id: ACCREDITATION_B, project_id: PROJECT, contratista_id: CONTRACTOR_B, is_active: true, parent_accreditation_id: null }] : []),
+      ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false, parent_accreditation_id: null }] : []),
+    ],
+    invitations: options.invitationFlow ? [{
+      id: INVITATION,
+      project_id: PROJECT,
+      contratista_id: null,
+      invited_email: 'pendiente@contratista.invalid',
+      status: 'pending',
+      invited_by: PROFILE,
+      accepted_by: null,
+      invited_at: '2026-09-22T10:00:00Z',
+      responded_at: null,
+      expires_at: '2026-09-29T10:00:00Z',
+      contractor_name: 'Contratista Pendiente SpA',
+      contractor_rut: '76.111.111-9',
+      message: null,
+      token_hash: 'hash',
+      sent_at: '2026-09-22T10:01:00Z',
+      send_error: null,
+    }] : [],
     requirements: [
       { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'req_f30', name: 'F30 / F31 SII', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento previsional', review_checklist: ['Vigencia'], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: options.categorizedWorker ? ['altura'] : [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
