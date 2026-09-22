@@ -547,7 +547,19 @@ function DocumentsV5({
             <div><dt>Proyecto</dt><dd>{project?.nombre}</dd></div>
             <div><dt>Vencimiento</dt><dd>{document?.vencimiento || '—'}</dd></div>
             <div><dt>Estado actual</dt><dd>{document ? validityLabel(document, state) : 'No se ha cargado un documento para este requisito.'}</dd></div>
+            {requirement && <div><dt>Efecto operacional</dt><dd>{requirementImpactLabel(requirement)}</dd></div>}
           </dl>
+          {document && state === 'Rechazado' && (document.motivoRechazo || document.explicacionRechazo || document.solucionRechazo || document.motivo || document.observacion) && <div className="mandante-contratistas-review-note rejected">
+            <strong>Documento rechazado</strong>
+            <p>{document.explicacionRechazo || document.motivoRechazo || document.motivo || document.observacion}</p>
+            {document.solucionRechazo && <small>Qué debe corregirse: {document.solucionRechazo}</small>}
+          </div>}
+          {document?.versionEnTramite && <div className="mandante-contratistas-review-note">
+            <strong>Hay una versión nueva en trámite</strong>
+            <p>Versión {document.versionEnTramite.version} · {document.versionEnTramite.estado === 'revision' ? 'En revisión por Acredita' : document.versionEnTramite.estado}</p>
+            <small>La versión vigente anterior no se reemplaza hasta que la nueva sea aprobada.</small>
+            {(document.versionEnTramite.explicacionRechazo || document.versionEnTramite.motivoRechazo) && <small>{document.versionEnTramite.explicacionRechazo || document.versionEnTramite.motivoRechazo}</small>}
+          </div>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {document && requirement && <button type="button" onClick={() => void abrirArchivo()} disabled={openingFile}>{openingFile ? 'Abriendo…' : 'Abrir archivo'}</button>}
             <button type="button" onClick={() => project && onOpenAccreditation(project.id)}>Ver acreditación</button>
