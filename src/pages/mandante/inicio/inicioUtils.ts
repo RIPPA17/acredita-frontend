@@ -160,6 +160,9 @@ export function buildMandanteProjectSummaries(
     const assignedWorkers = contractors.flatMap(contractor => (contractor.trabajadores || [])
       .filter(worker => esTrabajadorAsignado(worker, project.id, projects))
       .map(worker => ({ contractor, worker })));
+    const workerAccess = assignedWorkers.map(({ contractor, worker }) =>
+      calcularAccesoTrabajador(worker, project.id, contractor.id)
+    );
     const workerPriorities = assignedWorkers
       .map(({ contractor, worker }) => buildWorkerPriority(project, contractor, worker, requirements))
       .filter((priority): priority is MandantePriority => priority !== null);
@@ -175,7 +178,11 @@ export function buildMandanteProjectSummaries(
         calcularAccesoTrabajador(worker, project.id, contractor.id) === 'habilitado'
       ).length,
       workersTotal: assignedWorkers.length,
-      access: accessPayments.some(result => result.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayments.some(result => result.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
+      access: accessPayments.some(result => result.accesoEstado === 'bloqueado') || workerAccess.some(state => state === 'bloqueado')
+        ? 'Con bloqueos'
+        : accessPayments.some(result => result.accesoEstado === 'pendiente') || workerAccess.some(state => state === 'pendiente')
+          ? 'Pendiente'
+          : 'Habilitado',
       payment: accessPayments.some(result => result.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayments.some(result => result.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       attentionCount: priorities.length,
       priorities,
