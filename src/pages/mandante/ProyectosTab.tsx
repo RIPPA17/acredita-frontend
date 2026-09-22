@@ -9,7 +9,7 @@ import './ProyectosTab.css';
 import ServicesPanel from '../../components/ServicesPanel';
 import { getCierresDocumentales, getObligacionesDocumentales, getServiciosProyecto } from '../../data/operationalCore';
 import CompliancePeriodsPanel from '../../components/CompliancePeriodsPanel';
-import { setContractorParent } from '../../data/supabaseContractorHierarchy';
+import { setContractorParent, setContractorProjectActive } from '../../data/supabaseContractorHierarchy';
 import AssetsPanel from '../../components/AssetsPanel';
 import { downloadProjectPackage } from '../../data/projectReports';
 import OperationsCenter from '../../components/OperationsCenter';
@@ -121,7 +121,7 @@ function DocumentationBlock({ summary }: { summary: ProjectPresentation }) {
   </div>;
 }
 
-export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
+export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor, setShowInvitarModal }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
@@ -397,8 +397,20 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
     <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
-    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={currentProjects} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
-    {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'contratistas' && <ContractorsPanel
+      selected={selected}
+      projects={currentProjects}
+      allContractors={contractors}
+      projectArchived={selected.project.estado === 'Archivado'}
+      onInvite={() => setShowInvitarModal?.(true)}
+      onOpen={onOpenContractor}
+      onChanged={() => {
+        setContractorsVersion(value => value + 1);
+        setProjectsVersion(value => value + 1);
+      }}
+      showToast={showToast}
+    />}
+    {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id, undefined, true)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} retiredRequirements={retiredRequirements} projectArchived={selected.project.estado === 'Archivado'} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
