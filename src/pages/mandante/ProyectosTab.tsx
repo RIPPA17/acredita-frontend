@@ -400,6 +400,26 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   </section>;
 }
 
+function ProjectFormFields({ form, setForm, disabled }: { form: ProjectForm; setForm: (value: ProjectForm) => void; disabled: boolean }) {
+  return <div className="mandante-proyectos-project-form">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Nombre del proyecto<input aria-label="Nombre del proyecto" disabled={disabled} value={form.nombre} onChange={event => setForm({ ...form, nombre: event.target.value })} placeholder="Ej. Planta Norte 2026" /></label>
+      <label>Ubicación<input aria-label="Ubicación del proyecto" disabled={disabled} value={form.ubicacion} onChange={event => setForm({ ...form, ubicacion: event.target.value })} placeholder="Ej. Quilicura, Región Metropolitana" /></label>
+    </div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Fecha de inicio<input aria-label="Fecha de inicio" disabled={disabled} type="date" value={form.fechaInicio} onChange={event => setForm({ ...form, fechaInicio: event.target.value })} /></label>
+      <label>Fecha de término <span>opcional</span><input aria-label="Fecha de término" disabled={disabled} type="date" min={form.fechaInicio || undefined} value={form.fechaTermino} onChange={event => setForm({ ...form, fechaTermino: event.target.value })} /></label>
+    </div>
+    <label>Descripción <span>opcional</span><textarea aria-label="Descripción del proyecto" disabled={disabled} value={form.descripcion} onChange={event => setForm({ ...form, descripcion: event.target.value })} placeholder="Breve descripción de la obra, faena o servicio." /></label>
+    <div className="mandante-proyectos-form-divider"><span>Responsable principal del Mandante</span></div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Nombre<input aria-label="Nombre del responsable" disabled={disabled} value={form.responsableNombre} onChange={event => setForm({ ...form, responsableNombre: event.target.value })} placeholder="Nombre y apellido" /></label>
+      <label>Correo<input aria-label="Correo del responsable" disabled={disabled} type="email" value={form.responsableEmail} onChange={event => setForm({ ...form, responsableEmail: event.target.value })} placeholder="responsable@empresa.cl" /></label>
+    </div>
+    <label>Teléfono <span>opcional</span><input aria-label="Teléfono del responsable" disabled={disabled} value={form.responsableTelefono} onChange={event => setForm({ ...form, responsableTelefono: event.target.value })} placeholder="+56 9 1234 5678" /></label>
+  </div>;
+}
+
 function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; executive: ReturnType<typeof buildMandanteProjectSummaries>[number] | null }) {
   return <div className="mandante-proyectos-panel"><div className="mandante-proyectos-kpis"><div><BriefcaseBusiness /><span>Contratistas</span><strong>{selected.contractors.length}</strong></div><div><UsersRound /><span>Trabajadores habilitados</span><strong>{selected.workersEnabled}/{selected.workers.length}</strong></div><div className={selected.access === 'Habilitado' ? 'good' : 'bad'}><KeyRound /><span>Acceso</span><strong>{selected.access}</strong></div><div className={selected.payment === 'Habilitado' ? 'good' : 'bad'}><WalletCards /><span>Pago</span><strong>{selected.payment}</strong></div></div>
     <div className="mandante-proyectos-two-columns"><article className="mandante-proyectos-section-card"><h2>Requiere atención</h2><p>Problemas que afectan la operación o el avance de la acreditación.</p><div className="mandante-proyectos-attention-list">{(executive?.priorities || []).map(priority => <div key={priority.key}><span className={priority.kind === 'por_vencer' ? 'yellow' : 'red'}>{priority.kind === 'por_vencer' ? <Clock3 /> : <AlertCircle />}</span><div><strong>{priority.title}</strong><p>{priority.detail}</p></div></div>)}{!executive?.priorities.length && <div className="mandante-proyectos-clear"><CheckCircle2 /> No hay casos que requieran acción.</div>}</div></article>
