@@ -944,9 +944,9 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await relationA.selectOption('contratista_piloto_b');
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_parent'
-    && item.(request.postDataJSON() as any)?.p_project_key === 'proyecto_piloto'
-    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
-    && item.(request.postDataJSON() as any)?.p_parent_contractor_key === 'contratista_piloto_b'
+    && item.body?.p_project_key === 'proyecto_piloto'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_parent_contractor_key === 'contratista_piloto_b'
   )).toBeTruthy();
   await expect(relationA).toHaveValue('contratista_piloto_b');
 
@@ -957,8 +957,8 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await expect(historical).toBeVisible();
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_project_active'
-    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
-    && item.(request.postDataJSON() as any)?.p_active === false
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === false
   )).toBeTruthy();
 
   await historical.getByRole('button', { name: 'Ver historial' }).click();
@@ -978,8 +978,8 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await expect(restoredRow.getByLabel('Relación de Contratista Piloto A')).toHaveValue('');
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_project_active'
-    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
-    && item.(request.postDataJSON() as any)?.p_active === true
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === true
   )).toBeTruthy();
 });
 
@@ -998,7 +998,7 @@ test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async
   await expect(page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Cancelada' }).last()).toBeVisible();
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/cancel_contractor_invitation'
-    && item.(request.postDataJSON() as any)?.p_invitation_id === INVITATION
+    && item.body?.p_invitation_id === INVITATION
   )).toBeTruthy();
 });
 
