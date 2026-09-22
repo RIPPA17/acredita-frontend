@@ -234,6 +234,15 @@ export default function ContratistasTab({
                   <option key={p.id} value={p.id}>{p.nombre}</option>
                 ))}
               </select>
+              {hayFiltros && (
+                <button
+                  type="button"
+                  onClick={limpiarFiltros}
+                  className="px-3 py-2 rounded-xl border border-cream3 bg-white text-[12.5px] font-semibold text-gray-600 hover:bg-cream2"
+                >
+                  Limpiar filtros
+                </button>
+              )}
             </div>
 
           </div>
