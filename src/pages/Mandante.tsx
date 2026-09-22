@@ -371,6 +371,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
               vistaContratistas={vistaContratistas}
               setVistaContratistas={setVistaContratistas}
               misProyectos={misProyectos}
+              mandanteId={mandanteLogueado.id}
               allContratistas={allContratistas}
               selectedContratista={selectedContratista}
               setSelectedContratista={setSelectedContratista}

@@ -78,7 +78,7 @@ function fixtures(role: Role, options: MockOptions) {
     contratista_memberships: role === 'contratista' ? [{ profile_id: PROFILE, contratista_id: CONTRACTOR, role: 'contratista_admin', is_active: true }] : [],
     mandantes: [{ id: MANDANTE, name: 'Mandante Piloto', rut: '76.000.000-0', legal_name: 'Mandante Piloto SpA', integration_key: 'mandante_piloto', is_active: true }],
     projects: [
-      { id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null },
+      { id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null, description: null, responsible_name: 'Administrador Mandante', responsible_email: 'admin@mandante.invalid', responsible_phone: null },
       ...(options.historicalProject ? [{ id: PROJECT_OLD, mandante_id: MANDANTE, name: 'Proyecto Histórico QA', code: 'HIST-QA', status: 'archived', integration_key: 'proyecto_historico', location: 'Santiago', starts_at: '2025-01-01', ends_at: '2025-12-31' }] : []),
     ],
     contratistas: [{ id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null }],
@@ -611,6 +611,23 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         let body: any = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
+        if (request.method() === 'POST' && table === 'projects') {
+          const payload = Array.isArray(body) ? body : [body];
+          const projectRows = data.projects as any[];
+          for (const item of payload) {
+            const existing = projectRows.find(row => row.integration_key === item.integration_key);
+            if (existing) Object.assign(existing, item);
+            else projectRows.push({ id: '30000000-0000-4000-8000-000000000099', ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
+        if (request.method() === 'PATCH' && table === 'projects') {
+          const projectRows = data.projects as any[];
+          const integrationKey = url.searchParams.get('integration_key')?.replace(/^eq\./, '');
+          const existing = projectRows.find(row => row.integration_key === integrationKey);
+          if (existing) Object.assign(existing, body);
+          return route.fulfill({ status: 204, body: '' });
+        }
         if (request.method() === 'POST' && table === 'workers') {
           const payload = Array.isArray(body) ? body : [body];
           const workerRows = data.workers as any[];
@@ -683,6 +700,55 @@ test('03 Mandante hidrata proyecto desde Supabase', async ({ page }) => {
   await page.goto('/mandante');
   await expect(page.locator('body')).toContainText('Mandante Piloto');
   await expect(page.locator('body')).toContainText('Proyecto Piloto QA');
+});
+
+test('03b Mandante crea, completa y activa un proyecto desde su portal', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante');
+  await page.goto('/mandante');
+  await page.getByText('Proyectos', { exact: true }).first().click();
+
+  await page.getByRole('button', { name: 'Nuevo proyecto' }).click();
+  await page.getByLabel('Nombre del proyecto').fill('Proyecto Nuevo QA');
+  await page.getByRole('button', { name: 'Crear borrador' }).click();
+
+  await expect(page.getByText('Proyecto en borrador').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Completa los datos para activar/ })).toBeDisabled();
+
+  await page.getByLabel('Ubicación del proyecto').fill('Pudahuel, Región Metropolitana');
+  await page.getByLabel('Fecha de inicio').fill('2026-10-01');
+  await page.getByLabel('Nombre del responsable').fill('María Proyecto');
+  await page.getByLabel('Correo del responsable').fill('maria.proyecto@mandante.invalid');
+
+  const activate = page.getByRole('button', { name: 'Activar proyecto' });
+  await expect(activate).toBeEnabled();
+  await activate.click();
+
+  await expect(page.getByText('El proyecto está activo y disponible para la operación.')).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/projects'
+    && item.body?.name === 'Proyecto Nuevo QA'
+    && item.body?.status === 'draft'
+  )).toBeTruthy();
+  await expect.poll(() => mutations.some(item =>
+    item.method === 'PATCH'
+    && item.path === '/rest/v1/projects'
+    && item.body?.status === 'active'
+    && item.body?.location === 'Pudahuel, Región Metropolitana'
+    && item.body?.responsible_name === 'María Proyecto'
+    && item.body?.responsible_email === 'maria.proyecto@mandante.invalid'
+  )).toBeTruthy();
+});
+
+test('03c Mandante no puede activar un proyecto con fechas incoherentes', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await page.goto('/mandante');
+  await page.getByText('Proyectos', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Nuevo proyecto' }).click();
+  await page.getByLabel('Nombre del proyecto').fill('Proyecto Fechas QA');
+  await page.getByLabel('Fecha de inicio').fill('2026-10-10');
+  await page.getByLabel('Fecha de término').fill('2026-10-01');
+  await page.getByRole('button', { name: 'Crear borrador' }).click();
+  await expect(page.getByText('La fecha de término no puede ser anterior a la fecha de inicio.')).toBeVisible();
 });
 
 test('04 Mandante abre el detalle del proyecto', async ({ page }) => {

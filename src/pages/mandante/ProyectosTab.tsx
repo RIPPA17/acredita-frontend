@@ -30,7 +30,7 @@ type RequirementEditForm = {
 };
 interface Props {
   activeProjectTab: string; setActiveProjectTab: (value: string) => void;
-  misProyectos: Proyecto[]; allContratistas: Contratista[];
+  misProyectos: Proyecto[]; mandanteId: string; allContratistas: Contratista[];
   proyectoSeleccionadoAjustes: string | null; setProyectoSeleccionadoAjustes: (value: string | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
   setNewDocForm: (value: any) => void; setIsAddDocModalOpen: (value: boolean) => void;
@@ -39,8 +39,61 @@ interface Props {
   [key: string]: any;
 }
 type ProjectMetadata = Proyecto & Partial<{ direccion: string; ubicacion: string; comuna: string; ciudad: string; region: string; fechaInicio: string; inicio: string; fecha_inicio: string }>;
+type ProjectForm = {
+  nombre: string;
+  ubicacion: string;
+  fechaInicio: string;
+  fechaTermino: string;
+  descripcion: string;
+  responsableNombre: string;
+  responsableEmail: string;
+  responsableTelefono: string;
+};
 
-const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' ? 'gray' : 'yellow';
+const emptyProjectForm = (): ProjectForm => ({
+  nombre: '',
+  ubicacion: '',
+  fechaInicio: '',
+  fechaTermino: '',
+  descripcion: '',
+  responsableNombre: '',
+  responsableEmail: '',
+  responsableTelefono: '',
+});
+
+const projectFormFrom = (project: Proyecto): ProjectForm => ({
+  nombre: project.nombre || '',
+  ubicacion: project.ubicacion || '',
+  fechaInicio: project.fechaInicio || '',
+  fechaTermino: project.fechaTermino || '',
+  descripcion: project.descripcion || '',
+  responsableNombre: project.responsableNombre || '',
+  responsableEmail: project.responsableEmail || '',
+  responsableTelefono: project.responsableTelefono || '',
+});
+
+const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+const projectReadiness = (project: Proyecto) => {
+  const items = [
+    { label: 'Nombre del proyecto', ok: Boolean(project.nombre.trim()) },
+    { label: 'Ubicación', ok: Boolean(project.ubicacion?.trim()) },
+    { label: 'Fecha de inicio', ok: Boolean(project.fechaInicio) },
+    { label: 'Responsable principal', ok: Boolean(project.responsableNombre?.trim()) },
+    { label: 'Correo del responsable', ok: Boolean(project.responsableEmail && validEmail(project.responsableEmail)) },
+  ];
+  const datesOk = !project.fechaTermino || !project.fechaInicio || project.fechaTermino >= project.fechaInicio;
+  items.push({ label: 'Fechas coherentes', ok: datesOk });
+  return { items, ready: items.every(item => item.ok) };
+};
+
+const projectAdministrativeLabel = (project: Proyecto) => project.estado === 'Archivado'
+  ? 'Proyecto archivado'
+  : project.estado === 'Borrador'
+    ? 'Proyecto en borrador'
+    : 'Proyecto activo';
+
+const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' || state === 'Borrador' ? 'gray' : 'yellow';
 const accreditationLabel = (state: ReturnType<typeof calcularEstadoAcreditacion>) => state === 'Aprobado' ? 'Acreditado' : state === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 const projectLocation = (project: Proyecto) => {
   const item = project as ProjectMetadata;
@@ -68,7 +121,7 @@ function DocumentationBlock({ summary }: { summary: ProjectPresentation }) {
   </div>;
 }
 
-export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
+export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
@@ -76,13 +129,30 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const [servicesVersion, setServicesVersion] = useState(0);
   const [periodsVersion, setPeriodsVersion] = useState(0);
   const [contractorsVersion, setContractorsVersion] = useState(0);
+  const [projectsVersion, setProjectsVersion] = useState(0);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectForm, setProjectForm] = useState<ProjectForm>(emptyProjectForm);
   const contractors = contractorsVersion > 0 ? getContratistas() : allContratistas;
-  const summaries = useMemo(() => buildProjectPresentations(misProyectos, contractors), [misProyectos, contractors, requirementsVersion, contractorsVersion]);
+  const currentProjects = projectsVersion > 0 ? getProyectos().filter(project => project.mandanteId === mandanteId) : misProyectos;
+  const summaries = useMemo(() => buildProjectPresentations(currentProjects, contractors), [currentProjects, contractors, requirementsVersion, contractorsVersion, projectsVersion]);
   const selectedId = proyectoSeleccionadoAjustes || (activeProjectTab !== 'resumen' ? selectedProjectId : null);
   const selected = summaries.find(summary => summary.project.id === selectedId);
   const detailTab = (['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
   const requirements = selected ? getRequisitos().filter(requirement => requirement.proyectoId === selected.project.id && requirement.activo !== false) : [];
   const executive = selected ? buildMandanteProjectSummaries([selected.project], contractors)[0] : null;
+  const projectCandidate = selected ? {
+    ...selected.project,
+    nombre: projectForm.nombre,
+    ubicacion: projectForm.ubicacion || undefined,
+    fechaInicio: projectForm.fechaInicio || undefined,
+    fechaTermino: projectForm.fechaTermino || undefined,
+    descripcion: projectForm.descripcion || undefined,
+    responsableNombre: projectForm.responsableNombre || undefined,
+    responsableEmail: projectForm.responsableEmail || undefined,
+    responsableTelefono: projectForm.responsableTelefono || undefined,
+  } : null;
+  const readiness = projectCandidate ? projectReadiness(projectCandidate) : null;
   const visible = summaries.filter(summary => filter === 'Todos los estados' || summary.state === filter).filter(summary => {
     const query = search.trim().toLocaleLowerCase('es');
     return !query || `${summary.project.nombre} ${projectLocation(summary.project)}`.toLocaleLowerCase('es').includes(query);
@@ -91,7 +161,137 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const openProject = (summary: ProjectPresentation) => {
     setProyectoSeleccionadoAjustes(summary.project.id); setSelectedProjectId(summary.project.id); setProyectoArchivado(summary.project.estado === 'Archivado'); setActiveProjectTab('resumen'); setConfiguring(false); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const openProjectConfiguration = () => {
+    if (!selected) return;
+    setProjectForm(projectFormFrom(selected.project));
+    setConfiguring(true);
+  };
   const backToProjects = () => { setProyectoSeleccionadoAjustes(null); setActiveProjectTab('resumen'); setConfiguring(false); };
+
+  const validateProjectForm = (form: ProjectForm, requireComplete = false): string | null => {
+    if (!form.nombre.trim()) return 'Ingresa un nombre para el proyecto.';
+    if (form.fechaInicio && form.fechaTermino && form.fechaTermino < form.fechaInicio) return 'La fecha de término no puede ser anterior a la fecha de inicio.';
+    if (form.responsableEmail.trim() && !validEmail(form.responsableEmail)) return 'Ingresa un correo válido para el responsable.';
+    if (requireComplete) {
+      if (!form.ubicacion.trim()) return 'Falta registrar la ubicación del proyecto.';
+      if (!form.fechaInicio) return 'Falta registrar la fecha de inicio.';
+      if (!form.responsableNombre.trim()) return 'Falta definir al responsable principal.';
+      if (!form.responsableEmail.trim() || !validEmail(form.responsableEmail)) return 'Falta un correo válido para el responsable principal.';
+    }
+    return null;
+  };
+
+  const persistProjectForm = async (project: Proyecto, nextStatus = project.estado) => {
+    const projects = getProyectos();
+    const index = projects.findIndex(item => item.id === project.id);
+    if (index < 0) throw new Error('Proyecto no encontrado');
+    projects[index] = {
+      ...projects[index],
+      nombre: projectForm.nombre.trim(),
+      ubicacion: projectForm.ubicacion.trim() || undefined,
+      fechaInicio: projectForm.fechaInicio || undefined,
+      fechaTermino: projectForm.fechaTermino || undefined,
+      descripcion: projectForm.descripcion.trim() || undefined,
+      responsableNombre: projectForm.responsableNombre.trim() || undefined,
+      responsableEmail: projectForm.responsableEmail.trim().toLowerCase() || undefined,
+      responsableTelefono: projectForm.responsableTelefono.trim() || undefined,
+      estado: nextStatus,
+    };
+    saveProyectos(projects);
+    await confirmBusinessPersistence('core');
+    setProjectsVersion(value => value + 1);
+    return projects[index];
+  };
+
+  const createProject = async () => {
+    if (savingProject) return;
+    const validation = validateProjectForm(projectForm);
+    if (validation) { showToast(validation, 'warning'); return; }
+    const duplicate = getProyectos().some(project =>
+      project.mandanteId === mandanteId
+      && project.estado !== 'Archivado'
+      && project.nombre.trim().toLocaleLowerCase('es') === projectForm.nombre.trim().toLocaleLowerCase('es')
+    );
+    if (duplicate) { showToast('Ya existe un proyecto visible con ese nombre.', 'warning'); return; }
+
+    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replaceAll('-', '')
+      : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const project: Proyecto = {
+      id: `proyecto_${randomPart}`,
+      nombre: projectForm.nombre.trim(),
+      mandanteId,
+      estado: 'Borrador',
+      contratistas: [],
+      ubicacion: projectForm.ubicacion.trim() || undefined,
+      fechaInicio: projectForm.fechaInicio || undefined,
+      fechaTermino: projectForm.fechaTermino || undefined,
+      descripcion: projectForm.descripcion.trim() || undefined,
+      responsableNombre: projectForm.responsableNombre.trim() || undefined,
+      responsableEmail: projectForm.responsableEmail.trim().toLowerCase() || undefined,
+      responsableTelefono: projectForm.responsableTelefono.trim() || undefined,
+    };
+
+    setSavingProject(true);
+    try {
+      saveProyectos([...getProyectos(), project]);
+      await confirmBusinessPersistence('core');
+      setProjectsVersion(value => value + 1);
+      setIsCreateProjectOpen(false);
+      setProyectoSeleccionadoAjustes(project.id);
+      setSelectedProjectId(project.id);
+      setProyectoArchivado(false);
+      setActiveProjectTab('resumen');
+      setProjectForm(projectFormFrom(project));
+      setConfiguring(true);
+      showToast('Proyecto creado como borrador');
+    } catch (error) {
+      console.error('No fue posible crear el proyecto.', error);
+      showToast('No fue posible crear el proyecto. Intenta nuevamente.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const saveProjectConfiguration = async () => {
+    if (!selected || savingProject || selected.project.estado === 'Archivado') return;
+    const validation = validateProjectForm(projectForm);
+    if (validation) { showToast(validation, 'warning'); return; }
+    const duplicate = getProyectos().some(project =>
+      project.id !== selected.project.id
+      && project.mandanteId === mandanteId
+      && project.estado !== 'Archivado'
+      && project.nombre.trim().toLocaleLowerCase('es') === projectForm.nombre.trim().toLocaleLowerCase('es')
+    );
+    if (duplicate) { showToast('Ya existe un proyecto visible con ese nombre.', 'warning'); return; }
+    setSavingProject(true);
+    try {
+      await persistProjectForm(selected.project);
+      showToast('Datos del proyecto actualizados');
+    } catch (error) {
+      console.error('No fue posible actualizar el proyecto.', error);
+      showToast('No fue posible guardar los cambios del proyecto.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const activateProject = async () => {
+    if (!selected || savingProject || selected.project.estado === 'Archivado') return;
+    const validation = validateProjectForm(projectForm, true);
+    if (validation) { showToast(validation, 'warning'); return; }
+    setSavingProject(true);
+    try {
+      await persistProjectForm(selected.project, 'Activo');
+      showToast('Proyecto activado y listo para operar');
+    } catch (error) {
+      console.error('No fue posible activar el proyecto.', error);
+      showToast('No fue posible activar el proyecto.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
   const archiveProject = async () => {
     if (!selected) return;
     const confirmed = window.confirm(`¿Archivar "${selected.project.nombre}"?\n\nEl proyecto dejará de considerarse activo, pero conservará su información y trazabilidad.`);
@@ -103,6 +303,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     try {
       await confirmBusinessPersistence('core');
       setProyectoArchivado(true);
+      setProjectsVersion(value => value + 1);
       showToast('Proyecto archivado', 'warning');
     } catch (error) {
       setProyectoArchivado(getProyectos().find(project => project.id === selected.project.id)?.estado === 'Archivado');
@@ -115,31 +316,81 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5, projectId: selected.project.id }); setIsAddDocModalOpen(true);
   };
 
-  if (!selected) return <section className="mandante-proyectos fade-in">
-    <header className="mandante-proyectos-page-head"><div><h1>Proyectos</h1><p>Vista general de tus proyectos. Abre una tarjeta para revisar toda su gestión y acreditación.</p></div><div className="mandante-proyectos-toolbar">
-      <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
-      <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option></select></label>
-    </div></header>
-    <div className="mandante-proyectos-grid">{visible.map(summary => <button type="button" className="mandante-proyectos-card" key={summary.project.id} onClick={() => openProject(summary)}>
-      <div className="mandante-proyectos-cover"><div><span>{summary.project.estado === 'Archivado' ? 'Proyecto archivado' : 'Proyecto activo'}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.state)}`}>{summary.state}</b></div>
-      <div className="mandante-proyectos-card-body"><div className="mandante-proyectos-presentation"><span><MapPin />{projectLocation(summary.project)}</span><span><CalendarDays />{projectStartDate(summary.project)}</span></div>
-        <div className="mandante-proyectos-people"><span><strong>{summary.workers.length}</strong>Trabajadores</span><span><strong>{summary.contractors.length}</strong>Contratistas</span></div><DocumentationBlock summary={summary} /><span className="mandante-proyectos-open">Ver proyecto <ChevronRight /></span></div>
-    </button>)}</div>
-    {visible.length === 0 && <div className="mandante-proyectos-empty">No hay proyectos que coincidan con la búsqueda y el estado seleccionado.</div>}
-  </section>;
+  if (!selected) return <>
+    <section className="mandante-proyectos fade-in">
+      <header className="mandante-proyectos-page-head">
+        <div><h1>Proyectos</h1><p>Vista general de tus proyectos. Crea, configura y revisa cada proyecto desde aquí.</p></div>
+        <div className="mandante-proyectos-toolbar">
+          <button type="button" className="mandante-proyectos-primary-action" onClick={() => { setProjectForm(emptyProjectForm()); setIsCreateProjectOpen(true); }}><Plus /> Nuevo proyecto</button>
+          <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
+          <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option></select></label>
+        </div>
+      </header>
+      <div className="mandante-proyectos-grid">{visible.map(summary => <button type="button" className="mandante-proyectos-card" key={summary.project.id} onClick={() => openProject(summary)}>
+        <div className="mandante-proyectos-cover"><div><span>{projectAdministrativeLabel(summary.project)}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.project.estado === 'Borrador' ? 'Borrador' : summary.state)}`}>{summary.project.estado === 'Borrador' ? 'Borrador' : summary.state}</b></div>
+        <div className="mandante-proyectos-card-body"><div className="mandante-proyectos-presentation"><span><MapPin />{projectLocation(summary.project)}</span><span><CalendarDays />{projectStartDate(summary.project)}</span></div>
+          <div className="mandante-proyectos-people"><span><strong>{summary.workers.length}</strong>Trabajadores</span><span><strong>{summary.contractors.length}</strong>Contratistas</span></div><DocumentationBlock summary={summary} /><span className="mandante-proyectos-open">Ver proyecto <ChevronRight /></span></div>
+      </button>)}</div>
+      {visible.length === 0 && <div className="mandante-proyectos-empty">{summaries.length === 0 ? 'Aún no hay proyectos. Crea el primero para comenzar.' : 'No hay proyectos que coincidan con la búsqueda y el estado seleccionado.'}</div>}
+    </section>
 
-  if (configuring) return <section className="mandante-proyectos fade-in"><button type="button" className="mandante-proyectos-back" onClick={() => setConfiguring(false)}><ArrowLeft /> Volver al proyecto</button>
-    <div className="mandante-proyectos-config"><header><div><span>Administración del proyecto</span><h1>{selected.project.nombre}</h1><p>Consulta sus datos generales y administra su estado sin salir del contexto.</p></div><Settings2 /></header>
-      <div className="mandante-proyectos-config-grid"><div><span>Ubicación</span><strong>{projectLocation(selected.project)}</strong></div><div><span>Fecha de inicio</span><strong>{projectStartDate(selected.project)}</strong></div><div><span>Estado administrativo</span><strong>{selected.project.estado}</strong></div><div><span>Requisitos activos</span><strong>{requirements.length}</strong></div></div>
-      <div className="mandante-proyectos-danger"><div><strong>Archivar proyecto</strong><p>El proyecto deja de considerarse activo, pero conserva su información.</p></div><button type="button" onClick={archiveProject} disabled={proyectoArchivado}><Archive />{proyectoArchivado ? 'Proyecto archivado' : 'Archivar proyecto'}</button></div>
-    </div></section>;
+    {isCreateProjectOpen && <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 p-4" onClick={() => !savingProject && setIsCreateProjectOpen(false)}>
+      <div className="max-h-[calc(100vh-24px)] w-full max-w-[620px] overflow-y-auto rounded-xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-cream p-4">
+          <div><h3 className="text-[18px] font-semibold text-navy">Crear proyecto</h3><p className="mt-1 text-xs text-gray-500">Se guardará primero como borrador. Podrás activarlo cuando sus datos básicos estén completos.</p></div>
+          <button type="button" aria-label="Cerrar" disabled={savingProject} className="rounded p-1 text-gray-400 hover:bg-gray-100" onClick={() => setIsCreateProjectOpen(false)}><X size={19} /></button>
+        </div>
+        <ProjectFormFields form={projectForm} setForm={setProjectForm} disabled={savingProject} />
+        <div className="flex justify-end gap-3 border-t border-cream px-5 py-4">
+          <button type="button" className="btn btn-ghost" disabled={savingProject} onClick={() => setIsCreateProjectOpen(false)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={savingProject || !projectForm.nombre.trim()} onClick={() => void createProject()}>{savingProject ? 'Creando…' : 'Crear borrador'}</button>
+        </div>
+      </div>
+    </div>}
+  </>;
+
+  if (configuring) return <section className="mandante-proyectos fade-in">
+    <button type="button" className="mandante-proyectos-back" onClick={() => setConfiguring(false)}><ArrowLeft /> Volver al proyecto</button>
+    <div className="mandante-proyectos-config">
+      <header><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>Edita los datos generales, define al responsable y controla cuándo el proyecto queda operativo.</p></div><Settings2 /></header>
+
+      <div className="mandante-proyectos-config-grid">
+        <div><span>Estado administrativo</span><strong>{selected.project.estado}</strong></div>
+        <div><span>Preparación</span><strong>{readiness?.ready ? 'Datos básicos completos' : `${readiness?.items.filter(item => item.ok).length || 0} de ${readiness?.items.length || 0} controles completos`}</strong></div>
+        <div><span>Requisitos activos</span><strong>{requirements.length}</strong></div>
+        <div><span>Responsable</span><strong>{selected.project.responsableNombre || 'No definido'}</strong></div>
+      </div>
+
+      <div className="mandante-proyectos-config-body">
+        <section className="mandante-proyectos-config-card">
+          <div className="mandante-proyectos-section-head"><div><h2>Datos generales</h2><p>Información principal que verá el equipo del Mandante y Acredita.</p></div></div>
+          <ProjectFormFields form={projectForm} setForm={setProjectForm} disabled={savingProject || selected.project.estado === 'Archivado'} />
+          {selected.project.estado !== 'Archivado' && <div className="mandante-proyectos-config-actions">
+            <button type="button" className="btn btn-ghost" disabled={savingProject} onClick={() => setProjectForm(projectFormFrom(selected.project))}>Descartar cambios</button>
+            <button type="button" className="btn btn-primary" disabled={savingProject} onClick={() => void saveProjectConfiguration()}><Save size={15} /> {savingProject ? 'Guardando…' : 'Guardar cambios'}</button>
+          </div>}
+        </section>
+
+        <section className="mandante-proyectos-config-card">
+          <h2>Preparación del proyecto</h2>
+          <p>Estos datos deben estar completos antes de activar el proyecto.</p>
+          <div className="mandante-proyectos-readiness">{readiness?.items.map(item => <div key={item.label} className={item.ok ? 'ready' : 'pending'}>{item.ok ? <CheckCircle2 /> : <AlertCircle />}<span>{item.label}</span><strong>{item.ok ? 'Listo' : 'Pendiente'}</strong></div>)}</div>
+          {selected.project.estado === 'Borrador' && <button type="button" className="mandante-proyectos-activate" disabled={savingProject || !readiness?.ready} onClick={() => void activateProject()}><CheckCircle2 /> {readiness?.ready ? 'Activar proyecto' : 'Completa los datos para activar'}</button>}
+          {selected.project.estado === 'Activo' && <div className="mandante-proyectos-active-note"><CheckCircle2 /> El proyecto está activo y disponible para la operación.</div>}
+          {selected.project.estado === 'Archivado' && <div className="mandante-proyectos-archived-note"><Archive /> El proyecto está archivado y se mantiene solo para consulta e historial.</div>}
+        </section>
+      </div>
+
+      {selected.project.estado !== 'Archivado' && <div className="mandante-proyectos-danger"><div><strong>Archivar proyecto</strong><p>El proyecto deja de considerarse activo, pero conserva su información, documentos e historial.</p></div><button type="button" onClick={archiveProject} disabled={savingProject || proyectoArchivado}><Archive />Archivar proyecto</button></div>}
+    </div>
+  </section>;
 
   return <section className="mandante-proyectos mandante-proyectos-detail fade-in">
     <button type="button" className="mandante-proyectos-back" onClick={backToProjects}><ArrowLeft /> Volver a proyectos</button>
-    <header className="mandante-proyectos-hero"><div><span>{selected.project.estado === 'Archivado' ? 'Proyecto archivado' : 'Proyecto activo'}</span><h1>{selected.project.nombre}</h1><p>Gestiona la acreditación completa del proyecto desde un espacio dedicado.</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.state)}`}>{selected.state}</b><button type="button" onClick={() => setConfiguring(true)}><Settings2 /> Administrar proyecto</button></div></header>
+    <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
     <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
-    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={misProyectos} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={currentProjects} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
@@ -147,6 +398,26 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     {detailTab === 'operacion' && <OperationsCenter project={selected.project} contractors={selected.contractors} showToast={showToast} />}
     {detailTab === 'acreditaciones' && <AccreditationsPanel selected={selected} requirements={requirements} onOpen={onOpenContractor} />}
   </section>;
+}
+
+function ProjectFormFields({ form, setForm, disabled }: { form: ProjectForm; setForm: (value: ProjectForm) => void; disabled: boolean }) {
+  return <div className="mandante-proyectos-project-form">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Nombre del proyecto<input aria-label="Nombre del proyecto" disabled={disabled} value={form.nombre} onChange={event => setForm({ ...form, nombre: event.target.value })} placeholder="Ej. Planta Norte 2026" /></label>
+      <label>Ubicación<input aria-label="Ubicación del proyecto" disabled={disabled} value={form.ubicacion} onChange={event => setForm({ ...form, ubicacion: event.target.value })} placeholder="Ej. Quilicura, Región Metropolitana" /></label>
+    </div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Fecha de inicio<input aria-label="Fecha de inicio" disabled={disabled} type="date" value={form.fechaInicio} onChange={event => setForm({ ...form, fechaInicio: event.target.value })} /></label>
+      <label>Fecha de término <span>opcional</span><input aria-label="Fecha de término" disabled={disabled} type="date" min={form.fechaInicio || undefined} value={form.fechaTermino} onChange={event => setForm({ ...form, fechaTermino: event.target.value })} /></label>
+    </div>
+    <label>Descripción <span>opcional</span><textarea aria-label="Descripción del proyecto" disabled={disabled} value={form.descripcion} onChange={event => setForm({ ...form, descripcion: event.target.value })} placeholder="Breve descripción de la obra, faena o servicio." /></label>
+    <div className="mandante-proyectos-form-divider"><span>Responsable principal del Mandante</span></div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label>Nombre<input aria-label="Nombre del responsable" disabled={disabled} value={form.responsableNombre} onChange={event => setForm({ ...form, responsableNombre: event.target.value })} placeholder="Nombre y apellido" /></label>
+      <label>Correo<input aria-label="Correo del responsable" disabled={disabled} type="email" value={form.responsableEmail} onChange={event => setForm({ ...form, responsableEmail: event.target.value })} placeholder="responsable@empresa.cl" /></label>
+    </div>
+    <label>Teléfono <span>opcional</span><input aria-label="Teléfono del responsable" disabled={disabled} value={form.responsableTelefono} onChange={event => setForm({ ...form, responsableTelefono: event.target.value })} placeholder="+56 9 1234 5678" /></label>
+  </div>;
 }
 
 function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; executive: ReturnType<typeof buildMandanteProjectSummaries>[number] | null }) {
