@@ -30,7 +30,7 @@ type RequirementEditForm = {
 };
 interface Props {
   activeProjectTab: string; setActiveProjectTab: (value: string) => void;
-  misProyectos: Proyecto[]; allContratistas: Contratista[];
+  misProyectos: Proyecto[]; mandanteId: string; allContratistas: Contratista[];
   proyectoSeleccionadoAjustes: string | null; setProyectoSeleccionadoAjustes: (value: string | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
   setNewDocForm: (value: any) => void; setIsAddDocModalOpen: (value: boolean) => void;
@@ -39,6 +39,59 @@ interface Props {
   [key: string]: any;
 }
 type ProjectMetadata = Proyecto & Partial<{ direccion: string; ubicacion: string; comuna: string; ciudad: string; region: string; fechaInicio: string; inicio: string; fecha_inicio: string }>;
+type ProjectForm = {
+  nombre: string;
+  ubicacion: string;
+  fechaInicio: string;
+  fechaTermino: string;
+  descripcion: string;
+  responsableNombre: string;
+  responsableEmail: string;
+  responsableTelefono: string;
+};
+
+const emptyProjectForm = (): ProjectForm => ({
+  nombre: '',
+  ubicacion: '',
+  fechaInicio: '',
+  fechaTermino: '',
+  descripcion: '',
+  responsableNombre: '',
+  responsableEmail: '',
+  responsableTelefono: '',
+});
+
+const projectFormFrom = (project: Proyecto): ProjectForm => ({
+  nombre: project.nombre || '',
+  ubicacion: project.ubicacion || '',
+  fechaInicio: project.fechaInicio || '',
+  fechaTermino: project.fechaTermino || '',
+  descripcion: project.descripcion || '',
+  responsableNombre: project.responsableNombre || '',
+  responsableEmail: project.responsableEmail || '',
+  responsableTelefono: project.responsableTelefono || '',
+});
+
+const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+const projectReadiness = (project: Proyecto) => {
+  const items = [
+    { label: 'Nombre del proyecto', ok: Boolean(project.nombre.trim()) },
+    { label: 'Ubicación', ok: Boolean(project.ubicacion?.trim()) },
+    { label: 'Fecha de inicio', ok: Boolean(project.fechaInicio) },
+    { label: 'Responsable principal', ok: Boolean(project.responsableNombre?.trim()) },
+    { label: 'Correo del responsable', ok: Boolean(project.responsableEmail && validEmail(project.responsableEmail)) },
+  ];
+  const datesOk = !project.fechaTermino || !project.fechaInicio || project.fechaTermino >= project.fechaInicio;
+  items.push({ label: 'Fechas coherentes', ok: datesOk });
+  return { items, ready: items.every(item => item.ok) };
+};
+
+const projectAdministrativeLabel = (project: Proyecto) => project.estado === 'Archivado'
+  ? 'Proyecto archivado'
+  : project.estado === 'Borrador'
+    ? 'Proyecto en borrador'
+    : 'Proyecto activo';
 
 const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' ? 'gray' : 'yellow';
 const accreditationLabel = (state: ReturnType<typeof calcularEstadoAcreditacion>) => state === 'Aprobado' ? 'Acreditado' : state === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
@@ -68,7 +121,7 @@ function DocumentationBlock({ summary }: { summary: ProjectPresentation }) {
   </div>;
 }
 
-export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
+export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
@@ -76,8 +129,13 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const [servicesVersion, setServicesVersion] = useState(0);
   const [periodsVersion, setPeriodsVersion] = useState(0);
   const [contractorsVersion, setContractorsVersion] = useState(0);
+  const [projectsVersion, setProjectsVersion] = useState(0);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectForm, setProjectForm] = useState<ProjectForm>(emptyProjectForm);
   const contractors = contractorsVersion > 0 ? getContratistas() : allContratistas;
-  const summaries = useMemo(() => buildProjectPresentations(misProyectos, contractors), [misProyectos, contractors, requirementsVersion, contractorsVersion]);
+  const currentProjects = projectsVersion > 0 ? getProyectos().filter(project => project.mandanteId === mandanteId) : misProyectos;
+  const summaries = useMemo(() => buildProjectPresentations(currentProjects, contractors), [currentProjects, contractors, requirementsVersion, contractorsVersion, projectsVersion]);
   const selectedId = proyectoSeleccionadoAjustes || (activeProjectTab !== 'resumen' ? selectedProjectId : null);
   const selected = summaries.find(summary => summary.project.id === selectedId);
   const detailTab = (['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
