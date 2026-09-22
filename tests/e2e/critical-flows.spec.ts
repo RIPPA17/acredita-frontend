@@ -628,6 +628,16 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
           if (existing) Object.assign(existing, body);
           return route.fulfill({ status: 204, body: '' });
         }
+        if (request.method() === 'POST' && table === 'requirements') {
+          const payload = Array.isArray(body) ? body : [body];
+          const requirementRows = data.requirements as any[];
+          for (const item of payload) {
+            const existing = requirementRows.find(row => row.integration_key === item.integration_key);
+            if (existing) Object.assign(existing, item);
+            else requirementRows.push({ id: `99000000-0000-4000-8000-${String(requirementRows.length + 1).padStart(12, '0')}`, ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
         if (request.method() === 'POST' && table === 'workers') {
           const payload = Array.isArray(body) ? body : [body];
           const workerRows = data.workers as any[];
