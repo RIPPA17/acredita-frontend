@@ -133,7 +133,10 @@ export default function ContratistasTab({
   const safePage = Math.min(page, totalPages);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
   const hayFiltros = Boolean(search.trim()) || projectFilter !== 'all' || attentionFilter !== 'Todos';
-  const contractorIds = new Set(misProyectos.flatMap(project => project.contratistas));
+  const contractorIds = new Set(misProyectos.flatMap(project => [
+    ...project.contratistas,
+    ...(project.contratistasHistoricos || []),
+  ]));
   const selected = allContratistas.find(contractor => contractor.id === selectedContratista && contractorIds.has(contractor.id));
 
   useEffect(() => {
@@ -189,7 +192,9 @@ export default function ContratistasTab({
     </section>;
   }
 
-  const associatedProjects = misProyectos.filter(project => project.contratistas.includes(selected.id));
+  const associatedProjects = misProyectos.filter(project =>
+    project.contratistas.includes(selected.id) || (project.contratistasHistoricos || []).includes(selected.id)
+  );
   const uniqueWorkers = new Set(associatedProjects.flatMap(project => (selected.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, project.id, misProyectos)).map(worker => worker.rut))).size;
   const tabs = [
     { id: 'resumen' as const, label: 'Resumen', icon: Building2 }, { id: 'acreditaciones' as const, label: 'Acreditaciones', icon: ShieldCheck },
