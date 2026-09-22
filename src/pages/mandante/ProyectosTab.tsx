@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, Download, KeyRound, MapPin, Pencil, Plus, Save, Settings2, UsersRound, WalletCards, X } from 'lucide-react';
-import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/businessStore';
+import { calcularAccesoPago, calcularEstadoAcreditacion, calcularEstadoTrabajador, configuracionRequisitoRequiereObligatoriedad, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/businessStore';
 import { Contratista, Proyecto, Requisito } from '../../types';
 import { buildMandanteProjectSummaries } from './inicio/inicioUtils';
 import { buildProjectPresentations, companyObligationSummary, projectStateRank, ProjectPresentation } from './proyectos/proyectosUtils';
@@ -200,6 +200,13 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
 
   const toggleRequired = async (requirement: Requisito) => {
     if (savingRequirementId) return;
+    if (
+      requirement.obligatorio
+      && configuracionRequisitoRequiereObligatoriedad(requirement.criticidad, Boolean(requirement.bloqueaTrabajo), Boolean(requirement.bloqueaAsignacion))
+    ) {
+      showToast('Un requisito que bloquea una operación no puede ser opcional.', 'warning');
+      return;
+    }
     const list = getRequisitos();
     const index = list.findIndex(item => item.id === requirement.id);
     if (index < 0) return;
@@ -241,8 +248,14 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
     const index = list.findIndex(item => item.id === editingRequirement.id);
     if (index < 0) return;
     setSavingRequirementId(editingRequirement.id);
+    const mustBeRequired = configuracionRequisitoRequiereObligatoriedad(
+      editForm.criticidad,
+      editForm.bloqueaTrabajo,
+      editForm.bloqueaAsignacion,
+    );
     list[index] = {
       ...list[index],
+      obligatorio: mustBeRequired ? true : list[index].obligatorio,
       frecuencia: editForm.frequency,
       criticidad: editForm.criticidad,
       alertaDias: Math.min(365, Math.max(0, Number(editForm.alertaDias) || 0)),
@@ -294,6 +307,7 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
           <label className="text-[12px] font-medium text-gray-700">Checklist de revisión<textarea value={editForm.checklist} onChange={event => setEditForm({ ...editForm, checklist: event.target.value })} className="form-input mt-1.5 min-h-24 w-full rounded-lg border border-cream3 p-2.5" placeholder="Un criterio por línea" /></label>
           {editingRequirement.destino === 'trabajador' && <label className="text-[12px] font-medium text-gray-700">Categorías aplicables<input value={editForm.categories} onChange={event => setEditForm({ ...editForm, categories: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" placeholder="Conductor, Trabajo en altura" /><span className="mt-1 block text-[10.5px] font-normal text-gray-500">Sepáralas por coma. Estas categorías aparecerán como opciones al asignar trabajadores.</span></label>}
           <div className="grid grid-cols-1 gap-2 rounded-lg bg-cream2 p-3 sm:grid-cols-2"><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaTrabajo} onChange={event => setEditForm({ ...editForm, bloqueaTrabajo: event.target.checked })} /> Bloquea trabajo</label><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaAsignacion} onChange={event => setEditForm({ ...editForm, bloqueaAsignacion: event.target.checked })} /> Bloquea asignación</label></div>
+          {configuracionRequisitoRequiereObligatoriedad(editForm.criticidad, editForm.bloqueaTrabajo, editForm.bloqueaAsignacion) && <p className="text-[10.5px] text-gray-500">Esta configuración implica bloqueo operativo, por lo que el requisito se mantendrá obligatorio.</p>}
           <div className="flex justify-end gap-3 border-t border-cream pt-4"><button type="button" className="btn btn-ghost" disabled={Boolean(savingRequirementId)} onClick={() => setEditingRequirement(null)}>Cancelar</button><button type="button" className="btn btn-primary" disabled={Boolean(savingRequirementId)} onClick={() => void saveEdit()}><Save size={15} /> {savingRequirementId ? 'Guardando…' : 'Guardar cambios'}</button></div>
         </div>
       </div>
