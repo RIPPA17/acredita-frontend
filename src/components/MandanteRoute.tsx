@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Building2, CheckCircle, FolderPlus } from 'lucide-react';
 import MandantePortal from '../pages/Mandante';
-import { getMandantes, getProyectos, saveProyectos } from '../data/localStorageDb';
+import { getMandantes, getProyectos, saveProyectos } from '../data/businessStore';
 import { getStoredSupabaseSession } from '../data/supabaseAuth';
 import { hydrateCoreDataFromSupabase, pushCoreDataToSupabase } from '../data/supabaseCoreData';
 import type { Proyecto } from '../types';
