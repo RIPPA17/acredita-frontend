@@ -258,7 +258,7 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   await setRole(page, 'mandante');
   await page.goto('/mandante');
   await page.locator('.sb-item:visible').filter({ hasText: 'Proyectos' }).first().click();
-  await page.getByText('Proyecto Integrado QA', { exact: true }).first().click();
+  await page.locator('.mandante-proyectos-card').filter({ hasText: 'Proyecto Integrado QA' }).click();
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Estados de pago/ }).click();
   await expect(page.getByText('F-INT-01')).toBeVisible();
@@ -282,7 +282,7 @@ test('piloto compartido: aprobación Acredita → pago Mandante → soporte Cont
   await setRole(page, 'mandante');
   await page.goto('/mandante');
   await page.locator('.sb-item:visible').filter({ hasText: 'Proyectos' }).first().click();
-  await page.getByText('Proyecto Integrado QA', { exact: true }).first().click();
+  await page.locator('.mandante-proyectos-card').filter({ hasText: 'Proyecto Integrado QA' }).click();
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Operacion', exact: true }).click();
   await page.getByRole('button', { name: /Soporte/ }).click();
   await expect(page.getByText('Consulta piloto integrado')).toBeVisible();

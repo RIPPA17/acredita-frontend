@@ -28,6 +28,7 @@ export interface Proyecto {
   urgenciaLabel?: string; // e.g. "3 urgentes", "1 normal", "Al día"
   contratistas: string[]; // IDs de contratistas asociados, incluidos históricos visibles
   contratistasActivos?: string[]; // IDs con acreditación/relación activa en el proyecto
+  contratistasHistoricos?: string[]; // IDs cuya relación con el proyecto terminó, conservados para trazabilidad
   ubicacion?: string;
   fechaInicio?: string;
   fechaTermino?: string;
@@ -204,7 +205,8 @@ export interface Contratista {
   documentos: Documento[];
   trabajadores?: Trabajador[];
   isNew?: boolean;
-  contratistaPadreId?: string;
+  contratistaPadreId?: string; // Legado: no usar para decisiones por proyecto
+  contratistaPadrePorProyecto?: Record<string, string>;
 }
 
 export interface PreferenciasNotificacionesContratista {

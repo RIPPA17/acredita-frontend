@@ -163,7 +163,8 @@ export function buildMandanteProjectSummaries(
   allContractors: Contratista[],
 ): MandanteProjectSummary[] {
   return projects.map(project => {
-    const contractors = allContractors.filter(contractor => project.contratistas.includes(contractor.id));
+    const activeContractorIds = project.contratistasActivos ?? project.contratistas;
+    const contractors = allContractors.filter(contractor => activeContractorIds.includes(contractor.id));
     const requirements = getRequisitos().filter(requirement => requirement.proyectoId === project.id && requirement.activo !== false);
     const accessPayments = contractors.map(contractor => calcularAccesoPago(contractor, project.id));
     const assignedWorkers = contractors.flatMap(contractor => (contractor.trabajadores || [])

@@ -9,7 +9,7 @@ import './ProyectosTab.css';
 import ServicesPanel from '../../components/ServicesPanel';
 import { getCierresDocumentales, getObligacionesDocumentales, getServiciosProyecto } from '../../data/operationalCore';
 import CompliancePeriodsPanel from '../../components/CompliancePeriodsPanel';
-import { setContractorParent } from '../../data/supabaseContractorHierarchy';
+import { setContractorParent, setContractorProjectActive } from '../../data/supabaseContractorHierarchy';
 import AssetsPanel from '../../components/AssetsPanel';
 import { downloadProjectPackage } from '../../data/projectReports';
 import OperationsCenter from '../../components/OperationsCenter';
@@ -121,7 +121,7 @@ function DocumentationBlock({ summary }: { summary: ProjectPresentation }) {
   </div>;
 }
 
-export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor }: Props) {
+export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor, setShowInvitarModal }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
@@ -397,8 +397,20 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
     <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
-    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={currentProjects} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
-    {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'contratistas' && <ContractorsPanel
+      selected={selected}
+      projects={currentProjects}
+      allContractors={contractors}
+      projectArchived={selected.project.estado === 'Archivado'}
+      onInvite={() => setShowInvitarModal?.(true)}
+      onOpen={onOpenContractor}
+      onChanged={() => {
+        setContractorsVersion(value => value + 1);
+        setProjectsVersion(value => value + 1);
+      }}
+      showToast={showToast}
+    />}
+    {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id, undefined, true)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} retiredRequirements={retiredRequirements} projectArchived={selected.project.estado === 'Archivado'} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
@@ -434,47 +446,146 @@ function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; 
   </div>;
 }
 
-function ContractorsPanel({ selected, projects, onOpen, onChanged, showToast }: { selected: ProjectPresentation; projects: Proyecto[]; onOpen: Props['onOpenContractor']; onChanged: () => void; showToast: Props['showToast'] }) {
+function ContractorsPanel({
+  selected,
+  projects,
+  allContractors,
+  projectArchived,
+  onInvite,
+  onOpen,
+  onChanged,
+  showToast,
+}: {
+  selected: ProjectPresentation;
+  projects: Proyecto[];
+  allContractors: Contratista[];
+  projectArchived: boolean;
+  onInvite: () => void;
+  onOpen: Props['onOpenContractor'];
+  onChanged: () => void;
+  showToast: Props['showToast'];
+}) {
   const [savingId, setSavingId] = useState<string | null>(null);
-  const contractorById = new Map(selected.contractors.map(item => [item.id, item]));
+  const contractorById = new Map(allContractors.map(item => [item.id, item]));
+  const historical = (selected.project.contratistasHistoricos || [])
+    .map(id => contractorById.get(id))
+    .filter((item): item is Contratista => Boolean(item));
+
+  const parentForProject = (contractor: Contratista) =>
+    contractor.contratistaPadrePorProyecto?.[selected.project.id];
+
   const canBeParent = (candidate: Contratista, childId: string) => {
     if (candidate.id === childId) return false;
     let current: Contratista | undefined = candidate;
     const visited = new Set<string>();
-    while (current?.contratistaPadreId && !visited.has(current.id)) {
-      if (current.contratistaPadreId === childId) return false;
+    while (current && !visited.has(current.id)) {
+      const parentId = parentForProject(current);
+      if (!parentId) break;
+      if (parentId === childId) return false;
       visited.add(current.id);
-      current = contractorById.get(current.contratistaPadreId);
+      current = contractorById.get(parentId);
     }
     return true;
   };
+
   const updateParent = async (contractor: Contratista, parentId: string) => {
-    if (savingId) return;
+    if (savingId || projectArchived) return;
     setSavingId(contractor.id);
     try {
       await setContractorParent(selected.project.id, contractor.id, parentId || undefined);
       onChanged();
-      showToast(parentId ? 'Relación de subcontratación actualizada.' : 'Contratista marcado como principal.');
+      showToast(parentId ? 'Relación de subcontratación actualizada para este proyecto.' : 'Contratista marcado como principal en este proyecto.');
     } catch (error) {
       console.error('No fue posible actualizar la relación del contratista.', error);
-      showToast('No fue posible actualizar la relación de subcontratación.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible actualizar la relación de subcontratación.', 'error');
     } finally {
       setSavingId(null);
     }
   };
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Contratistas del proyecto</h2><p>Organiza contratistas principales y subcontratistas, manteniendo una acreditación independiente por empresa.</p><div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Contratista</th><th>Relación</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acción</th></tr></thead><tbody>{selected.contractors.map(contractor => {
-    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
-    const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
-    const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
-    const enabled = workerAccess.filter(state => state === 'habilitado').length;
-    const result = calcularAccesoPago(contractor, selected.project.id);
-    const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado')
-      ? 'Con bloqueos'
-      : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente')
-        ? 'Pendiente'
-        : 'Habilitado';
-    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><select aria-label={`Relación de ${contractor.nombre}`} value={contractor.contratistaPadreId || ''} disabled={savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{accessState}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
-  })}</tbody></table></div></article>;
+
+  const finishParticipation = async (contractor: Contratista) => {
+    if (savingId || projectArchived) return;
+    const confirmed = window.confirm(
+      `¿Finalizar la participación de "${contractor.nombre}" en "${selected.project.nombre}"?\n\n` +
+      'Se cerrarán sus servicios y asignaciones activas en este proyecto. Los documentos, revisiones y antecedentes históricos se conservarán.'
+    );
+    if (!confirmed) return;
+    setSavingId(contractor.id);
+    try {
+      await setContractorProjectActive(selected.project.id, contractor.id, false);
+      onChanged();
+      showToast('Participación finalizada. El historial se conserva.', 'warning');
+    } catch (error) {
+      console.error('No fue posible finalizar la participación.', error);
+      showToast(error instanceof Error ? error.message : 'No fue posible finalizar la participación.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const reactivateParticipation = async (contractor: Contratista) => {
+    if (savingId || projectArchived) return;
+    setSavingId(contractor.id);
+    try {
+      await setContractorProjectActive(selected.project.id, contractor.id, true);
+      onChanged();
+      showToast('Contratista reactivado en el proyecto. Revisa servicios y trabajadores antes de operar.');
+    } catch (error) {
+      console.error('No fue posible reactivar la participación.', error);
+      showToast(error instanceof Error ? error.message : 'No fue posible reactivar la participación.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return <>
+    <article className="mandante-proyectos-section-card mandante-proyectos-panel">
+      <div className="mandante-proyectos-section-head">
+        <div>
+          <h2>Contratistas del proyecto</h2>
+          <p>Administra quién participa en esta obra y la relación entre contratistas principales y subcontratistas.</p>
+        </div>
+        <button type="button" onClick={onInvite} disabled={projectArchived}><Plus /> {projectArchived ? 'Solo lectura' : 'Invitar contratista'}</button>
+      </div>
+      {projectArchived && <div className="mandante-proyectos-readonly-note"><Archive /> Proyecto archivado: las relaciones se mantienen solo para consulta.</div>}
+      <div className="mandante-proyectos-table-wrap">
+        <table>
+          <thead><tr><th>Contratista</th><th>Relación en este proyecto</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acciones</th></tr></thead>
+          <tbody>{selected.contractors.map(contractor => {
+            const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
+            const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
+            const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
+            const enabled = workerAccess.filter(state => state === 'habilitado').length;
+            const result = calcularAccesoPago(contractor, selected.project.id);
+            const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado')
+              ? 'Con bloqueos'
+              : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente')
+                ? 'Pendiente'
+                : 'Habilitado';
+            const currentParentId = parentForProject(contractor) || '';
+            return <tr key={contractor.id}>
+              <td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td>
+              <td><select aria-label={`Relación de ${contractor.nombre}`} value={currentParentId} disabled={projectArchived || savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td>
+              <td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td>
+              <td>{enabled}/{assigned.length}</td>
+              <td>{accessState}</td>
+              <td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td>
+              <td><div className="mandante-proyectos-contractor-actions"><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button><button type="button" className="danger" disabled={projectArchived || Boolean(savingId)} onClick={() => void finishParticipation(contractor)}><Archive /> {savingId === contractor.id ? 'Actualizando…' : 'Finalizar'}</button></div></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      {selected.contractors.length === 0 && <div className="mandante-proyectos-empty">Todavía no hay contratistas activos en este proyecto.</div>}
+    </article>
+
+    {historical.length > 0 && <article className="mandante-proyectos-section-card mandante-proyectos-panel mandante-proyectos-retired">
+      <div className="mandante-proyectos-section-head"><div><h2>Participaciones finalizadas</h2><p>Empresas que ya no operan en el proyecto. Sus documentos, trabajadores y revisiones permanecen en el historial.</p></div></div>
+      <div className="mandante-proyectos-retired-list">{historical.map(contractor => <div key={contractor.id}>
+        <span><strong>{contractor.nombre}</strong><small>RUT {contractor.rut} · relación finalizada</small></span>
+        <div className="mandante-proyectos-history-actions"><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver historial</button><button type="button" disabled={projectArchived || Boolean(savingId)} onClick={() => void reactivateParticipation(contractor)}><RotateCcw /> {savingId === contractor.id ? 'Reactivando…' : 'Reactivar'}</button></div>
+      </div>)}</div>
+    </article>}
+  </>;
 }
 
 function RequirementsPanel({ requirements, retiredRequirements, projectArchived, onAdd, onChanged, showToast }: {
@@ -741,7 +852,7 @@ function AccreditationsPanel({ selected, requirements, onOpen }: { selected: Pro
     await downloadProjectPackage(selected.project, selected.contractors, requirements, obligations);
   };
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Acreditaciones del proyecto</h2><p>Vista consolidada de Contratista + Mandante + Proyecto.</p></div><button type="button" onClick={() => void exportReport()}><Download /> Exportar paquete</button></div><div className="mandante-proyectos-accreditations">{selected.contractors.map(contractor => {
-    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id)); const workers = selected.workers.filter(item => item.contractor.id === contractor.id); const workerAccess = workers.map(item => calcularAccesoTrabajador(item.worker, selected.project.id, contractor.id)); const enabled = workerAccess.filter(state => state === 'habilitado').length; const result = calcularAccesoPago(contractor, selected.project.id); const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado') ? 'Con bloqueos' : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente') ? 'Pendiente' : 'Habilitado';
-    return <div key={contractor.id}><span><strong>{contractor.nombre}</strong><small>{selected.project.nombre}</small></span><span><small>Estado</small><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></span><span><small>Empresa</small><strong>{companyObligationSummary(contractor, selected.project.id, requirements)}</strong></span><span><small>Trabajadores</small><strong>{enabled}/{workers.length}</strong></span><span><small>Acceso</small><strong>{accessState === 'Con bloqueos' ? 'Bloqueado' : accessState}</strong></span><span><small>Pago</small><strong>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Abrir</button></div>;
+    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id)); const workers = selected.workers.filter(item => item.contractor.id === contractor.id); const workerAccess = workers.map(item => calcularAccesoTrabajador(item.worker, selected.project.id, contractor.id)); const enabled = workerAccess.filter(state => state === 'habilitado').length; const result = calcularAccesoPago(contractor, selected.project.id); const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado') ? 'Con bloqueos' : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente') ? 'Pendiente' : 'Habilitado'; const today = new Date().toISOString().slice(0,10); const obligations = getObligacionesDocumentales().filter(item => item.proyectoId===selected.project.id && item.contratistaId===contractor.id && item.activo && item.periodoInicio<=today && item.estado!=='no_aplica'); const satisfied = obligations.filter(item => item.estado==='aprobado' || item.estado==='por_vencer').length; const reviewCount = obligations.filter(item => item.estado==='revision').length; const compliance = obligations.length ? Math.round((satisfied/obligations.length)*100) : null;
+    return <div key={contractor.id}><span><strong>{contractor.nombre}</strong><small>{selected.project.nombre}</small></span><span><small>Estado</small><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></span><span><small>Cumplimiento</small><strong>{compliance===null?'Sin obligaciones':`${compliance}%`}</strong><small>{reviewCount ? `${reviewCount} en revisión` : 'Sin revisión pendiente'}</small></span><span><small>Empresa</small><strong>{companyObligationSummary(contractor, selected.project.id, requirements)}</strong></span><span><small>Trabajadores</small><strong>{enabled}/{workers.length}</strong></span><span><small>Acceso</small><strong>{accessState === 'Con bloqueos' ? 'Bloqueado' : accessState}</strong></span><span><small>Pago</small><strong>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</strong></span><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Abrir</button></div>;
   })}</div></article>;
 }

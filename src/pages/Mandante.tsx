@@ -518,6 +518,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
   onClose={() => setShowInvitarModal(false)}
   contractors={allContratistas}
   projects={misProyectos}
+  initialProjectKey={selectedProjectId || undefined}
   showToast={showToast}
 />
     </div>

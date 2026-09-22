@@ -46,6 +46,7 @@ type BackendAccreditation = {
   project_id: string;
   contratista_id: string;
   is_active: boolean;
+  parent_accreditation_id: string | null;
 };
 
 type BackendRequirement = {
@@ -227,7 +228,7 @@ async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
     selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone'),
     selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
-    selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active'),
+    selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active,parent_accreditation_id'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
     selectRows<BackendService>('services', accessToken, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active'),
     selectRows<BackendDecisionReview>('privacy_decision_reviews', accessToken, 'accreditation_id,worker_id,decision_type,status,override_value,override_reason,override_until,reviewed_at'),
@@ -263,25 +264,42 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
   const contractorKeyByUuid = new Map(rows.contratistas.map(row => [row.id, row.integration_key || row.id]));
   const serviceKeyByUuid = new Map(rows.services.map(row => [row.id, row.integration_key || row.id]));
 
-  // El contratista conserva acceso de consulta a proyectos históricos mediante
-  // acreditaciones inactivas. Admin y Mandante mantienen únicamente asociaciones
-  // activas para que una hidratación histórica no pueda reactivar relaciones al sincronizar.
-  const visibleAccreditations = session.role === 'contratista'
-    ? rows.accreditations
-    : rows.accreditations.filter(row => row.is_active);
+  // La relación activa gobierna la operación. Las relaciones inactivas se
+  // mantienen separadas para que Mandante y Contratista conserven historial sin
+  // riesgo de reactivarlas por una sincronización posterior.
   const contractorsByProject = new Map<string, string[]>();
   const activeContractorsByProject = new Map<string, string[]>();
-  visibleAccreditations.forEach(row => {
+  const historicalContractorsByProject = new Map<string, string[]>();
+  rows.accreditations.forEach(row => {
     const projectKey = projectKeyByUuid.get(row.project_id);
     const contractorKey = contractorKeyByUuid.get(row.contratista_id);
     if (!projectKey || !contractorKey) return;
-    const current = contractorsByProject.get(projectKey) || [];
-    current.push(contractorKey);
-    contractorsByProject.set(projectKey, current);
+    if (session.role === 'contratista' || row.is_active) {
+      const visible = contractorsByProject.get(projectKey) || [];
+      visible.push(contractorKey);
+      contractorsByProject.set(projectKey, visible);
+    }
     if (row.is_active) {
       const active = activeContractorsByProject.get(projectKey) || [];
       active.push(contractorKey);
       activeContractorsByProject.set(projectKey, active);
+    } else {
+      const historical = historicalContractorsByProject.get(projectKey) || [];
+      historical.push(contractorKey);
+      historicalContractorsByProject.set(projectKey, historical);
+    }
+  });
+
+  const accreditationRowById = new Map(rows.accreditations.map(row => [row.id, row]));
+  const parentByContractorProject = new Map<string, string>();
+  rows.accreditations.forEach(row => {
+    if (!row.parent_accreditation_id) return;
+    const parent = accreditationRowById.get(row.parent_accreditation_id);
+    const projectKey = projectKeyByUuid.get(row.project_id);
+    const contractorKey = contractorKeyByUuid.get(row.contratista_id);
+    const parentContractorKey = parent ? contractorKeyByUuid.get(parent.contratista_id) : undefined;
+    if (projectKey && contractorKey && parentContractorKey) {
+      parentByContractorProject.set(`${contractorKey}:${projectKey}`, parentContractorKey);
     }
   });
 
@@ -315,6 +333,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         estado: frontendStatus(row.status),
         contratistas: contractorsByProject.get(id) || [],
         contratistasActivos: activeContractorsByProject.get(id) || [],
+        contratistasHistoricos: historicalContractorsByProject.get(id) || [],
         ubicacion: row.location || fallback?.ubicacion,
         fechaInicio: row.starts_at || fallback?.fechaInicio,
         fechaTermino: row.ends_at || fallback?.fechaTermino,
@@ -346,6 +365,11 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         rut: row.rut || fallback?.rut || '',
         proyectos: projectIdsByContractor.get(id) || [],
         contratistaPadreId: row.parent_contratista_id ? contractorKeyByUuid.get(row.parent_contratista_id) : undefined,
+        contratistaPadrePorProyecto: Object.fromEntries(
+          frontendProjects
+            .map(project => [project.id, parentByContractorProject.get(`${id}:${project.id}`)] as const)
+            .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
+        ),
       };
     });
 
@@ -572,7 +596,7 @@ async function syncAccreditations(
 ): Promise<void> {
   if (session.role === 'contratista') return;
   const token = session._supabase.accessToken;
-  const backendAccreditations = await selectRows<BackendAccreditation>('accreditations', token, 'id,project_id,contratista_id,is_active');
+  const backendAccreditations = await selectRows<BackendAccreditation>('accreditations', token, 'id,project_id,contratista_id,is_active,parent_accreditation_id');
   const scopedProjects = scopeLocalProjects(session, localProjects);
   const scopedProjectUuids = new Set(scopedProjects.map(project => projectUuidByKey.get(project.id)).filter(Boolean) as string[]);
   const desired = new Set<string>();
@@ -580,7 +604,7 @@ async function syncAccreditations(
   for (const project of scopedProjects) {
     const projectUuid = projectUuidByKey.get(project.id);
     if (!projectUuid) continue;
-    for (const contractorKey of project.contratistas) {
+    for (const contractorKey of (project.contratistasActivos ?? project.contratistas)) {
       const contractorUuid = contractorUuidByKey.get(contractorKey);
       if (!contractorUuid) continue;
       const key = `${projectUuid}:${contractorUuid}`;

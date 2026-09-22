@@ -95,7 +95,8 @@ export function buildProjectPresentations(
   const requirements = getRequisitos();
 
   return projects.map(project => {
-    const contractors = allContractors.filter(contractor => project.contratistas.includes(contractor.id));
+    const activeContractorIds = project.contratistasActivos ?? project.contratistas;
+    const contractors = allContractors.filter(contractor => activeContractorIds.includes(contractor.id));
     const workerMap = new Map<string, { contractor: Contratista; worker: Trabajador }>();
     contractors.forEach(contractor => (contractor.trabajadores || [])
       .filter(worker => esTrabajadorAsignado(worker, project.id, projects))

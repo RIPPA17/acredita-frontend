@@ -6,7 +6,10 @@ const MANDANTE = '20000000-0000-4000-8000-000000000001';
 const PROJECT = '30000000-0000-4000-8000-000000000001';
 const PROJECT_OLD = '30000000-0000-4000-8000-000000000002';
 const CONTRACTOR = '40000000-0000-4000-8000-000000000001';
+const CONTRACTOR_B = '40000000-0000-4000-8000-000000000002';
 const ACCREDITATION = '50000000-0000-4000-8000-000000000001';
+const ACCREDITATION_B = '50000000-0000-4000-8000-000000000003';
+const INVITATION = '51000000-0000-4000-8000-000000000001';
 const ACCREDITATION_OLD = '50000000-0000-4000-8000-000000000002';
 const SERVICE = '60000000-0000-4000-8000-000000000001';
 const WORKER = '70000000-0000-4000-8000-000000000001';
@@ -44,6 +47,8 @@ type MockOptions = {
   notificationScenario?: boolean;
   evaluationWorkflow?: boolean;
   paymentWorkflow?: boolean;
+  contractorHierarchy?: boolean;
+  invitationFlow?: boolean;
 };
 
 function appSession(role: Role) {
@@ -81,11 +86,33 @@ function fixtures(role: Role, options: MockOptions) {
       { id: PROJECT, mandante_id: MANDANTE, name: 'Proyecto Piloto QA', code: 'PILOTO-QA', status: 'active', integration_key: 'proyecto_piloto', location: 'Santiago', starts_at: '2026-09-01', ends_at: null, description: null, responsible_name: 'Administrador Mandante', responsible_email: 'admin@mandante.invalid', responsible_phone: null },
       ...(options.historicalProject ? [{ id: PROJECT_OLD, mandante_id: MANDANTE, name: 'Proyecto Histórico QA', code: 'HIST-QA', status: 'archived', integration_key: 'proyecto_historico', location: 'Santiago', starts_at: '2025-01-01', ends_at: '2025-12-31' }] : []),
     ],
-    contratistas: [{ id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null }],
-    accreditations: [
-      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject },
-      ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false }] : []),
+    contratistas: [
+      { id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null },
+      ...(options.contractorHierarchy ? [{ id: CONTRACTOR_B, name: 'Contratista Piloto B', rut: '77.000.000-2', legal_name: 'Contratista Piloto B SpA', integration_key: 'contratista_piloto_b', is_active: true, parent_contratista_id: null }] : []),
     ],
+    accreditations: [
+      { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject, parent_accreditation_id: null },
+      ...(options.contractorHierarchy ? [{ id: ACCREDITATION_B, project_id: PROJECT, contratista_id: CONTRACTOR_B, is_active: true, parent_accreditation_id: null }] : []),
+      ...(options.historicalProject ? [{ id: ACCREDITATION_OLD, project_id: PROJECT_OLD, contratista_id: CONTRACTOR, is_active: false, parent_accreditation_id: null }] : []),
+    ],
+    invitations: options.invitationFlow ? [{
+      id: INVITATION,
+      project_id: PROJECT,
+      contratista_id: null,
+      invited_email: 'pendiente@contratista.invalid',
+      status: 'pending',
+      invited_by: PROFILE,
+      accepted_by: null,
+      invited_at: '2026-09-22T10:00:00Z',
+      responded_at: null,
+      expires_at: '2026-09-29T10:00:00Z',
+      contractor_name: 'Contratista Pendiente SpA',
+      contractor_rut: '76.111.111-9',
+      message: null,
+      token_hash: 'hash',
+      sent_at: '2026-09-22T10:01:00Z',
+      send_error: null,
+    }] : [],
     requirements: [
       { id: REQ_COMPANY, project_id: PROJECT, integration_key: 'req_f30', name: 'F30 / F31 SII', category: 'Laboral', target: 'empresa', is_required: true, frequency: 'mensual', validity_days: 30, alert_days: 7, criticality: 'bloquea_pago', is_active: true, sort_order: 1, description: 'Cumplimiento previsional', review_checklist: ['Vigencia'], applicability: { categories: [] }, blocks_work: false, blocks_assignment: false, service_id: null, due_days: 5 },
       { id: REQ_WORKER, project_id: PROJECT, integration_key: 'req_odi', name: 'Certificado ODI', category: 'Seguridad', target: 'trabajador', is_required: true, frequency: 'un_ano', validity_days: 365, alert_days: 30, criticality: 'bloquea_acceso', is_active: true, sort_order: 2, description: 'ODI vigente', review_checklist: ['Firma'], applicability: { categories: options.categorizedWorker ? ['altura'] : [] }, blocks_work: true, blocks_assignment: true, service_id: SERVICE, due_days: 5 },
@@ -576,6 +603,60 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
+      if (url.pathname === '/rest/v1/rpc/set_contractor_parent') {
+        const project = (data.projects as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_contractor_key);
+        const parent = (request.postDataJSON() as any)?.p_parent_contractor_key
+          ? (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_parent_contractor_key)
+          : null;
+        const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
+        const parentAccreditation = parent
+          ? (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === parent.id && item.is_active)
+          : null;
+        if (accreditation) accreditation.parent_accreditation_id = parentAccreditation?.id || null;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
+      if (url.pathname === '/rest/v1/rpc/set_contractor_project_active') {
+        const project = (data.projects as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_contractor_key);
+        const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
+        if (accreditation) {
+          accreditation.is_active = Boolean((request.postDataJSON() as any)?.p_active);
+          accreditation.parent_accreditation_id = null;
+          if (!(request.postDataJSON() as any)?.p_active) {
+            for (const child of data.accreditations as any[]) {
+              if (child.project_id === project?.id && child.parent_accreditation_id === accreditation.id) child.parent_accreditation_id = null;
+            }
+            for (const service of data.services as any[]) {
+              if (service.accreditation_id === accreditation.id && service.is_active) {
+                service.is_active = false;
+                service.status = 'finalizado';
+                service.ends_at = service.ends_at || '2026-09-22';
+              }
+            }
+            for (const assignment of data.worker_assignments as any[]) {
+              if (assignment.accreditation_id === accreditation.id && assignment.is_active) {
+                assignment.is_active = false;
+                assignment.assignment_status = 'baja';
+                assignment.access_status = 'bloqueado';
+                assignment.unassigned_at = assignment.unassigned_at || '2026-09-22T12:00:00Z';
+              }
+            }
+            for (const obligation of data.document_obligations as any[]) {
+              if (obligation.accreditation_id === accreditation.id) obligation.is_active = false;
+            }
+          }
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
+      if (url.pathname === '/rest/v1/rpc/cancel_contractor_invitation') {
+        const invitation = (data.invitations as any[]).find(item => item.id === (request.postDataJSON() as any)?.p_invitation_id);
+        if (invitation && invitation.status === 'pending') {
+          invitation.status = 'cancelled';
+          invitation.responded_at = '2026-09-22T12:00:00Z';
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
       if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
         return route.fulfill({
           status: 200,
@@ -635,6 +716,16 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
             const existing = requirementRows.find(row => row.integration_key === item.integration_key);
             if (existing) Object.assign(existing, item);
             else requirementRows.push({ id: `99000000-0000-4000-8000-${String(requirementRows.length + 1).padStart(12, '0')}`, ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
+        if (request.method() === 'POST' && table === 'services') {
+          const payload = Array.isArray(body) ? body : [body];
+          const serviceRows = data.services as any[];
+          for (const item of payload) {
+            const existing = serviceRows.find(row => row.integration_key === item.integration_key);
+            if (existing) Object.assign(existing, item);
+            else serviceRows.push({ id: `61000000-0000-4000-8000-${String(serviceRows.length + 1).padStart(12, '0')}`, ...item });
           }
           return route.fulfill({ status: 204, body: '' });
         }
@@ -837,6 +928,132 @@ test('05d Proyecto archivado mantiene la matriz documental en solo lectura', asy
   await expect(row.getByRole('button', { name: 'Editar' })).toBeDisabled();
   await expect(row.getByRole('button', { name: 'Retirar' })).toBeDisabled();
   await expect(page.getByText('Proyecto archivado: la matriz se conserva para consulta e historial.')).toBeVisible();
+});
+
+test('05e Mandante administra jerarquía, baja, historial y reactivación por proyecto', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { contractorHierarchy: true });
+  await openMandanteProject(page);
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+
+  const rowA = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
+  const rowB = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto B' }).first();
+  await expect(rowA).toBeVisible();
+  await expect(rowB).toBeVisible();
+
+  const relationA = rowA.getByLabel('Relación de Contratista Piloto A');
+  await relationA.selectOption('contratista_piloto_b');
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_parent'
+    && item.body?.p_project_key === 'proyecto_piloto'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_parent_contractor_key === 'contratista_piloto_b'
+  )).toBeTruthy();
+  await expect(relationA).toHaveValue('contratista_piloto_b');
+
+  page.once('dialog', dialog => dialog.accept());
+  await rowA.getByRole('button', { name: 'Finalizar' }).click();
+  await expect(page.getByRole('heading', { name: 'Participaciones finalizadas' })).toBeVisible();
+  const historical = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Contratista Piloto A' });
+  await expect(historical).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_project_active'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === false
+  )).toBeTruthy();
+
+  await historical.getByRole('button', { name: 'Ver historial' }).click();
+  await expect(page.getByRole('heading', { name: 'Contratista Piloto A', exact: true })).toBeVisible();
+  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
+
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Servicios', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Servicios y contratos finalizados' })).toBeVisible();
+  await expect(page.getByText('SRV-01', { exact: true })).toBeVisible();
+
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+  const historicalAgain = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Contratista Piloto A' });
+  await historicalAgain.getByRole('button', { name: 'Reactivar' }).click();
+  const restoredRow = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
+  await expect(restoredRow).toBeVisible();
+  await expect(restoredRow.getByLabel('Relación de Contratista Piloto A')).toHaveValue('');
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_project_active'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === true
+  )).toBeTruthy();
+});
+
+test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { invitationFlow: true });
+  await openMandanteProject(page);
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByRole('button', { name: 'Invitar contratista' }).click();
+
+  const invitationRow = page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Pendiente' }).last();
+  await expect(invitationRow).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Cancelar invitación de pendiente@contratista.invalid' }).click();
+
+  await expect(page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Cancelada' }).last()).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/cancel_contractor_invitation'
+    && item.body?.p_invitation_id === INVITATION
+  )).toBeTruthy();
+});
+
+test('05g Servicios impide códigos duplicados para el mismo contratista', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Servicios', exact: true }).click();
+  await page.getByRole('button', { name: 'Nuevo servicio' }).click();
+
+  await page.getByPlaceholder('Ej. OC-2026-014').fill('SRV-01');
+  await page.getByPlaceholder('Ej. Mantención eléctrica planta norte').fill('Servicio duplicado QA');
+  await page.getByRole('button', { name: 'Crear servicio' }).click();
+
+  await expect(page.getByText('Ese contratista ya tiene un servicio o contrato con el mismo código en este proyecto.')).toBeVisible();
+});
+
+test('05h Mandante distingue acceso pendiente de acceso bloqueado en trabajadores', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'pending' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  await expect(page.getByText('Pendiente', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('Afecta: ingreso, trabajo, asignación')).toBeVisible();
+});
+
+test('05i Mandante ve motivo y corrección de un documento rechazado', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'rejected' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+  await page.getByRole('button', { name: /Certificado ODI/ }).click();
+
+  await expect(page.getByText('Documento rechazado', { exact: true })).toBeVisible();
+  await expect(page.getByText('Falta la firma del trabajador en la última página.')).toBeVisible();
+  await expect(page.getByText('Qué debe corregirse: Sube nuevamente el ODI firmado.')).toBeVisible();
+  await expect(page.getByText('Afecta: ingreso, trabajo, asignación')).toBeVisible();
+});
+
+test('05j Mandante ve renovación en revisión sin perder la versión vigente', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'renewal_review' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+  await page.getByRole('button', { name: /Certificado ODI/ }).click();
+
+  await expect(page.getByText('Hay una versión nueva en trámite')).toBeVisible();
+  await expect(page.getByText(/Versión 2 · En revisión por Acredita/)).toBeVisible();
+  await expect(page.getByText('La versión vigente anterior no se reemplaza hasta que la nueva sea aprobada.')).toBeVisible();
 });
 
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {
