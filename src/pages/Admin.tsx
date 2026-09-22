@@ -65,6 +65,7 @@ import { useSidebarPreference } from '../hooks/useSidebarPreference';
 import { buildAdminNotifications, type OperationalNotification } from '../data/operationalNotifications';
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
+import { buildAdminSearchResults } from './admin/globalSearch';
 
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -282,62 +283,13 @@ export default function AdminPortal() {
     { id: "configuracion", label: "Configuración", icon: Settings },
   ];
 
-  const PROYECTOS_BUSQUEDA = proyectos.map(p => {
-    const mandante = GLOBAL_MANDANTES.find(m => m.id === p.mandanteId);
-    return {
-      nombre: p.nombre,
-      mandante: mandante ? mandante.nombre : "Mandante no disponible",
-      proyecto: p,
-    };
+  const resultadosPorTipo = buildAdminSearchResults({
+    query: busquedaGlobal,
+    mandantes: GLOBAL_MANDANTES,
+    contratistas,
+    proyectos,
+    verificadores,
   });
-
-  const DOCUMENTOS_BUSQUEDA = contratistas.flatMap(contratista => [
-    ...contratista.documentos.map(documento => ({
-      documento: documento.nombre,
-      estado: documento.estado,
-      contratista,
-      proyectoId: documento.proyectoId,
-      proyectoNombre: proyectos.find(proyecto => proyecto.id === documento.proyectoId)?.nombre || 'Proyecto no disponible',
-      trabajador: null,
-    })),
-    ...(contratista.trabajadores || []).flatMap(trabajador =>
-      (trabajador.documentos || []).map(documento => ({
-        documento: documento.nombre,
-        estado: documento.estado,
-        contratista,
-        proyectoId: documento.proyectoId,
-        proyectoNombre: proyectos.find(proyecto => proyecto.id === documento.proyectoId)?.nombre || 'Proyecto no disponible',
-        trabajador,
-      }))
-    ),
-  ]).filter(item => Boolean(item.proyectoId));
-
-  const indiceBusqueda = [
-    ...GLOBAL_MANDANTES.map(m => ({ tipo: "empresa", label: m.nombre, sub: "Mandante", data: m, esMandante: true })),
-    ...contratistas.map(c => ({ tipo: "empresa", label: c.nombre, sub: c.isNew ? "Contratista (Nuevo)" : "Contratista", data: c, esMandante: false })),
-    ...DOCUMENTOS_BUSQUEDA.map(item => ({ tipo: "documento", label: item.documento, sub: `${item.contratista.nombre} · ${item.proyectoNombre} · ${item.estado}`, data: item })),
-    ...PROYECTOS_BUSQUEDA.map(p => ({ tipo: "proyecto", label: p.nombre, sub: p.mandante, data: p })),
-    ...verificadores.map(v => ({
-      tipo: "revisor",
-      label: v.nombre,
-      sub: `${v.rol === 'supervisor' ? 'Supervisor' : 'Verificador'} · ${v.estado === 'online' ? 'Online' : 'Offline'}`,
-      data: v,
-    })),
-  ];
-
-  const resultadosBusqueda = busquedaGlobal.trim().length === 0
-    ? []
-    : indiceBusqueda.filter(item =>
-        item.label.toLowerCase().includes(busquedaGlobal.toLowerCase()) ||
-        item.sub?.toLowerCase().includes(busquedaGlobal.toLowerCase())
-      );
-
-  const resultadosPorTipo = {
-    empresa: resultadosBusqueda.filter(r => r.tipo === "empresa"),
-    documento: resultadosBusqueda.filter(r => r.tipo === "documento"),
-    proyecto: resultadosBusqueda.filter(r => r.tipo === "proyecto"),
-    revisor: resultadosBusqueda.filter(r => r.tipo === "revisor"),
-  };
 
   return (
     <div className="h-screen flex flex-col font-sans bg-cream2 text-navy">
