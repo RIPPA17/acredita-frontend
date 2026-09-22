@@ -962,7 +962,7 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   )).toBeTruthy();
 
   await historical.getByRole('button', { name: 'Ver historial' }).click();
-  await expect(page.getByRole('heading', { name: 'Contratista Piloto A' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Contratista Piloto A', exact: true })).toBeVisible();
   await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
 
   await openMandanteProject(page);
