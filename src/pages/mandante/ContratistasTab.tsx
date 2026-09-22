@@ -22,6 +22,7 @@ import {
   summarizeContractorMatrix,
 } from './contratistas/contratistasUtils';
 import './ContratistasTab.css';
+import ListPagination from '../../components/ListPagination';
 
 type ContractorTab = 'resumen' | 'acreditaciones' | 'trabajadores' | 'documentos';
 type AttentionFilter = 'Todos' | 'Con problemas' | 'Al día';
@@ -99,6 +100,7 @@ export default function ContratistasTab({
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('Todos');
+  const [page, setPage] = useState(1);
   const [selectedAccreditationProjectId, setSelectedAccreditationProjectId] = useState<string | null>(null);
   const [selectedWorkerContext, setSelectedWorkerContext] = useState<WorkerContext | null>(null);
   const [selectedDocumentContext, setSelectedDocumentContext] = useState<DocumentContext | null>(null);
@@ -117,8 +119,17 @@ export default function ContratistasTab({
     const stateMatches = attentionFilter === 'Todos' || (attentionFilter === 'Con problemas' ? row.hasProblems : row.allGood);
     return textMatches && stateMatches;
   });
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hayFiltros = Boolean(search.trim()) || projectFilter !== 'all' || attentionFilter !== 'Todos';
   const contractorIds = new Set(misProyectos.flatMap(project => project.contratistas));
   const selected = allContratistas.find(contractor => contractor.id === selectedContratista && contractorIds.has(contractor.id));
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, projectFilter, attentionFilter]);
 
   useEffect(() => {
     if (!focus) return;
@@ -153,6 +164,7 @@ export default function ContratistasTab({
           <label className="mandante-contratistas-search"><Search /><span className="sr-only">Buscar contratista</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar contratista..." /></label>
           <label><span className="sr-only">Filtrar proyecto</span><select value={projectFilter} onChange={event => setProjectFilter(event.target.value)}><option value="all">Todos los proyectos</option>{misProyectos.map(project => <option value={project.id} key={project.id}>{project.nombre}</option>)}</select></label>
           <label><span className="sr-only">Filtrar estado</span><select value={attentionFilter} onChange={event => setAttentionFilter(event.target.value as AttentionFilter)}><option>Todos</option><option>Con problemas</option><option>Al día</option></select></label>
+          {hayFiltros && <button type="button" onClick={() => { setSearch(''); setProjectFilter('all'); setAttentionFilter('Todos'); }} className="btn btn-ghost text-[12px]">Limpiar filtros</button>}
         </div>
       </header>
       <div className="mandante-contratistas-executive">
@@ -160,7 +172,10 @@ export default function ContratistasTab({
         <div><strong>{executive.contractorsAttention} de {executive.contractorsTotal} contratistas requieren atención en {executive.projectsAttention} proyecto{executive.projectsAttention === 1 ? '' : 's'}.</strong><span>Hay {executive.retainedPayments} pagos retenidos y {executive.workersWithoutAccess} trabajadores sin acceso.</span></div>
       </div>
       <div className="mandante-contratistas-legend"><span><i className="green" />Acreditado</span><span><i className="yellow" />En proceso</span><span><i className="red" />Bloqueado</span><span><i className="gray" />No participa</span></div>
-      {matrixRows.length === 0 ? <div className="mandante-contratistas-empty">No hay contratistas asociados a los proyectos del Mandante.</div> : visibleRows.length === 0 ? <div className="mandante-contratistas-empty">No hay contratistas que coincidan con estos filtros.</div> : <Matrix rows={visibleRows} projects={scopeProjects} onOpenGeneral={openGeneral} onOpenAccreditation={openAccreditation} />}
+      {matrixRows.length === 0 ? <div className="mandante-contratistas-empty">No hay contratistas asociados a los proyectos del Mandante.</div> : visibleRows.length === 0 ? <div className="mandante-contratistas-empty">No hay contratistas que coincidan con estos filtros.</div> : <>
+        <Matrix rows={pagedRows} projects={scopeProjects} onOpenGeneral={openGeneral} onOpenAccreditation={openAccreditation} />
+        <ListPagination page={safePage} pageSize={pageSize} total={visibleRows.length} onPageChange={setPage} label="contratistas" />
+      </>}
       <p className="mandante-contratistas-note">Cada celda representa una acreditación distinta: Contratista + Proyecto. Nombre de empresa = ficha general · estado = acreditación exacta.</p>
     </section>;
   }
