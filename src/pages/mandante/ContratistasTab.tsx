@@ -418,6 +418,7 @@ function DocumentsV5({
   const [typeFilter, setTypeFilter] = useState('all');
   const [openingFile, setOpeningFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const requirements = getRequisitos();
 
   const source = [
@@ -451,6 +452,16 @@ function DocumentsV5({
     (typeFilter === 'all' || row.type === typeFilter) &&
     `${row.document.nombre} ${row.associated}`.toLowerCase().includes(search.toLowerCase())
   );
+
+  const pageSize = 30;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hayFiltros = Boolean(search.trim()) || projectFilter !== 'all' || typeFilter !== 'all';
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, projectFilter, typeFilter]);
 
   const context = selectedContext;
   if (context) {
@@ -530,17 +541,19 @@ function DocumentsV5({
       <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar documento..." />
       <select value={projectFilter} onChange={event => setProjectFilter(event.target.value)}><option value="all">Todos los proyectos</option>{projects.map(project => <option value={project.id} key={project.id}>{project.nombre}</option>)}</select>
       <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">Todos</option><option value="Empresa">Empresa</option><option value="Trabajador">Trabajadores</option></select>
+      {hayFiltros && <button type="button" className="btn btn-ghost text-[12px]" onClick={() => { setSearch(''); setProjectFilter('all'); setTypeFilter('all'); }}>Limpiar filtros</button>}
     </div>
     <article className="mandante-contratistas-card">
       <h2>Documentos</h2>
       <p>Explorador documental de solo lectura. Puedes abrir los archivos autorizados, pero no aprobarlos ni rechazarlos.</p>
-      <div className="mandante-contratistas-table-wrap"><table><thead><tr><th>Documento</th><th>Asociado a</th><th>Proyecto</th><th>Estado</th><th>Vencimiento</th></tr></thead><tbody>{rows.map(row => <tr key={row.key} onClick={() => onSelect({
+      <div className="mandante-contratistas-table-wrap"><table><thead><tr><th>Documento</th><th>Asociado a</th><th>Proyecto</th><th>Estado</th><th>Vencimiento</th></tr></thead><tbody>{pageRows.map(row => <tr key={row.key} onClick={() => onSelect({
         projectId: row.project.id,
         documentId: row.document.id,
         workerRut: row.workerRut,
         requirementId: row.requirement?.id,
       })}><td><button type="button">{row.document.nombre}</button></td><td>{row.associated}</td><td>{row.project.nombre}</td><td><b className={`mandante-contratistas-state ${badgeClass(row.state)}`}>{row.state}</b></td><td>{row.validity}</td></tr>)}</tbody></table></div>
       {rows.length === 0 && <p>No hay documentos que coincidan con los filtros.</p>}
+      <ListPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={setPage} label="documentos" />
     </article>
   </div>;
 }
