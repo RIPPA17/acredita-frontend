@@ -4,7 +4,7 @@ import {
   calcularEstadoTrabajador,
   esTrabajadorAsignado,
   getRequisitos,
-} from '../../../data/localStorageDb';
+} from '../../../data/businessStore';
 import { Contratista, Proyecto, Requisito, Trabajador } from '../../../types';
 import {
   getEstadoDocumentoEfectivo,
