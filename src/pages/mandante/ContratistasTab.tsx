@@ -558,6 +558,7 @@ function DocumentsV5({
             <div><dt>Proyecto</dt><dd>{project?.nombre}</dd></div>
             <div><dt>Vencimiento</dt><dd>{document?.vencimiento || '—'}</dd></div>
             <div><dt>Estado actual</dt><dd>{document ? validityLabel(document, state) : 'No se ha cargado un documento para este requisito.'}</dd></div>
+            {document?.revisor && <div><dt>Revisado por</dt><dd>{document.revisor}{document.fechaRevisado ? ` · ${document.fechaRevisado}` : ''}</dd></div>}
             {requirement && <div><dt>Efecto operacional</dt><dd>{requirementImpactLabel(requirement)}</dd></div>}
           </dl>
           {document && state === 'Rechazado' && (document.motivoRechazo || document.explicacionRechazo || document.solucionRechazo || document.motivo || document.observacion) && <div className="mandante-contratistas-review-note rejected">
