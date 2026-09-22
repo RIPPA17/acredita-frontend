@@ -3,7 +3,7 @@ import {
   calcularEstadoAcreditacion,
   calcularEstadoTrabajador,
   esTrabajadorAsignado,
-} from '../../../data/localStorageDb';
+} from '../../../data/businessStore';
 import { Contratista, Proyecto, Trabajador } from '../../../types';
 import { buildMandanteProjectSummaries, MandantePriority } from '../inicio/inicioUtils';
 

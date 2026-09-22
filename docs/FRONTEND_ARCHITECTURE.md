@@ -11,8 +11,8 @@
 3. **`businessRuntimeCache.ts` es memoria temporal.**
    No representa persistencia. Se hidrata desde Supabase y puede descartarse al cerrar sesión o resincronizar.
 
-4. **`localStorageDb.ts` y `runtimeDataStore.ts` son shims de compatibilidad.**
-   No deben recibir nuevas dependencias. Se eliminarán cuando los últimos imports legados hayan migrado.
+4. **Los shims legacy ya fueron retirados.**
+   `localStorageDb.ts` y `runtimeDataStore.ts` no existen en la arquitectura vigente. El código de negocio importa desde `businessStore.ts` y el cache efímero desde `businessRuntimeCache.ts`.
 
 5. **localStorage se reserva para preferencias de UI o sesión cuando corresponda.**
    No se deben guardar allí documentos, acreditaciones, trabajadores, requisitos, pagos u otros datos de negocio.
@@ -63,22 +63,23 @@ El cálculo local heredado solo se conserva temporalmente para pruebas sin sesi�
 
 ## Reglas para nuevos cambios
 
-- No importar desde `localStorageDb.ts` en código nuevo.
-- No importar desde `runtimeDataStore.ts` en código nuevo.
+- No reintroducir `localStorageDb.ts` ni `runtimeDataStore.ts`.
+- Importar negocio desde `businessStore.ts` y memoria efímera desde `businessRuntimeCache.ts`.
 - Preferir módulos especializados a ampliar `businessStore.ts`.
 - No duplicar reglas SQL del backend en componentes React.
 - Los cambios operacionales deben quedar persistidos antes de presentarse como definitivos.
 - Las excepciones humanas no deben alterar el estado documental original.
 
-## Próxima fragmentación
+## Fragmentación por dominio
 
-Los siguientes archivos deben seguir reduciéndose progresivamente:
+La segunda fase de limpieza ya separó responsabilidades concretas:
 
-- `src/pages/Contratista.tsx`
-- `src/pages/Admin.tsx`
-- `src/pages/Mandante.tsx`
-- `src/data/businessStore.ts`
-- `src/data/supabaseOperationalData.ts`
-- `src/pages/admin/configuracion/PrivacyAdminConfig.tsx`
+- privacidad: `PrivacyAdminConfig.tsx` quedó como orquestador y los paneles viven en `PrivacyAdminPanels.tsx`;
+- datos operacionales: acceso REST/tipos/fetch viven en `supabaseOperationalApi.ts`;
+- Mandante: la matriz de contratistas vive en `pages/mandante/contractorsData.ts`;
+- Admin: el índice y filtrado de búsqueda viven en `pages/admin/globalSearch.ts`;
+- Contratista: composición de notificaciones y validación del formulario de trabajadores viven en módulos propios;
+- negocio: las alertas de vigencia viven en `domain/accreditationAlerts.ts`;
+- pruebas de dominio: viven fuera de `src`, bajo `tests/domain`.
 
-La fragmentación debe hacerse por dominio y con CI/E2E verde después de cada grupo de cambios.
+Los portales y stores todavía pueden reducirse en iteraciones posteriores, pero las nuevas reglas son obligatorias: no agregar lógica de dominio a los componentes de portal, preferir módulos especializados y exigir CI/E2E verde después de cada grupo de cambios.

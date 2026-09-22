@@ -15,6 +15,7 @@ import {
   obtenerDiasRestantes,
   parseVencimientoDate,
 } from '../domain/documentRules';
+import { buildValidityAlerts } from '../domain/accreditationAlerts';
 
 export {
   esDocumentoCumplido,
@@ -36,25 +37,6 @@ export const REGLAS_DEFAULT = [
 
 export function getContratistas(): Contratista[] {
   return getRuntimeArray<Contratista>('acredita_contratistas', []);
-}
-
-function snapshotContractorStates(contratistas: Contratista[]): Record<string, { acreditacion: string; accesoBloqueado: boolean; pagoBloqueado: boolean }> {
-  const snapshot: Record<string, { acreditacion: string; accesoBloqueado: boolean; pagoBloqueado: boolean }> = {};
-  if (!contratistas || !Array.isArray(contratistas)) return snapshot;
-  contratistas.forEach(c => {
-    const pIds = c.proyectos || [];
-    pIds.forEach(pId => {
-      const key = `${c.id}_${pId}`;
-      const accessPago = calcularAccesoPago(c, pId);
-      const acreditacion = calcularEstadoAcreditacion(c, pId);
-      snapshot[key] = {
-        acreditacion,
-        accesoBloqueado: accessPago.accesoBloqueado,
-        pagoBloqueado: accessPago.pagoBloqueado
-      };
-    });
-  });
-  return snapshot;
 }
 
 export function saveContratistas(data: Contratista[]) {
@@ -659,143 +641,10 @@ export function evaluarHabilitacionCompuerta(
   };
 }
 
-export interface AlertaVigencia {
-  id: string;
-  documentoId: string;
-  documentoNombre: string;
-  empresaId: string;
-  empresaNombre: string;
-  trabajadorRut?: string;
-  trabajadorNombre?: string;
-  proyectoId: string;
-  proyectoNombre: string;
-  vencimiento: string;
-  diasRestantes: number;
-  criticidad: 'Crítica' | 'Atención' | 'Informativa';
-  bloquea: boolean;
-}
+export type { AlertaVigencia } from '../domain/accreditationAlerts';
 
-export function getAlertasVigencia(proyectoId?: string): AlertaVigencia[] {
-  const contratistas = getContratistas();
-  const proyectos = getProyectos();
-  const requisitos = getRequisitos().filter(r => r.activo !== false);
-  const alertas: AlertaVigencia[] = [];
-
-  contratistas.forEach(c => {
-    const cProjs = c.proyectos || [];
-    cProjs.forEach(pId => {
-      if (proyectoId && pId !== proyectoId) return;
-      const proj = proyectos.find(p => p.id === pId);
-      const projNombre = proj ? proj.nombre : pId;
-
-      const companyDocs = c.documentos || [];
-      const companyReqs = requisitos.filter(r => r.proyectoId === pId && r.destino === 'empresa');
-
-      companyReqs.forEach(req => {
-        const doc = buscarDocumentoRequisito(companyDocs, req, pId);
-        if (!doc) return;
-
-        const isVencido = esVencidoPorFecha(doc.vencimiento);
-        const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
-        const isPorVencer = esPorVencerPorFecha(doc.vencimiento, req.alertaDias);
-
-        if (isVencido || isPorVencer) {
-          let criticidad: 'Crítica' | 'Atención' | 'Informativa' = 'Informativa';
-          let bloquea = false;
-
-          if (isVencido) {
-            if (req.obligatorio) {
-              criticidad = 'Crítica';
-              bloquea = true;
-            } else {
-              criticidad = 'Informativa';
-              bloquea = false;
-            }
-          } else if (isPorVencer) {
-            if (req.obligatorio) {
-              criticidad = 'Atención';
-              bloquea = false;
-            } else {
-              criticidad = 'Informativa';
-              bloquea = false;
-            }
-          }
-
-          alertas.push({
-            id: `alert_e_${c.id}_${doc.id}`,
-            documentoId: doc.id,
-            documentoNombre: doc.nombre,
-            empresaId: c.id,
-            empresaNombre: c.nombre,
-            proyectoId: pId,
-            proyectoNombre: projNombre,
-            vencimiento: doc.vencimiento,
-            diasRestantes,
-            criticidad,
-            bloquea
-          });
-        }
-      });
-
-      const workers = c.trabajadores || [];
-      const workerReqs = requisitos.filter(r => r.proyectoId === pId && r.destino === 'trabajador');
-
-      workers.forEach(w => {
-        const hasProjDocs = w.documentos?.some(d => d.proyectoId === pId);
-        if (!hasProjDocs) return;
-
-        workerReqs.forEach(req => {
-          const doc = buscarDocumentoRequisito(w.documentos || [], req, pId);
-          if (!doc) return;
-
-          const isVencido = esVencidoPorFecha(doc.vencimiento);
-          const diasRestantes = obtenerDiasRestantes(doc.vencimiento);
-          const isPorVencer = esPorVencerPorFecha(doc.vencimiento, req.alertaDias);
-
-          if (isVencido || isPorVencer) {
-            let criticidad: 'Crítica' | 'Atención' | 'Informativa' = 'Informativa';
-            let bloquea = false;
-
-            if (isVencido) {
-              if (req.obligatorio) {
-                criticidad = 'Crítica';
-                bloquea = true;
-              } else {
-                criticidad = 'Informativa';
-                bloquea = false;
-              }
-            } else if (isPorVencer) {
-              if (req.obligatorio) {
-                criticidad = 'Atención';
-                bloquea = false;
-              } else {
-                criticidad = 'Informativa';
-                bloquea = false;
-              }
-            }
-
-            alertas.push({
-              id: `alert_w_${c.id}_${w.rut.replace(/[^a-zA-Z0-9]/g, '')}_${doc.id}`,
-              documentoId: doc.id,
-              documentoNombre: doc.nombre,
-              empresaId: c.id,
-              empresaNombre: c.nombre,
-              trabajadorRut: w.rut,
-              trabajadorNombre: w.nombre,
-              proyectoId: pId,
-              proyectoNombre: projNombre,
-              vencimiento: doc.vencimiento,
-              diasRestantes,
-              criticidad,
-              bloquea
-            });
-          }
-        });
-      });
-    });
-  });
-
-  return alertas;
+export function getAlertasVigencia(proyectoId?: string) {
+  return buildValidityAlerts(getContratistas(), getProyectos(), getRequisitos(), proyectoId);
 }
 
 export function getMotivoBloqueoTrabajador(w: Trabajador, proyectoId: string): string {

@@ -6,9 +6,9 @@ import {
   saveContratistas,
   saveProyectos,
   saveRequisitos,
-} from '../localStorageDb';
-import { buildComplianceCsv, formatPeriodo, getAsignacionProyecto } from '../operationalCore';
-import type { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
+} from '../../src/data/businessStore';
+import { buildComplianceCsv, formatPeriodo, getAsignacionProyecto } from '../../src/data/operationalCore';
+import type { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../src/types';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);

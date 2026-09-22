@@ -7,7 +7,7 @@ import {
   getRequisitos,
   requisitoAplicaATrabajador,
   saveContratistas,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { confirmBusinessPersistence } from '../../data/supabasePersistence';
 import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
 import { useDataSync } from '../../components/DataSyncContext';

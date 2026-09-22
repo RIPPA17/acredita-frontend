@@ -1,4 +1,4 @@
-import { calcularEstadoTrabajador, contratoTrabajadorVencido, esTrabajadorAsignado, getProblemasFichaTrabajador, obtenerDiasRestantes } from '../../data/localStorageDb';
+import { calcularEstadoTrabajador, contratoTrabajadorVencido, esTrabajadorAsignado, getProblemasFichaTrabajador, obtenerDiasRestantes } from '../../data/businessStore';
 import { Contratista, PreferenciasNotificacionesContratista, Proyecto, Requisito, Trabajador } from '../../types';
 import { buildAcreditacionRows, estadoUILabel } from '../admin/acreditacionUtils';
 import { proyectoOperativoParaContratista } from '../../data/operationalCore';

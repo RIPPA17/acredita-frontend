@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { Contratista, Documento, Proyecto, Trabajador, type RegimenEspecialLaboral, type TipoContratoLaboral } from '../types';
 import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, esPorVencerPorFecha, obtenerDiasRestantes, esTrabajadorAsignado, logoutUser, getCurrentSession } from '../data/businessStore';
-import { isValidRut } from '../utils/rut';
 import FichaAcreditacion from '../components/FichaAcreditacion';
 import ContratistaNotificaciones from '../components/ContratistaNotificaciones';
 import DataSyncButton from '../components/DataSyncButton';
@@ -25,6 +24,8 @@ import ConfigTab from './contratista/ConfigTab';
 import OperationsTab from './contratista/OperationsTab';
 import { crearDocumentosPendientesProyecto } from './contratista/documentosUtils';
 import { buildNotificacionesContratista, NotificacionContratista } from './contratista/notificacionesUtils';
+import { mergeContractorNotifications } from './contratista/notificationMerge';
+import { createWorkerFormDefaults, validateWorkerForm, type WorkerFormState } from './contratista/workerForm';
 import { DEFAULT_NOTIFICATION_PREFERENCES, loadNotificationPreferences, loadReadNotificationKeys, loadStoredNotifications, markNotificationKeysRead, saveNotificationPreferences, type StoredNotification } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getAsignacionProyecto, getServiciosProyecto, proyectoOperativoParaContratista } from '../data/operationalCore';
@@ -45,33 +46,7 @@ export default function ContratistaPortal() {
   const [showFichaAcreditacion, setShowFichaAcreditacion] = useState(false);
   const [selectedWorkerForDocs, setSelectedWorkerForDocs] = useState<Trabajador | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
-  const [newWorkerForm, setNewWorkerForm] = useState<{
-    nombre: string;
-    rut: string;
-    cargo: string;
-    servicioId: string;
-    categorias: string;
-    fechaIngreso: string;
-    tipoContrato: TipoContratoLaboral;
-    fechaInicioContrato: string;
-    fechaTerminoContrato: string;
-    obraFaenaContrato: string;
-    regimenEspecial: '' | RegimenEspecialLaboral;
-    detalleRegimenEspecial: string;
-  }>({
-    nombre: '',
-    rut: '',
-    cargo: '',
-    servicioId: '',
-    categorias: '',
-    fechaIngreso: new Date().toISOString().slice(0, 10),
-    tipoContrato: 'indefinido',
-    fechaInicioContrato: new Date().toISOString().slice(0, 10),
-    fechaTerminoContrato: '',
-    obraFaenaContrato: '',
-    regimenEspecial: '',
-    detalleRegimenEspecial: '',
-  });
+  const [newWorkerForm, setNewWorkerForm] = useState<WorkerFormState>(createWorkerFormDefaults);
 
   const showToast = (msg: string, type: 'success'|'error'|'warning' = 'success') => {
     setToast({msg, type});
@@ -160,85 +135,12 @@ export default function ContratistaPortal() {
     preferencias: preferenciasNotificaciones,
   });
 
-  const eventosDerivados = new Set([
-    'document_rejected',
-    'document_expired',
-    'document_expiring',
-    'document_in_review',
-    'accreditation_approved',
-    'worker_blocked',
-    'worker_enabled',
-    'worker_contract_expiring',
-    'worker_contract_expired',
-  ]);
-
-  const persistidasVisibles: NotificacionContratista[] = notificacionesPersistidas
-    .filter(item => {
-      if (item.status === 'resolved' || !eventosDerivados.has(item.eventType)) return true;
-      const alreadyDerived = actuales.some(actual =>
-        actual.eventType === item.eventType
-        && actual.proyectoId === item.projectKey
-        && (!item.workerRut || actual.trabajadorRut === item.workerRut)
-        && (!item.requirementKey || actual.requisitoId === item.requirementKey)
-      );
-      return !alreadyDerived;
-    })
-    .map(item => {
-      const proyecto = misProyectos.find(candidate => candidate.id === item.projectKey);
-      const worker = item.workerRut
-        ? (contratistaLogueado.trabajadores || []).find(candidate => candidate.rut === item.workerRut)
-        : undefined;
-      const tipo = item.category === 'informativa' ? 'informativa' : item.category;
-      const prioridad = item.status === 'resolved'
-        ? 9
-        : item.severity === 'critical'
-          ? 0
-          : item.severity === 'action'
-            ? 1
-            : item.severity === 'preventive'
-              ? 2
-              : tipo === 'revision'
-                ? 3
-                : 5;
-      const actionPlanId = item.eventType.match(/^action_plan_[^:]+:(.+)$/)?.[1];
-      const evaluationId = item.eventType.match(/^evaluation_[^:]+:(.+)$/)?.[1];
-      const paymentCaseId = item.paymentCaseId || item.key.match(/^payment_(?:blocked|released|paid|voided):(.+)$/)?.[1];
-      const destino = item.actionKind === 'trabajador' && worker
-        ? { tipo: 'trabajador' as const, trabajador: worker }
-        : item.actionKind === 'operacion' || item.actionKind === 'soporte'
-          ? { tipo: 'operacion' as const }
-          : item.actionKind === 'proyecto'
-            ? { tipo: 'proyecto' as const }
-            : item.actionKind === 'acreditacion'
-              ? { tipo: 'acreditacion' as const }
-              : { tipo: 'documentos' as const };
-      return {
-        id: item.key,
-        tipo,
-        proyectoId: proyecto?.id || item.projectKey || misProyectos[0]?.id || '',
-        proyectoNombre: proyecto?.nombre || 'Proyecto',
-        titulo: item.title,
-        descripcion: item.body,
-        fecha: new Date(item.occurredAt).toLocaleString('es-CL'),
-        cta: item.actionLabel,
-        destino,
-        prioridad,
-        eventType: item.eventType,
-        nivel: item.severity,
-        situacion: item.status === 'resolved' ? 'resuelta' as const : 'activa' as const,
-        persistida: true,
-        requisitoId: item.requirementKey,
-        trabajadorRut: item.workerRut,
-        actionPlanId,
-        evaluationId,
-        paymentCaseId,
-        supportTicketId: item.supportTicketId,
-      };
-    });
-
-  const notificaciones = [...actuales, ...persistidasVisibles]
-    .filter(item => Boolean(item.proyectoId))
-    .sort((a, b) => a.prioridad - b.prioridad || (b.fecha || '').localeCompare(a.fecha || '') || a.titulo.localeCompare(b.titulo, 'es'));
+  const notificaciones = mergeContractorNotifications({
+    actuales,
+    persistidas: notificacionesPersistidas,
+    proyectos: misProyectos,
+    contratista: contratistaLogueado,
+  });
   const notificacionesSinLeer = notificaciones.filter(item => item.situacion !== 'resuelta' && !notificacionesLeidas.has(item.id)).length;
 
   const marcarLeidas = (ids: string[]) => {
@@ -381,20 +283,7 @@ export default function ContratistaPortal() {
   const servicioObligatorio = serviciosDisponibles.length > 0 || requisitosTrabajadorProyecto.some(r => Boolean(r.servicioId));
   const categoriasObligatorias = categoriasDisponibles.length > 0;
 
-  const resetWorkerForm = () => setNewWorkerForm({
-    nombre: '',
-    rut: '',
-    cargo: '',
-    servicioId: '',
-    categorias: '',
-    fechaIngreso: new Date().toISOString().slice(0, 10),
-    tipoContrato: 'indefinido',
-    fechaInicioContrato: new Date().toISOString().slice(0, 10),
-    fechaTerminoContrato: '',
-    obraFaenaContrato: '',
-    regimenEspecial: '',
-    detalleRegimenEspecial: '',
-  });
+  const resetWorkerForm = () => setNewWorkerForm(createWorkerFormDefaults());
 
   const openAddWorkerModal = () => {
     const project = misProyectos.find(item => item.id === selectedProyectoId);
@@ -482,64 +371,16 @@ export default function ContratistaPortal() {
   const handleAddWorkerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWorkerForm.nombre || !newWorkerForm.rut || savingWorker) return;
-    if (!isValidRut(newWorkerForm.rut)) {
-      showToast('RUT inválido, revisa el formato y dígito verificador', 'error');
-      return;
-    }
     const project = misProyectos.find(item => item.id === selectedProyectoId);
-    if (!project || !proyectoOperativoParaContratista(project, contratistaLogueado.id)) {
-      showToast('Este proyecto está en modo histórico y solo permite consultar el historial.', 'warning');
-      return;
-    }
-    if (!newWorkerForm.fechaInicioContrato) {
-      showToast('Debes indicar la fecha de inicio del contrato.', 'error');
-      return;
-    }
-    if (!newWorkerForm.fechaIngreso) {
-      showToast('Debes indicar la fecha de ingreso al proyecto.', 'error');
-      return;
-    }
-    if (newWorkerForm.tipoContrato === 'plazo_fijo' && !newWorkerForm.fechaTerminoContrato) {
-      showToast('El contrato a plazo fijo requiere fecha de término.', 'error');
-      return;
-    }
-    if (
-      newWorkerForm.fechaTerminoContrato &&
-      newWorkerForm.fechaTerminoContrato < newWorkerForm.fechaInicioContrato
-    ) {
-      showToast('La fecha de término no puede ser anterior a la fecha de inicio.', 'error');
-      return;
-    }
-    if (newWorkerForm.fechaIngreso < newWorkerForm.fechaInicioContrato) {
-      showToast('La fecha de ingreso al proyecto no puede ser anterior al inicio del contrato.', 'error');
-      return;
-    }
-    if (
-      newWorkerForm.tipoContrato === 'plazo_fijo'
-      && newWorkerForm.fechaTerminoContrato
-      && newWorkerForm.fechaIngreso > newWorkerForm.fechaTerminoContrato
-    ) {
-      showToast('La fecha de ingreso al proyecto no puede ser posterior al término del contrato.', 'error');
-      return;
-    }
-    if (newWorkerForm.tipoContrato === 'obra_faena' && !newWorkerForm.obraFaenaContrato.trim()) {
-      showToast('Describe la obra o faena determinada asociada al contrato.', 'error');
-      return;
-    }
-    if (newWorkerForm.regimenEspecial === 'otro' && !newWorkerForm.detalleRegimenEspecial.trim()) {
-      showToast('Especifica el régimen laboral especial.', 'error');
-      return;
-    }
-    if (servicioObligatorio && serviciosDisponibles.length === 0) {
-      showToast('El proyecto tiene requisitos asociados a servicios, pero no hay servicios activos configurados. Solicita configurar el servicio antes de continuar.', 'error');
-      return;
-    }
-    if (servicioObligatorio && !newWorkerForm.servicioId) {
-      showToast('Debes seleccionar el servicio o contrato del trabajador.', 'error');
-      return;
-    }
-    if (categoriasObligatorias && categoriasSeleccionadas.size === 0) {
-      showToast('Debes seleccionar al menos una categoría del trabajador.', 'error');
+    const validation = validateWorkerForm(newWorkerForm, {
+      projectOperational: Boolean(project && proyectoOperativoParaContratista(project, contratistaLogueado.id)),
+      serviceRequired: servicioObligatorio,
+      availableServices: serviciosDisponibles.length,
+      categoriesRequired: categoriasObligatorias,
+      selectedCategories: categoriasSeleccionadas.size,
+    });
+    if (validation) {
+      showToast(validation.message, validation.type);
       return;
     }
 
