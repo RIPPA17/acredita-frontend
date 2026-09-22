@@ -603,6 +603,60 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
+      if (url.pathname === '/rest/v1/rpc/set_contractor_parent') {
+        const project = (data.projects as any[]).find(item => item.integration_key === body?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === body?.p_contractor_key);
+        const parent = body?.p_parent_contractor_key
+          ? (data.contratistas as any[]).find(item => item.integration_key === body?.p_parent_contractor_key)
+          : null;
+        const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
+        const parentAccreditation = parent
+          ? (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === parent.id && item.is_active)
+          : null;
+        if (accreditation) accreditation.parent_accreditation_id = parentAccreditation?.id || null;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
+      if (url.pathname === '/rest/v1/rpc/set_contractor_project_active') {
+        const project = (data.projects as any[]).find(item => item.integration_key === body?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === body?.p_contractor_key);
+        const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
+        if (accreditation) {
+          accreditation.is_active = Boolean(body?.p_active);
+          accreditation.parent_accreditation_id = null;
+          if (!body?.p_active) {
+            for (const child of data.accreditations as any[]) {
+              if (child.project_id === project?.id && child.parent_accreditation_id === accreditation.id) child.parent_accreditation_id = null;
+            }
+            for (const service of data.services as any[]) {
+              if (service.accreditation_id === accreditation.id && service.is_active) {
+                service.is_active = false;
+                service.status = 'finalizado';
+                service.ends_at = service.ends_at || '2026-09-22';
+              }
+            }
+            for (const assignment of data.worker_assignments as any[]) {
+              if (assignment.accreditation_id === accreditation.id && assignment.is_active) {
+                assignment.is_active = false;
+                assignment.assignment_status = 'baja';
+                assignment.access_status = 'bloqueado';
+                assignment.unassigned_at = assignment.unassigned_at || '2026-09-22T12:00:00Z';
+              }
+            }
+            for (const obligation of data.document_obligations as any[]) {
+              if (obligation.accreditation_id === accreditation.id) obligation.is_active = false;
+            }
+          }
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
+      if (url.pathname === '/rest/v1/rpc/cancel_contractor_invitation') {
+        const invitation = (data.invitations as any[]).find(item => item.id === body?.p_invitation_id);
+        if (invitation && invitation.status === 'pending') {
+          invitation.status = 'cancelled';
+          invitation.responded_at = '2026-09-22T12:00:00Z';
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
+      }
       if (url.pathname === '/rest/v1/rpc/get_payment_case_compliance') {
         return route.fulfill({
           status: 200,
@@ -662,6 +716,16 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
             const existing = requirementRows.find(row => row.integration_key === item.integration_key);
             if (existing) Object.assign(existing, item);
             else requirementRows.push({ id: `99000000-0000-4000-8000-${String(requirementRows.length + 1).padStart(12, '0')}`, ...item });
+          }
+          return route.fulfill({ status: 204, body: '' });
+        }
+        if (request.method() === 'POST' && table === 'services') {
+          const payload = Array.isArray(body) ? body : [body];
+          const serviceRows = data.services as any[];
+          for (const item of payload) {
+            const existing = serviceRows.find(row => row.integration_key === item.integration_key);
+            if (existing) Object.assign(existing, item);
+            else serviceRows.push({ id: `61000000-0000-4000-8000-${String(serviceRows.length + 1).padStart(12, '0')}`, ...item });
           }
           return route.fulfill({ status: 204, body: '' });
         }
