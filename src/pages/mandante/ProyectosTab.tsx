@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, Download, KeyRound, MapPin, Pencil, Plus, Save, Settings2, UsersRound, WalletCards, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronRight, Clock3, Download, KeyRound, MapPin, Pencil, Plus, RotateCcw, Save, Settings2, UsersRound, WalletCards, X } from 'lucide-react';
 import { calcularAccesoPago, calcularAccesoTrabajador, calcularEstadoAcreditacion, configuracionRequisitoRequiereObligatoriedad, esTrabajadorAsignado, getContratistas, getProyectos, getRequisitos, saveProyectos, saveRequisitos } from '../../data/businessStore';
 import { Contratista, Proyecto, Requisito } from '../../types';
 import { buildMandanteProjectSummaries } from './inicio/inicioUtils';
@@ -139,7 +139,9 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const selectedId = proyectoSeleccionadoAjustes || (activeProjectTab !== 'resumen' ? selectedProjectId : null);
   const selected = summaries.find(summary => summary.project.id === selectedId);
   const detailTab = (['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
-  const requirements = selected ? getRequisitos().filter(requirement => requirement.proyectoId === selected.project.id && requirement.activo !== false) : [];
+  const projectRequirements = selected ? getRequisitos().filter(requirement => requirement.proyectoId === selected.project.id) : [];
+  const requirements = projectRequirements.filter(requirement => requirement.activo !== false);
+  const retiredRequirements = projectRequirements.filter(requirement => requirement.activo === false);
   const executive = selected ? buildMandanteProjectSummaries([selected.project], contractors)[0] : null;
   const projectCandidate = selected ? {
     ...selected.project,
@@ -313,7 +315,12 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   };
   const addRequirement = () => {
     if (!selected) return;
-    setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5, projectId: selected.project.id }); setIsAddDocModalOpen(true);
+    if (selected.project.estado === 'Archivado') {
+      showToast('Un proyecto archivado se mantiene solo para consulta.', 'warning');
+      return;
+    }
+    setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', alertDays: 7, dueDays: 5, projectId: selected.project.id });
+    setIsAddDocModalOpen(true);
   };
 
   if (!selected) return <>
@@ -393,7 +400,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={currentProjects} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
-    {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} retiredRequirements={retiredRequirements} projectArchived={selected.project.estado === 'Archivado'} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'operacion' && <OperationsCenter project={selected.project} contractors={selected.contractors} showToast={showToast} />}
     {detailTab === 'acreditaciones' && <AccreditationsPanel selected={selected} requirements={requirements} onOpen={onOpenContractor} />}
