@@ -1,5 +1,6 @@
 import {
   calcularAccesoPago,
+  calcularAccesoTrabajador,
   calcularEstadoAcreditacion,
   calcularEstadoTrabajador,
   esPorVencerPorFecha,
@@ -118,6 +119,7 @@ const buildWorkerPriority = (
   requirements: Requisito[],
 ): MandantePriority | null => {
   const workerState = calcularEstadoTrabajador(worker, project.id);
+  const workerAccess = calcularAccesoTrabajador(worker, project.id, contractor.id);
   const candidates = requirements
     .filter(requirement => requirement.destino === 'trabajador' && requirement.obligatorio)
     .map(requirement => {
@@ -143,7 +145,7 @@ const buildWorkerPriority = (
     title: `${worker.nombre} · ${project.nombre}`,
     detail: isExpiring
       ? `${requirement.nombre} vence en ${days} día${days === 1 ? '' : 's'} · acceso todavía habilitado`
-      : `${requirement.nombre} ${problem} · ${workerState === 'rechazado' ? 'acceso bloqueado' : 'acceso pendiente'}`,
+      : `${requirement.nombre} ${problem} · ${workerAccess === 'bloqueado' ? 'acceso bloqueado' : workerAccess === 'pendiente' ? 'acceso pendiente' : 'acceso habilitado'}`,
   };
 };
 
@@ -169,10 +171,9 @@ export function buildMandanteProjectSummaries(
       project,
       state: projectState(contractors, project.id),
       contractors,
-      workersEnabled: assignedWorkers.filter(({ worker }) => {
-        const state = calcularEstadoTrabajador(worker, project.id);
-        return state === 'aprobado' || state === 'por_vencer';
-      }).length,
+      workersEnabled: assignedWorkers.filter(({ contractor, worker }) =>
+        calcularAccesoTrabajador(worker, project.id, contractor.id) === 'habilitado'
+      ).length,
       workersTotal: assignedWorkers.length,
       access: accessPayments.some(result => result.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayments.some(result => result.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       payment: accessPayments.some(result => result.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayments.some(result => result.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
