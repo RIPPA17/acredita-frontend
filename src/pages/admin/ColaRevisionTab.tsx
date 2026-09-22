@@ -313,7 +313,7 @@ export default function ColaRevisionTab({
         <div>
           <div className="text-[11px] tracking-[1.8px] uppercase font-bold text-brown">Operación Acredita</div>
           <h2 className="text-2xl font-semibold text-navy mt-1">Cola de revisión</h2>
-          <p className="text-[13px] text-gray-500 mt-1">Las tomas se coordinan de forma atómica en Supabase. Usa Actualizar para refrescar la vista compartida.</p>
+          <p className="text-[13px] text-gray-500 mt-1">Cuando una persona toma un documento, queda reservado para ella y así evitamos revisiones duplicadas. Usa Actualizar para ver los cambios del equipo.</p>
         </div>
         <div className="flex gap-2 text-[11px]">
           <span className={`badge border ${BADGE.green}`}>{aprobadosHoy} aprobados hoy</span>
