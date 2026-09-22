@@ -93,7 +93,7 @@ const projectAdministrativeLabel = (project: Proyecto) => project.estado === 'Ar
     ? 'Proyecto en borrador'
     : 'Proyecto activo';
 
-const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' ? 'gray' : 'yellow';
+const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' || state === 'Borrador' ? 'gray' : 'yellow';
 const accreditationLabel = (state: ReturnType<typeof calcularEstadoAcreditacion>) => state === 'Aprobado' ? 'Acreditado' : state === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 const projectLocation = (project: Proyecto) => {
   const item = project as ProjectMetadata;
@@ -149,7 +149,137 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const openProject = (summary: ProjectPresentation) => {
     setProyectoSeleccionadoAjustes(summary.project.id); setSelectedProjectId(summary.project.id); setProyectoArchivado(summary.project.estado === 'Archivado'); setActiveProjectTab('resumen'); setConfiguring(false); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const openProjectConfiguration = () => {
+    if (!selected) return;
+    setProjectForm(projectFormFrom(selected.project));
+    setConfiguring(true);
+  };
   const backToProjects = () => { setProyectoSeleccionadoAjustes(null); setActiveProjectTab('resumen'); setConfiguring(false); };
+
+  const validateProjectForm = (form: ProjectForm, requireComplete = false): string | null => {
+    if (!form.nombre.trim()) return 'Ingresa un nombre para el proyecto.';
+    if (form.fechaInicio && form.fechaTermino && form.fechaTermino < form.fechaInicio) return 'La fecha de término no puede ser anterior a la fecha de inicio.';
+    if (form.responsableEmail.trim() && !validEmail(form.responsableEmail)) return 'Ingresa un correo válido para el responsable.';
+    if (requireComplete) {
+      if (!form.ubicacion.trim()) return 'Falta registrar la ubicación del proyecto.';
+      if (!form.fechaInicio) return 'Falta registrar la fecha de inicio.';
+      if (!form.responsableNombre.trim()) return 'Falta definir al responsable principal.';
+      if (!form.responsableEmail.trim() || !validEmail(form.responsableEmail)) return 'Falta un correo válido para el responsable principal.';
+    }
+    return null;
+  };
+
+  const persistProjectForm = async (project: Proyecto, nextStatus = project.estado) => {
+    const projects = getProyectos();
+    const index = projects.findIndex(item => item.id === project.id);
+    if (index < 0) throw new Error('Proyecto no encontrado');
+    projects[index] = {
+      ...projects[index],
+      nombre: projectForm.nombre.trim(),
+      ubicacion: projectForm.ubicacion.trim() || undefined,
+      fechaInicio: projectForm.fechaInicio || undefined,
+      fechaTermino: projectForm.fechaTermino || undefined,
+      descripcion: projectForm.descripcion.trim() || undefined,
+      responsableNombre: projectForm.responsableNombre.trim() || undefined,
+      responsableEmail: projectForm.responsableEmail.trim().toLowerCase() || undefined,
+      responsableTelefono: projectForm.responsableTelefono.trim() || undefined,
+      estado: nextStatus,
+    };
+    saveProyectos(projects);
+    await confirmBusinessPersistence('core');
+    setProjectsVersion(value => value + 1);
+    return projects[index];
+  };
+
+  const createProject = async () => {
+    if (savingProject) return;
+    const validation = validateProjectForm(projectForm);
+    if (validation) { showToast(validation, 'warning'); return; }
+    const duplicate = getProyectos().some(project =>
+      project.mandanteId === mandanteId
+      && project.estado !== 'Archivado'
+      && project.nombre.trim().toLocaleLowerCase('es') === projectForm.nombre.trim().toLocaleLowerCase('es')
+    );
+    if (duplicate) { showToast('Ya existe un proyecto visible con ese nombre.', 'warning'); return; }
+
+    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replaceAll('-', '')
+      : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const project: Proyecto = {
+      id: `proyecto_${randomPart}`,
+      nombre: projectForm.nombre.trim(),
+      mandanteId,
+      estado: 'Borrador',
+      contratistas: [],
+      ubicacion: projectForm.ubicacion.trim() || undefined,
+      fechaInicio: projectForm.fechaInicio || undefined,
+      fechaTermino: projectForm.fechaTermino || undefined,
+      descripcion: projectForm.descripcion.trim() || undefined,
+      responsableNombre: projectForm.responsableNombre.trim() || undefined,
+      responsableEmail: projectForm.responsableEmail.trim().toLowerCase() || undefined,
+      responsableTelefono: projectForm.responsableTelefono.trim() || undefined,
+    };
+
+    setSavingProject(true);
+    try {
+      saveProyectos([...getProyectos(), project]);
+      await confirmBusinessPersistence('core');
+      setProjectsVersion(value => value + 1);
+      setIsCreateProjectOpen(false);
+      setProyectoSeleccionadoAjustes(project.id);
+      setSelectedProjectId(project.id);
+      setProyectoArchivado(false);
+      setActiveProjectTab('resumen');
+      setProjectForm(projectFormFrom(project));
+      setConfiguring(true);
+      showToast('Proyecto creado como borrador');
+    } catch (error) {
+      console.error('No fue posible crear el proyecto.', error);
+      showToast('No fue posible crear el proyecto. Intenta nuevamente.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const saveProjectConfiguration = async () => {
+    if (!selected || savingProject || selected.project.estado === 'Archivado') return;
+    const validation = validateProjectForm(projectForm);
+    if (validation) { showToast(validation, 'warning'); return; }
+    const duplicate = getProyectos().some(project =>
+      project.id !== selected.project.id
+      && project.mandanteId === mandanteId
+      && project.estado !== 'Archivado'
+      && project.nombre.trim().toLocaleLowerCase('es') === projectForm.nombre.trim().toLocaleLowerCase('es')
+    );
+    if (duplicate) { showToast('Ya existe un proyecto visible con ese nombre.', 'warning'); return; }
+    setSavingProject(true);
+    try {
+      await persistProjectForm(selected.project);
+      showToast('Datos del proyecto actualizados');
+    } catch (error) {
+      console.error('No fue posible actualizar el proyecto.', error);
+      showToast('No fue posible guardar los cambios del proyecto.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const activateProject = async () => {
+    if (!selected || savingProject || selected.project.estado === 'Archivado') return;
+    const validation = validateProjectForm(projectForm, true);
+    if (validation) { showToast(validation, 'warning'); return; }
+    setSavingProject(true);
+    try {
+      await persistProjectForm(selected.project, 'Activo');
+      showToast('Proyecto activado y listo para operar');
+    } catch (error) {
+      console.error('No fue posible activar el proyecto.', error);
+      showToast('No fue posible activar el proyecto.', 'error');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
   const archiveProject = async () => {
     if (!selected) return;
     const confirmed = window.confirm(`¿Archivar "${selected.project.nombre}"?\n\nEl proyecto dejará de considerarse activo, pero conservará su información y trazabilidad.`);
@@ -161,6 +291,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     try {
       await confirmBusinessPersistence('core');
       setProyectoArchivado(true);
+      setProjectsVersion(value => value + 1);
       showToast('Proyecto archivado', 'warning');
     } catch (error) {
       setProyectoArchivado(getProyectos().find(project => project.id === selected.project.id)?.estado === 'Archivado');
