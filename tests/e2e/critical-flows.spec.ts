@@ -604,10 +604,10 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
       if (url.pathname === '/rest/v1/rpc/set_contractor_parent') {
-        const project = (data.projects as any[]).find(item => item.integration_key === body?.p_project_key);
-        const contractor = (data.contratistas as any[]).find(item => item.integration_key === body?.p_contractor_key);
-        const parent = body?.p_parent_contractor_key
-          ? (data.contratistas as any[]).find(item => item.integration_key === body?.p_parent_contractor_key)
+        const project = (data.projects as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_contractor_key);
+        const parent = (request.postDataJSON() as any)?.p_parent_contractor_key
+          ? (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_parent_contractor_key)
           : null;
         const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
         const parentAccreditation = parent
@@ -617,13 +617,13 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
       }
       if (url.pathname === '/rest/v1/rpc/set_contractor_project_active') {
-        const project = (data.projects as any[]).find(item => item.integration_key === body?.p_project_key);
-        const contractor = (data.contratistas as any[]).find(item => item.integration_key === body?.p_contractor_key);
+        const project = (data.projects as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_contractor_key);
         const accreditation = (data.accreditations as any[]).find(item => item.project_id === project?.id && item.contratista_id === contractor?.id);
         if (accreditation) {
-          accreditation.is_active = Boolean(body?.p_active);
+          accreditation.is_active = Boolean((request.postDataJSON() as any)?.p_active);
           accreditation.parent_accreditation_id = null;
-          if (!body?.p_active) {
+          if (!(request.postDataJSON() as any)?.p_active) {
             for (const child of data.accreditations as any[]) {
               if (child.project_id === project?.id && child.parent_accreditation_id === accreditation.id) child.parent_accreditation_id = null;
             }
@@ -650,7 +650,7 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
       }
       if (url.pathname === '/rest/v1/rpc/cancel_contractor_invitation') {
-        const invitation = (data.invitations as any[]).find(item => item.id === body?.p_invitation_id);
+        const invitation = (data.invitations as any[]).find(item => item.id === (request.postDataJSON() as any)?.p_invitation_id);
         if (invitation && invitation.status === 'pending') {
           invitation.status = 'cancelled';
           invitation.responded_at = '2026-09-22T12:00:00Z';
@@ -944,9 +944,9 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await relationA.selectOption('contratista_piloto_b');
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_parent'
-    && item.body?.p_project_key === 'proyecto_piloto'
-    && item.body?.p_contractor_key === 'contratista_piloto_a'
-    && item.body?.p_parent_contractor_key === 'contratista_piloto_b'
+    && item.(request.postDataJSON() as any)?.p_project_key === 'proyecto_piloto'
+    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
+    && item.(request.postDataJSON() as any)?.p_parent_contractor_key === 'contratista_piloto_b'
   )).toBeTruthy();
   await expect(relationA).toHaveValue('contratista_piloto_b');
 
@@ -957,8 +957,8 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await expect(historical).toBeVisible();
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_project_active'
-    && item.body?.p_contractor_key === 'contratista_piloto_a'
-    && item.body?.p_active === false
+    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
+    && item.(request.postDataJSON() as any)?.p_active === false
   )).toBeTruthy();
 
   await historical.getByRole('button', { name: 'Ver historial' }).click();
@@ -978,8 +978,8 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
   await expect(restoredRow.getByLabel('Relación de Contratista Piloto A')).toHaveValue('');
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/set_contractor_project_active'
-    && item.body?.p_contractor_key === 'contratista_piloto_a'
-    && item.body?.p_active === true
+    && item.(request.postDataJSON() as any)?.p_contractor_key === 'contratista_piloto_a'
+    && item.(request.postDataJSON() as any)?.p_active === true
   )).toBeTruthy();
 });
 
@@ -989,16 +989,16 @@ test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
   await page.getByRole('button', { name: 'Invitar contratista' }).click();
 
-  await expect(page.getByText('pendiente@contratista.invalid')).toBeVisible();
-  await expect(page.getByText('Pendiente', { exact: true })).toBeVisible();
+  const invitationRow = page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Pendiente' }).last();
+  await expect(invitationRow).toBeVisible();
 
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Cancelar invitación de pendiente@contratista.invalid' }).click();
 
-  await expect(page.getByText('Cancelada', { exact: true })).toBeVisible();
+  await expect(page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Cancelada' }).last()).toBeVisible();
   await expect.poll(() => mutations.some(item =>
     item.path === '/rest/v1/rpc/cancel_contractor_invitation'
-    && item.body?.p_invitation_id === INVITATION
+    && item.(request.postDataJSON() as any)?.p_invitation_id === INVITATION
   )).toBeTruthy();
 });
 
