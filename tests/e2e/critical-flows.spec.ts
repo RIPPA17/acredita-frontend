@@ -961,12 +961,18 @@ test('05e Mandante administra jerarquía, baja, historial y reactivación por pr
     && item.body?.p_active === false
   )).toBeTruthy();
 
+  await historical.getByRole('button', { name: 'Ver historial' }).click();
+  await expect(page.getByRole('heading', { name: 'Contratista Piloto A' })).toBeVisible();
+  await expect(page.getByText('Proyecto Piloto QA').first()).toBeVisible();
+
+  await openMandanteProject(page);
   await page.getByRole('button', { name: 'Servicios', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Servicios y contratos finalizados' })).toBeVisible();
   await expect(page.getByText('SRV-01', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
-  await historical.getByRole('button', { name: 'Reactivar' }).click();
+  const historicalAgain = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Contratista Piloto A' });
+  await historicalAgain.getByRole('button', { name: 'Reactivar' }).click();
   const restoredRow = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
   await expect(restoredRow).toBeVisible();
   await expect(restoredRow.getByLabel('Relación de Contratista Piloto A')).toHaveValue('');
