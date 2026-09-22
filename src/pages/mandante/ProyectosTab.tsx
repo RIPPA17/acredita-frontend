@@ -477,13 +477,56 @@ function ContractorsPanel({ selected, projects, onOpen, onChanged, showToast }: 
   })}</tbody></table></div></article>;
 }
 
-function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requirements: Requisito[]; onAdd: () => void; onChanged: () => void; showToast: Props['showToast'] }) {
+function RequirementsPanel({ requirements, retiredRequirements, projectArchived, onAdd, onChanged, showToast }: {
+  requirements: Requisito[];
+  retiredRequirements: Requisito[];
+  projectArchived: boolean;
+  onAdd: () => void;
+  onChanged: () => void;
+  showToast: Props['showToast'];
+}) {
   const [savingRequirementId, setSavingRequirementId] = useState<string | null>(null);
   const [editingRequirement, setEditingRequirement] = useState<Requisito | null>(null);
   const [editForm, setEditForm] = useState<RequirementEditForm | null>(null);
 
+  const uniqueValues = (value: string) => Array.from(new Map(
+    value.split(/[,\n]/).map(item => item.trim()).filter(Boolean).map(item => [item.toLocaleLowerCase('es'), item])
+  ).values());
+
+  const criticalityLabel = (value: Requisito['criticidad']) => value === 'bloquea_pago'
+    ? 'Bloquea pago'
+    : value === 'bloquea_acceso'
+      ? 'Bloquea ingreso'
+      : value === 'bloquea_ambas'
+        ? 'Bloquea ingreso y pago'
+        : 'Solo advertencia';
+
+  const scopeLabel = (requirement: Requisito) => {
+    if (!requirement.servicioId) return 'Todo el proyecto';
+    const service = getServiciosProyecto(requirement.proyectoId, undefined, true).find(item => item.id === requirement.servicioId);
+    return service ? `${service.codigo} · ${service.nombre}` : 'Servicio histórico';
+  };
+
+  const impactLabel = (requirement: Requisito) => {
+    const effects: string[] = [];
+    if (requirement.criticidad === 'bloquea_acceso' || requirement.criticidad === 'bloquea_ambas') effects.push('ingreso');
+    if (requirement.bloqueaTrabajo) effects.push('trabajo');
+    if (requirement.bloqueaAsignacion) effects.push('asignación');
+    if (requirement.criticidad === 'bloquea_pago' || requirement.criticidad === 'bloquea_ambas') effects.push('pago');
+    return effects.length ? `Afecta: ${effects.join(', ')}` : 'Sin bloqueo operativo';
+  };
+
+  const hasEquivalentActive = (candidate: Requisito, excludingId?: string) => getRequisitos().some(item =>
+    item.id !== excludingId
+    && item.activo !== false
+    && item.proyectoId === candidate.proyectoId
+    && item.destino === candidate.destino
+    && (item.servicioId || '') === (candidate.servicioId || '')
+    && item.nombre.trim().toLocaleLowerCase('es') === candidate.nombre.trim().toLocaleLowerCase('es')
+  );
+
   const toggleRequired = async (requirement: Requisito) => {
-    if (savingRequirementId) return;
+    if (savingRequirementId || projectArchived) return;
     if (
       requirement.obligatorio
       && configuracionRequisitoRequiereObligatoriedad(requirement.criticidad, Boolean(requirement.bloqueaTrabajo), Boolean(requirement.bloqueaAsignacion))
@@ -511,6 +554,7 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
   };
 
   const openEdit = (requirement: Requisito) => {
+    if (projectArchived) return;
     setEditingRequirement(requirement);
     setEditForm({
       frequency: requirement.frecuencia,
@@ -527,30 +571,37 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
   };
 
   const saveEdit = async () => {
-    if (!editingRequirement || !editForm || savingRequirementId) return;
+    if (!editingRequirement || !editForm || savingRequirementId || projectArchived) return;
     const list = getRequisitos();
     const index = list.findIndex(item => item.id === editingRequirement.id);
     if (index < 0) return;
-    setSavingRequirementId(editingRequirement.id);
-    const mustBeRequired = configuracionRequisitoRequiereObligatoriedad(
-      editForm.criticidad,
-      editForm.bloqueaTrabajo,
-      editForm.bloqueaAsignacion,
-    );
-    list[index] = {
+
+    const candidate: Requisito = {
       ...list[index],
-      obligatorio: mustBeRequired ? true : list[index].obligatorio,
       frecuencia: editForm.frequency,
       criticidad: editForm.criticidad,
       alertaDias: Math.min(365, Math.max(0, Number(editForm.alertaDias) || 0)),
       diasPlazo: Math.min(90, Math.max(0, Number(editForm.diasPlazo) || 0)),
       descripcion: editForm.description.trim() || undefined,
-      checklistRevision: editForm.checklist.split('\n').map(item => item.trim()).filter(Boolean),
-      categoriasAplicables: editForm.categories.split(',').map(item => item.trim()).filter(Boolean),
+      checklistRevision: uniqueValues(editForm.checklist),
+      categoriasAplicables: editingRequirement.destino === 'trabajador' ? uniqueValues(editForm.categories) : [],
       bloqueaTrabajo: editForm.bloqueaTrabajo,
       bloqueaAsignacion: editForm.bloqueaAsignacion,
       servicioId: editForm.servicioId || undefined,
     };
+    candidate.obligatorio = configuracionRequisitoRequiereObligatoriedad(
+      candidate.criticidad,
+      Boolean(candidate.bloqueaTrabajo),
+      Boolean(candidate.bloqueaAsignacion),
+    ) ? true : candidate.obligatorio;
+
+    if (hasEquivalentActive(candidate, editingRequirement.id)) {
+      showToast('Ya existe un requisito activo con ese nombre, destino y ámbito.', 'warning');
+      return;
+    }
+
+    setSavingRequirementId(editingRequirement.id);
+    list[index] = candidate;
     saveRequisitos(list);
     try {
       await confirmBusinessPersistence('core');
@@ -567,29 +618,113 @@ function RequirementsPanel({ requirements, onAdd, onChanged, showToast }: { requ
     }
   };
 
+  const retireRequirement = async (requirement: Requisito) => {
+    if (savingRequirementId || projectArchived) return;
+    const confirmed = window.confirm(`¿Retirar "${requirement.nombre}"?\n\nDejará de generar y bloquear obligaciones nuevas, pero sus documentos e historial se conservarán.`);
+    if (!confirmed) return;
+    const list = getRequisitos();
+    const index = list.findIndex(item => item.id === requirement.id);
+    if (index < 0) return;
+    list[index] = { ...list[index], activo: false };
+    setSavingRequirementId(requirement.id);
+    saveRequisitos(list);
+    try {
+      await confirmBusinessPersistence('core');
+      onChanged();
+      showToast('Requisito retirado. El historial se conserva.', 'warning');
+    } catch (error) {
+      onChanged();
+      console.error('No fue posible retirar el requisito.', error);
+      showToast('No fue posible retirar el requisito.', 'error');
+    } finally {
+      setSavingRequirementId(null);
+    }
+  };
+
+  const reactivateRequirement = async (requirement: Requisito) => {
+    if (savingRequirementId || projectArchived) return;
+    if (hasEquivalentActive(requirement, requirement.id)) {
+      showToast('Ya existe un requisito activo equivalente. No es necesario reactivarlo.', 'warning');
+      return;
+    }
+    const list = getRequisitos();
+    const index = list.findIndex(item => item.id === requirement.id);
+    if (index < 0) return;
+    list[index] = { ...list[index], activo: true };
+    setSavingRequirementId(requirement.id);
+    saveRequisitos(list);
+    try {
+      await confirmBusinessPersistence('core');
+      onChanged();
+      showToast('Requisito reactivado');
+    } catch (error) {
+      onChanged();
+      console.error('No fue posible reactivar el requisito.', error);
+      showToast('No fue posible reactivar el requisito.', 'error');
+    } finally {
+      setSavingRequirementId(null);
+    }
+  };
+
   return <>
-    <article className="mandante-proyectos-section-card mandante-proyectos-panel"><div className="mandante-proyectos-section-head"><div><h2>Requisitos del proyecto</h2><p>Define qué debe cumplir cada empresa y trabajador.</p></div><button type="button" onClick={onAdd}><Plus /> Agregar requisito</button></div><div className="mandante-proyectos-requirements">{requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}><div><strong>{requirement.nombre}</strong><span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {requirement.criticidad.replaceAll('_', ' ')} · Alerta {requirement.alertaDias} días · Plazo {requirement.diasPlazo ?? 5} días</span>{requirement.descripcion && <p>{requirement.descripcion}</p>}{Boolean(requirement.checklistRevision?.length) && <small>{requirement.checklistRevision!.length} criterios de revisión</small>}{Boolean(requirement.categoriasAplicables?.length) && <small>Aplica a: {requirement.categoriasAplicables!.join(', ')}</small>}</div><div className="mandante-proyectos-requirement-actions"><button type="button" className="edit" onClick={() => openEdit(requirement)}><Pencil /> Editar</button><button type="button" role="switch" aria-checked={requirement.obligatorio} disabled={savingRequirementId === requirement.id} className={`requirement-switch ${requirement.obligatorio ? 'mandatory' : 'optional'}`} onClick={() => void toggleRequired(requirement)}><span className="requirement-switch-track"><i /></span><b>{savingRequirementId === requirement.id ? 'Guardando…' : requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</b></button></div></div>)}{requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}</div></article>
+    <article className="mandante-proyectos-section-card mandante-proyectos-panel">
+      <div className="mandante-proyectos-section-head">
+        <div>
+          <h2>Requisitos del proyecto</h2>
+          <p>Define qué debe cumplir cada empresa y trabajador, su vigencia y qué efecto tiene un incumplimiento.</p>
+        </div>
+        <button type="button" onClick={onAdd} disabled={projectArchived}><Plus /> {projectArchived ? 'Solo lectura' : 'Agregar requisito'}</button>
+      </div>
+      {projectArchived && <div className="mandante-proyectos-readonly-note"><Archive /> Proyecto archivado: la matriz se conserva para consulta e historial.</div>}
+      <div className="mandante-proyectos-requirements">
+        {requirements.map(requirement => <div className="mandante-proyectos-requirement" key={requirement.id}>
+          <div>
+            <strong>{requirement.nombre}</strong>
+            <span>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {requirement.frecuencia} · {criticalityLabel(requirement.criticidad)}</span>
+            <small>Ámbito: {scopeLabel(requirement)} · Alerta {requirement.alertaDias} días · Plazo {requirement.diasPlazo ?? 5} días</small>
+            <small>{impactLabel(requirement)}</small>
+            {requirement.descripcion && <p>{requirement.descripcion}</p>}
+            {Boolean(requirement.checklistRevision?.length) && <small>{requirement.checklistRevision!.length} criterios de revisión</small>}
+            {Boolean(requirement.categoriasAplicables?.length) && <small>Aplica a: {requirement.categoriasAplicables!.join(', ')}</small>}
+          </div>
+          <div className="mandante-proyectos-requirement-actions">
+            <button type="button" className="edit" disabled={projectArchived || savingRequirementId === requirement.id} onClick={() => openEdit(requirement)}><Pencil /> Editar</button>
+            <button type="button" className="edit danger" disabled={projectArchived || Boolean(savingRequirementId)} onClick={() => void retireRequirement(requirement)}><Archive /> Retirar</button>
+            <button type="button" role="switch" aria-checked={requirement.obligatorio} disabled={projectArchived || savingRequirementId === requirement.id} className={`requirement-switch ${requirement.obligatorio ? 'mandatory' : 'optional'}`} onClick={() => void toggleRequired(requirement)}><span className="requirement-switch-track"><i /></span><b>{savingRequirementId === requirement.id ? 'Guardando…' : requirement.obligatorio ? 'Obligatorio' : 'Opcional'}</b></button>
+          </div>
+        </div>)}
+        {requirements.length === 0 && <div className="mandante-proyectos-empty">No hay requisitos activos para este proyecto.</div>}
+      </div>
+    </article>
+
+    {retiredRequirements.length > 0 && <article className="mandante-proyectos-section-card mandante-proyectos-panel mandante-proyectos-retired">
+      <div className="mandante-proyectos-section-head"><div><h2>Requisitos retirados</h2><p>No afectan la operación actual. Se conservan para mantener la trazabilidad histórica.</p></div></div>
+      <div className="mandante-proyectos-retired-list">{retiredRequirements.map(requirement => <div key={requirement.id}>
+        <span><strong>{requirement.nombre}</strong><small>{requirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'} · {scopeLabel(requirement)} · {requirement.frecuencia}</small></span>
+        <button type="button" disabled={projectArchived || Boolean(savingRequirementId)} onClick={() => void reactivateRequirement(requirement)}><RotateCcw /> {savingRequirementId === requirement.id ? 'Reactivando…' : 'Reactivar'}</button>
+      </div>)}</div>
+    </article>}
 
     {editingRequirement && editForm && <div className="fixed inset-0 z-[650] flex items-center justify-center bg-black/50 p-4" onClick={() => !savingRequirementId && setEditingRequirement(null)}>
       <div className="max-h-[calc(100vh-24px)] w-full max-w-[560px] overflow-y-auto rounded-xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-cream p-4">
           <div><h3 className="text-[17px] font-semibold text-navy">Editar configuración del requisito</h3><p className="mt-1 text-xs text-gray-500">{editingRequirement.nombre} · {editingRequirement.destino === 'empresa' ? 'Empresa' : 'Trabajador'}</p></div>
-          <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Cerrar" onClick={() => setEditingRequirement(null)}><X size={19} /></button>
+          <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Cerrar" disabled={Boolean(savingRequirementId)} onClick={() => setEditingRequirement(null)}><X size={19} /></button>
         </div>
         <div className="flex flex-col gap-4 p-5">
-          <div className="rounded-lg border border-cream3 bg-cream2/60 p-3 text-[11px] leading-relaxed text-gray-600"><strong className="text-navy">Identidad protegida.</strong> El nombre y el destino no se editan aquí para conservar la asociación con documentos y obligaciones existentes.</div>
+          <div className="rounded-lg border border-cream3 bg-cream2/60 p-3 text-[11px] leading-relaxed text-gray-600"><strong className="text-navy">Identidad protegida.</strong> El nombre y el destino no se editan para conservar la asociación con documentos y obligaciones existentes.</div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-[12px] font-medium text-gray-700">Frecuencia<select value={editForm.frequency} onChange={event => setEditForm({ ...editForm, frequency: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5"><option>Mensual</option><option>Bimensual</option><option>Trimestral</option><option>Por Proyecto</option><option>6 meses</option><option>1 año</option><option>Indefinido</option></select></label>
-            <label className="text-[12px] font-medium text-gray-700">Criticidad<select value={editForm.criticidad} onChange={event => setEditForm({ ...editForm, criticidad: event.target.value as Requisito['criticidad'] })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea acceso</option><option value="bloquea_ambas">Bloquea acceso y pago</option><option value="advertencia">Solo advertencia</option></select></label>
+            <label className="text-[12px] font-medium text-gray-700">Criticidad<select value={editForm.criticidad} onChange={event => setEditForm({ ...editForm, criticidad: event.target.value as Requisito['criticidad'] })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5"><option value="bloquea_pago">Bloquea pago</option><option value="bloquea_acceso">Bloquea ingreso</option><option value="bloquea_ambas">Bloquea ingreso y pago</option><option value="advertencia">Solo advertencia</option></select></label>
           </div>
           <label className="text-[12px] font-medium text-gray-700">Ámbito<select value={editForm.servicioId} onChange={event => setEditForm({ ...editForm, servicioId: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5"><option value="">Todo el proyecto</option>{getServiciosProyecto(editingRequirement.proyectoId).map(service => <option key={service.id} value={service.id}>{service.codigo} · {service.nombre}</option>)}</select></label>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-[12px] font-medium text-gray-700">Alerta preventiva (días)<input type="number" min="0" max="365" value={editForm.alertaDias} onChange={event => setEditForm({ ...editForm, alertaDias: Number(event.target.value) })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" /></label>
-            <label className="text-[12px] font-medium text-gray-700">Plazo después del período<input type="number" min="0" max="90" value={editForm.diasPlazo} onChange={event => setEditForm({ ...editForm, diasPlazo: Number(event.target.value) })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" /></label>
+            <label className="text-[12px] font-medium text-gray-700">Alerta preventiva (días)<input aria-label="Alerta preventiva edición" type="number" min="0" max="365" value={editForm.alertaDias} onChange={event => setEditForm({ ...editForm, alertaDias: Number(event.target.value) })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" /></label>
+            <label className="text-[12px] font-medium text-gray-700">Plazo después del período<input aria-label="Plazo después del período edición" type="number" min="0" max="90" value={editForm.diasPlazo} onChange={event => setEditForm({ ...editForm, diasPlazo: Number(event.target.value) })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" /></label>
           </div>
           <label className="text-[12px] font-medium text-gray-700">Descripción para el contratista<textarea value={editForm.description} onChange={event => setEditForm({ ...editForm, description: event.target.value })} className="form-input mt-1.5 min-h-20 w-full rounded-lg border border-cream3 p-2.5" /></label>
           <label className="text-[12px] font-medium text-gray-700">Checklist de revisión<textarea value={editForm.checklist} onChange={event => setEditForm({ ...editForm, checklist: event.target.value })} className="form-input mt-1.5 min-h-24 w-full rounded-lg border border-cream3 p-2.5" placeholder="Un criterio por línea" /></label>
-          {editingRequirement.destino === 'trabajador' && <label className="text-[12px] font-medium text-gray-700">Categorías aplicables<input value={editForm.categories} onChange={event => setEditForm({ ...editForm, categories: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" placeholder="Conductor, Trabajo en altura" /><span className="mt-1 block text-[10.5px] font-normal text-gray-500">Sepáralas por coma. Estas categorías aparecerán como opciones al asignar trabajadores.</span></label>}
+          {editingRequirement.destino === 'trabajador' && <label className="text-[12px] font-medium text-gray-700">Categorías aplicables<input value={editForm.categories} onChange={event => setEditForm({ ...editForm, categories: event.target.value })} className="form-input mt-1.5 w-full rounded-lg border border-cream3 p-2.5" placeholder="Conductor, Trabajo en altura" /><span className="mt-1 block text-[10.5px] font-normal text-gray-500">Sepáralas por coma. Vacío significa que aplica a todos los trabajadores del ámbito.</span></label>}
           <div className="grid grid-cols-1 gap-2 rounded-lg bg-cream2 p-3 sm:grid-cols-2"><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaTrabajo} onChange={event => setEditForm({ ...editForm, bloqueaTrabajo: event.target.checked })} /> Bloquea trabajo</label><label className="flex items-center gap-2 text-xs text-navy"><input type="checkbox" checked={editForm.bloqueaAsignacion} onChange={event => setEditForm({ ...editForm, bloqueaAsignacion: event.target.checked })} /> Bloquea asignación</label></div>
           {configuracionRequisitoRequiereObligatoriedad(editForm.criticidad, editForm.bloqueaTrabajo, editForm.bloqueaAsignacion) && <p className="text-[10.5px] text-gray-500">Esta configuración implica bloqueo operativo, por lo que el requisito se mantendrá obligatorio.</p>}
           <div className="flex justify-end gap-3 border-t border-cream pt-4"><button type="button" className="btn btn-ghost" disabled={Boolean(savingRequirementId)} onClick={() => setEditingRequirement(null)}>Cancelar</button><button type="button" className="btn btn-primary" disabled={Boolean(savingRequirementId)} onClick={() => void saveEdit()}><Save size={15} /> {savingRequirementId ? 'Guardando…' : 'Guardar cambios'}</button></div>
