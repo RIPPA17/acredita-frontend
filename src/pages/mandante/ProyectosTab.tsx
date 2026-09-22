@@ -141,6 +141,18 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   const detailTab = (['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'].includes(activeProjectTab) ? activeProjectTab : 'resumen') as DetailTab;
   const requirements = selected ? getRequisitos().filter(requirement => requirement.proyectoId === selected.project.id && requirement.activo !== false) : [];
   const executive = selected ? buildMandanteProjectSummaries([selected.project], contractors)[0] : null;
+  const projectCandidate = selected ? {
+    ...selected.project,
+    nombre: projectForm.nombre,
+    ubicacion: projectForm.ubicacion || undefined,
+    fechaInicio: projectForm.fechaInicio || undefined,
+    fechaTermino: projectForm.fechaTermino || undefined,
+    descripcion: projectForm.descripcion || undefined,
+    responsableNombre: projectForm.responsableNombre || undefined,
+    responsableEmail: projectForm.responsableEmail || undefined,
+    responsableTelefono: projectForm.responsableTelefono || undefined,
+  } : null;
+  const readiness = projectCandidate ? projectReadiness(projectCandidate) : null;
   const visible = summaries.filter(summary => filter === 'Todos los estados' || summary.state === filter).filter(summary => {
     const query = search.trim().toLocaleLowerCase('es');
     return !query || `${summary.project.nombre} ${projectLocation(summary.project)}`.toLocaleLowerCase('es').includes(query);
@@ -304,31 +316,81 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5, projectId: selected.project.id }); setIsAddDocModalOpen(true);
   };
 
-  if (!selected) return <section className="mandante-proyectos fade-in">
-    <header className="mandante-proyectos-page-head"><div><h1>Proyectos</h1><p>Vista general de tus proyectos. Abre una tarjeta para revisar toda su gestión y acreditación.</p></div><div className="mandante-proyectos-toolbar">
-      <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
-      <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option></select></label>
-    </div></header>
-    <div className="mandante-proyectos-grid">{visible.map(summary => <button type="button" className="mandante-proyectos-card" key={summary.project.id} onClick={() => openProject(summary)}>
-      <div className="mandante-proyectos-cover"><div><span>{summary.project.estado === 'Archivado' ? 'Proyecto archivado' : 'Proyecto activo'}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.state)}`}>{summary.state}</b></div>
-      <div className="mandante-proyectos-card-body"><div className="mandante-proyectos-presentation"><span><MapPin />{projectLocation(summary.project)}</span><span><CalendarDays />{projectStartDate(summary.project)}</span></div>
-        <div className="mandante-proyectos-people"><span><strong>{summary.workers.length}</strong>Trabajadores</span><span><strong>{summary.contractors.length}</strong>Contratistas</span></div><DocumentationBlock summary={summary} /><span className="mandante-proyectos-open">Ver proyecto <ChevronRight /></span></div>
-    </button>)}</div>
-    {visible.length === 0 && <div className="mandante-proyectos-empty">No hay proyectos que coincidan con la búsqueda y el estado seleccionado.</div>}
-  </section>;
+  if (!selected) return <>
+    <section className="mandante-proyectos fade-in">
+      <header className="mandante-proyectos-page-head">
+        <div><h1>Proyectos</h1><p>Crea, configura y revisa los proyectos de tu organización.</p></div>
+        <div className="mandante-proyectos-toolbar">
+          <button type="button" className="mandante-proyectos-primary-action" onClick={() => { setProjectForm(emptyProjectForm()); setIsCreateProjectOpen(true); }}><Plus /> Nuevo proyecto</button>
+          <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
+          <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option></select></label>
+        </div>
+      </header>
+      <div className="mandante-proyectos-grid">{visible.map(summary => <button type="button" className="mandante-proyectos-card" key={summary.project.id} onClick={() => openProject(summary)}>
+        <div className="mandante-proyectos-cover"><div><span>{projectAdministrativeLabel(summary.project)}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.project.estado === 'Borrador' ? 'Borrador' : summary.state)}`}>{summary.project.estado === 'Borrador' ? 'Borrador' : summary.state}</b></div>
+        <div className="mandante-proyectos-card-body"><div className="mandante-proyectos-presentation"><span><MapPin />{projectLocation(summary.project)}</span><span><CalendarDays />{projectStartDate(summary.project)}</span></div>
+          <div className="mandante-proyectos-people"><span><strong>{summary.workers.length}</strong>Trabajadores</span><span><strong>{summary.contractors.length}</strong>Contratistas</span></div><DocumentationBlock summary={summary} /><span className="mandante-proyectos-open">Ver proyecto <ChevronRight /></span></div>
+      </button>)}</div>
+      {visible.length === 0 && <div className="mandante-proyectos-empty">{summaries.length === 0 ? 'Aún no hay proyectos. Crea el primero para comenzar.' : 'No hay proyectos que coincidan con la búsqueda y el estado seleccionado.'}</div>}
+    </section>
 
-  if (configuring) return <section className="mandante-proyectos fade-in"><button type="button" className="mandante-proyectos-back" onClick={() => setConfiguring(false)}><ArrowLeft /> Volver al proyecto</button>
-    <div className="mandante-proyectos-config"><header><div><span>Administración del proyecto</span><h1>{selected.project.nombre}</h1><p>Consulta sus datos generales y administra su estado sin salir del contexto.</p></div><Settings2 /></header>
-      <div className="mandante-proyectos-config-grid"><div><span>Ubicación</span><strong>{projectLocation(selected.project)}</strong></div><div><span>Fecha de inicio</span><strong>{projectStartDate(selected.project)}</strong></div><div><span>Estado administrativo</span><strong>{selected.project.estado}</strong></div><div><span>Requisitos activos</span><strong>{requirements.length}</strong></div></div>
-      <div className="mandante-proyectos-danger"><div><strong>Archivar proyecto</strong><p>El proyecto deja de considerarse activo, pero conserva su información.</p></div><button type="button" onClick={archiveProject} disabled={proyectoArchivado}><Archive />{proyectoArchivado ? 'Proyecto archivado' : 'Archivar proyecto'}</button></div>
-    </div></section>;
+    {isCreateProjectOpen && <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 p-4" onClick={() => !savingProject && setIsCreateProjectOpen(false)}>
+      <div className="max-h-[calc(100vh-24px)] w-full max-w-[620px] overflow-y-auto rounded-xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-cream p-4">
+          <div><h3 className="text-[18px] font-semibold text-navy">Crear proyecto</h3><p className="mt-1 text-xs text-gray-500">Se guardará primero como borrador. Podrás activarlo cuando sus datos básicos estén completos.</p></div>
+          <button type="button" aria-label="Cerrar" disabled={savingProject} className="rounded p-1 text-gray-400 hover:bg-gray-100" onClick={() => setIsCreateProjectOpen(false)}><X size={19} /></button>
+        </div>
+        <ProjectFormFields form={projectForm} setForm={setProjectForm} disabled={savingProject} />
+        <div className="flex justify-end gap-3 border-t border-cream px-5 py-4">
+          <button type="button" className="btn btn-ghost" disabled={savingProject} onClick={() => setIsCreateProjectOpen(false)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={savingProject || !projectForm.nombre.trim()} onClick={() => void createProject()}>{savingProject ? 'Creando…' : 'Crear borrador'}</button>
+        </div>
+      </div>
+    </div>}
+  </>;
+
+  if (configuring) return <section className="mandante-proyectos fade-in">
+    <button type="button" className="mandante-proyectos-back" onClick={() => setConfiguring(false)}><ArrowLeft /> Volver al proyecto</button>
+    <div className="mandante-proyectos-config">
+      <header><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>Edita los datos generales, define al responsable y controla cuándo el proyecto queda operativo.</p></div><Settings2 /></header>
+
+      <div className="mandante-proyectos-config-grid">
+        <div><span>Estado administrativo</span><strong>{selected.project.estado}</strong></div>
+        <div><span>Preparación</span><strong>{readiness?.ready ? 'Datos básicos completos' : `${readiness?.items.filter(item => item.ok).length || 0} de ${readiness?.items.length || 0} controles completos`}</strong></div>
+        <div><span>Requisitos activos</span><strong>{requirements.length}</strong></div>
+        <div><span>Responsable</span><strong>{selected.project.responsableNombre || 'No definido'}</strong></div>
+      </div>
+
+      <div className="mandante-proyectos-config-body">
+        <section className="mandante-proyectos-config-card">
+          <div className="mandante-proyectos-section-head"><div><h2>Datos generales</h2><p>Información principal que verá el equipo del Mandante y Acredita.</p></div></div>
+          <ProjectFormFields form={projectForm} setForm={setProjectForm} disabled={savingProject || selected.project.estado === 'Archivado'} />
+          {selected.project.estado !== 'Archivado' && <div className="mandante-proyectos-config-actions">
+            <button type="button" className="btn btn-ghost" disabled={savingProject} onClick={() => setProjectForm(projectFormFrom(selected.project))}>Descartar cambios</button>
+            <button type="button" className="btn btn-primary" disabled={savingProject} onClick={() => void saveProjectConfiguration()}><Save size={15} /> {savingProject ? 'Guardando…' : 'Guardar cambios'}</button>
+          </div>}
+        </section>
+
+        <section className="mandante-proyectos-config-card">
+          <h2>Preparación del proyecto</h2>
+          <p>Estos datos deben estar completos antes de activar el proyecto.</p>
+          <div className="mandante-proyectos-readiness">{readiness?.items.map(item => <div key={item.label} className={item.ok ? 'ready' : 'pending'}>{item.ok ? <CheckCircle2 /> : <AlertCircle />}<span>{item.label}</span><strong>{item.ok ? 'Listo' : 'Pendiente'}</strong></div>)}</div>
+          {selected.project.estado === 'Borrador' && <button type="button" className="mandante-proyectos-activate" disabled={savingProject || !readiness?.ready} onClick={() => void activateProject()}><CheckCircle2 /> {readiness?.ready ? 'Activar proyecto' : 'Completa los datos para activar'}</button>}
+          {selected.project.estado === 'Activo' && <div className="mandante-proyectos-active-note"><CheckCircle2 /> El proyecto está activo y disponible para la operación.</div>}
+          {selected.project.estado === 'Archivado' && <div className="mandante-proyectos-archived-note"><Archive /> El proyecto está archivado y se mantiene solo para consulta e historial.</div>}
+        </section>
+      </div>
+
+      {selected.project.estado !== 'Archivado' && <div className="mandante-proyectos-danger"><div><strong>Archivar proyecto</strong><p>El proyecto deja de considerarse activo, pero conserva su información, documentos e historial.</p></div><button type="button" onClick={archiveProject} disabled={savingProject || proyectoArchivado}><Archive />Archivar proyecto</button></div>}
+    </div>
+  </section>;
 
   return <section className="mandante-proyectos mandante-proyectos-detail fade-in">
     <button type="button" className="mandante-proyectos-back" onClick={backToProjects}><ArrowLeft /> Volver a proyectos</button>
-    <header className="mandante-proyectos-hero"><div><span>{selected.project.estado === 'Archivado' ? 'Proyecto archivado' : 'Proyecto activo'}</span><h1>{selected.project.nombre}</h1><p>Gestiona la acreditación completa del proyecto desde un espacio dedicado.</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.state)}`}>{selected.state}</b><button type="button" onClick={() => setConfiguring(true)}><Settings2 /> Administrar proyecto</button></div></header>
+    <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
     <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
-    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={misProyectos} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'contratistas' && <ContractorsPanel selected={selected} projects={currentProjects} onOpen={onOpenContractor} onChanged={() => setContractorsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
