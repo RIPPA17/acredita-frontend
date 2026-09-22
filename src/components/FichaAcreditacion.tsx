@@ -593,6 +593,7 @@ function LegacyFichaAcreditacion({
                           const showRevisor = rol === 'admin';
                           const showImpact = rol === 'admin' || rol === 'mandante';
                           const hasImpact = req.obligatorio && (docEstado === 'rechazado' || docEstado === 'vencido');
+                          const configuredImpacts = getImpactosRequisito(req);
 
                           return (
                             <div className="space-y-3">
@@ -642,21 +643,12 @@ function LegacyFichaAcreditacion({
                               {showImpact && (
                                 <div className="border-t border-cream pt-2.5">
                                   <div className="font-semibold text-navy mb-1.5">Impacto:</div>
-                                  {hasImpact ? (
-                                    <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea ingreso</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea trabajo</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea asignación</span>
-                                      <span className="text-red-600 flex items-center gap-1">🔴 Bloquea pago</span>
-                                    </div>
-                                  ) : (
-                                    <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado ingreso</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado trabajo</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado asignación</span>
-                                      <span className="text-green-600 flex items-center gap-1">🟢 Habilitado pago</span>
-                                    </div>
-                                  )}
+                                  <div className="grid grid-cols-2 gap-1.5 text-[12px] font-medium">
+                                    <span className={`${hasImpact && configuredImpacts.acceso ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.acceso ? '🔴 Bloquea ingreso' : '🟢 No bloquea ingreso'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.trabajo ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.trabajo ? '🔴 Bloquea trabajo' : '🟢 No bloquea trabajo'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.asignacion ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.asignacion ? '🔴 Bloquea asignación' : '🟢 No bloquea asignación'}</span>
+                                    <span className={`${hasImpact && configuredImpacts.pago ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>{hasImpact && configuredImpacts.pago ? '🔴 Bloquea pago' : '🟢 No bloquea pago'}</span>
+                                  </div>
                                 </div>
                               )}
                             </div>
