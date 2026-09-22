@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Pencil, Search, UserMinus, UserPlus } from 'lucide-react';
 import {
   calcularEstadoTrabajador,
@@ -15,6 +15,7 @@ import { openDocumentFile, uploadDocumentFile } from '../../data/supabaseDocumen
 import { DocEstado } from '../admin/acreditacionUtils';
 import { impactoLabel } from './inicio/inicioUtils';
 import { getServiciosProyecto, proyectoOperativoParaContratista } from '../../data/operationalCore';
+import ListPagination from '../../components/ListPagination';
 import {
   documentoVigente,
   getEstadoDocumentoEfectivo,
@@ -196,6 +197,7 @@ export default function TrabajadoresTab({
 }) {
   const [search, setSearch] = useState('');
   const [filtro, setFiltro] = useState<FiltroEstado>('todos');
+  const [page, setPage] = useState(1);
   const [uploadTarget, setUploadTarget] = useState<{ item: ChecklistItem; trabajador: Trabajador } | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -439,6 +441,15 @@ export default function TrabajadoresTab({
       .some(value => normalizarNombreDocumento(value).includes(query));
     return matchesSearch && (modoConsulta || filtro === 'todos' || item.estado === filtro);
   });
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(filtrados.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const trabajadoresVisibles = filtrados.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hayFiltros = Boolean(search.trim()) || (!modoConsulta && filtro !== 'todos');
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filtro, selectedProyectoId, modoConsulta]);
 
   return (
     <>
@@ -485,9 +496,10 @@ export default function TrabajadoresTab({
               <option value="por_vencer">Por vencer</option>
               <option value="rechazado">Bloqueados</option>
             </select>}
+            {hayFiltros && <button type="button" className="btn btn-ghost text-[12px]" onClick={() => { setSearch(''); setFiltro('todos'); }}>Limpiar filtros</button>}
           </div>
           <div className="tw-table-head"><span>Trabajador</span><span>Cargo</span><span>Estado</span><span>Documentos</span><span>Acceso</span><span /></div>
-          {filtrados.length === 0 ? <div className="tw-empty">No hay trabajadores que coincidan con los filtros.</div> : filtrados.map(item => {
+          {filtrados.length === 0 ? <div className="tw-empty">No hay trabajadores que coincidan con los filtros.</div> : trabajadoresVisibles.map(item => {
             const acceso = !modoConsulta && (item.estado === 'aprobado' || item.estado === 'por_vencer');
             const problemasFicha = modoConsulta ? [] : getProblemasFichaTrabajador(item.trabajador, selectedProyectoId, contratistaLogueado.id);
             const motivo = !modoConsulta && item.estado === 'rechazado' ? getMotivoBloqueoTrabajador(item.trabajador, selectedProyectoId) : undefined;
@@ -507,6 +519,7 @@ export default function TrabajadoresTab({
               </div>
             );
           })}
+          <ListPagination page={safePage} pageSize={pageSize} total={filtrados.length} onPageChange={setPage} label="trabajadores" />
         </div>
       </section>
     </div>
