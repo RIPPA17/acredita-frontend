@@ -369,8 +369,36 @@ function estadoRequisitoCompuerta(req: Requisito, doc: Documento | undefined): E
   return 'pendiente';
 }
 
+export type ImpactosRequisito = {
+  acceso: boolean;
+  trabajo: boolean;
+  asignacion: boolean;
+  pago: boolean;
+};
+
+export function getImpactosRequisito(req: Pick<Requisito, 'criticidad' | 'bloqueaTrabajo' | 'bloqueaAsignacion'>): ImpactosRequisito {
+  const acceso = req.criticidad === 'bloquea_acceso' || req.criticidad === 'bloquea_ambas';
+  const pago = req.criticidad === 'bloquea_pago' || req.criticidad === 'bloquea_ambas';
+  return {
+    acceso,
+    // Sin ingreso a faena tampoco es posible trabajar ni materializar una asignación.
+    trabajo: acceso || Boolean(req.bloqueaTrabajo),
+    asignacion: acceso || Boolean(req.bloqueaAsignacion),
+    pago,
+  };
+}
+
+export function configuracionRequisitoRequiereObligatoriedad(
+  criticidad: Requisito['criticidad'],
+  bloqueaTrabajo = false,
+  bloqueaAsignacion = false,
+): boolean {
+  return criticidad !== 'advertencia' || bloqueaTrabajo || bloqueaAsignacion;
+}
+
 function requisitoAplicaACompuerta(req: Requisito, compuerta: 'acceso' | 'pago'): boolean {
-  return req.criticidad === 'bloquea_ambas' || req.criticidad === `bloquea_${compuerta}`;
+  const impactos = getImpactosRequisito(req);
+  return impactos[compuerta];
 }
 
 function buscarDocumentoRequisito(documentos: Documento[], req: Requisito, proyectoId: string): Documento | undefined {
