@@ -64,6 +64,7 @@ export function buildAdminSearchResults(params: {
     : [];
 
   return {
+    total: results.length,
     empresa: results.filter(item => item.tipo === 'empresa'),
     documento: results.filter(item => item.tipo === 'documento'),
     proyecto: results.filter(item => item.tipo === 'proyecto'),
