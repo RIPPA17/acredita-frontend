@@ -31,6 +31,10 @@ export interface Proyecto {
   ubicacion?: string;
   fechaInicio?: string;
   fechaTermino?: string;
+  descripcion?: string;
+  responsableNombre?: string;
+  responsableEmail?: string;
+  responsableTelefono?: string;
 }
 
 export type EstadoAsignacion = 'activa' | 'inactiva' | 'baja';
