@@ -446,47 +446,146 @@ function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; 
   </div>;
 }
 
-function ContractorsPanel({ selected, projects, onOpen, onChanged, showToast }: { selected: ProjectPresentation; projects: Proyecto[]; onOpen: Props['onOpenContractor']; onChanged: () => void; showToast: Props['showToast'] }) {
+function ContractorsPanel({
+  selected,
+  projects,
+  allContractors,
+  projectArchived,
+  onInvite,
+  onOpen,
+  onChanged,
+  showToast,
+}: {
+  selected: ProjectPresentation;
+  projects: Proyecto[];
+  allContractors: Contratista[];
+  projectArchived: boolean;
+  onInvite: () => void;
+  onOpen: Props['onOpenContractor'];
+  onChanged: () => void;
+  showToast: Props['showToast'];
+}) {
   const [savingId, setSavingId] = useState<string | null>(null);
-  const contractorById = new Map(selected.contractors.map(item => [item.id, item]));
+  const contractorById = new Map(allContractors.map(item => [item.id, item]));
+  const historical = (selected.project.contratistasHistoricos || [])
+    .map(id => contractorById.get(id))
+    .filter((item): item is Contratista => Boolean(item));
+
+  const parentForProject = (contractor: Contratista) =>
+    contractor.contratistaPadrePorProyecto?.[selected.project.id];
+
   const canBeParent = (candidate: Contratista, childId: string) => {
     if (candidate.id === childId) return false;
     let current: Contratista | undefined = candidate;
     const visited = new Set<string>();
-    while (current?.contratistaPadreId && !visited.has(current.id)) {
-      if (current.contratistaPadreId === childId) return false;
+    while (current && !visited.has(current.id)) {
+      const parentId = parentForProject(current);
+      if (!parentId) break;
+      if (parentId === childId) return false;
       visited.add(current.id);
-      current = contractorById.get(current.contratistaPadreId);
+      current = contractorById.get(parentId);
     }
     return true;
   };
+
   const updateParent = async (contractor: Contratista, parentId: string) => {
-    if (savingId) return;
+    if (savingId || projectArchived) return;
     setSavingId(contractor.id);
     try {
       await setContractorParent(selected.project.id, contractor.id, parentId || undefined);
       onChanged();
-      showToast(parentId ? 'Relación de subcontratación actualizada.' : 'Contratista marcado como principal.');
+      showToast(parentId ? 'Relación de subcontratación actualizada para este proyecto.' : 'Contratista marcado como principal en este proyecto.');
     } catch (error) {
       console.error('No fue posible actualizar la relación del contratista.', error);
-      showToast('No fue posible actualizar la relación de subcontratación.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible actualizar la relación de subcontratación.', 'error');
     } finally {
       setSavingId(null);
     }
   };
-  return <article className="mandante-proyectos-section-card mandante-proyectos-panel"><h2>Contratistas del proyecto</h2><p>Organiza contratistas principales y subcontratistas, manteniendo una acreditación independiente por empresa.</p><div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Contratista</th><th>Relación</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acción</th></tr></thead><tbody>{selected.contractors.map(contractor => {
-    const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
-    const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
-    const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
-    const enabled = workerAccess.filter(state => state === 'habilitado').length;
-    const result = calcularAccesoPago(contractor, selected.project.id);
-    const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado')
-      ? 'Con bloqueos'
-      : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente')
-        ? 'Pendiente'
-        : 'Habilitado';
-    return <tr key={contractor.id}><td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td><td><select aria-label={`Relación de ${contractor.nombre}`} value={contractor.contratistaPadreId || ''} disabled={savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td><td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td><td>{enabled}/{assigned.length}</td><td>{accessState}</td><td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td><td><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button></td></tr>;
-  })}</tbody></table></div></article>;
+
+  const finishParticipation = async (contractor: Contratista) => {
+    if (savingId || projectArchived) return;
+    const confirmed = window.confirm(
+      `¿Finalizar la participación de "${contractor.nombre}" en "${selected.project.nombre}"?\n\n` +
+      'Se cerrarán sus servicios y asignaciones activas en este proyecto. Los documentos, revisiones y antecedentes históricos se conservarán.'
+    );
+    if (!confirmed) return;
+    setSavingId(contractor.id);
+    try {
+      await setContractorProjectActive(selected.project.id, contractor.id, false);
+      onChanged();
+      showToast('Participación finalizada. El historial se conserva.', 'warning');
+    } catch (error) {
+      console.error('No fue posible finalizar la participación.', error);
+      showToast(error instanceof Error ? error.message : 'No fue posible finalizar la participación.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const reactivateParticipation = async (contractor: Contratista) => {
+    if (savingId || projectArchived) return;
+    setSavingId(contractor.id);
+    try {
+      await setContractorProjectActive(selected.project.id, contractor.id, true);
+      onChanged();
+      showToast('Contratista reactivado en el proyecto. Revisa servicios y trabajadores antes de operar.');
+    } catch (error) {
+      console.error('No fue posible reactivar la participación.', error);
+      showToast(error instanceof Error ? error.message : 'No fue posible reactivar la participación.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return <>
+    <article className="mandante-proyectos-section-card mandante-proyectos-panel">
+      <div className="mandante-proyectos-section-head">
+        <div>
+          <h2>Contratistas del proyecto</h2>
+          <p>Administra quién participa en esta obra y la relación entre contratistas principales y subcontratistas.</p>
+        </div>
+        <button type="button" onClick={onInvite} disabled={projectArchived}><Plus /> {projectArchived ? 'Solo lectura' : 'Invitar contratista'}</button>
+      </div>
+      {projectArchived && <div className="mandante-proyectos-readonly-note"><Archive /> Proyecto archivado: las relaciones se mantienen solo para consulta.</div>}
+      <div className="mandante-proyectos-table-wrap">
+        <table>
+          <thead><tr><th>Contratista</th><th>Relación en este proyecto</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acciones</th></tr></thead>
+          <tbody>{selected.contractors.map(contractor => {
+            const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
+            const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
+            const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
+            const enabled = workerAccess.filter(state => state === 'habilitado').length;
+            const result = calcularAccesoPago(contractor, selected.project.id);
+            const accessState = result.accesoEstado === 'bloqueado' || workerAccess.some(state => state === 'bloqueado')
+              ? 'Con bloqueos'
+              : result.accesoEstado === 'pendiente' || workerAccess.some(state => state === 'pendiente')
+                ? 'Pendiente'
+                : 'Habilitado';
+            const currentParentId = parentForProject(contractor) || '';
+            return <tr key={contractor.id}>
+              <td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td>
+              <td><select aria-label={`Relación de ${contractor.nombre}`} value={currentParentId} disabled={projectArchived || savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td>
+              <td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td>
+              <td>{enabled}/{assigned.length}</td>
+              <td>{accessState}</td>
+              <td>{result.pagoEstado === 'bloqueado' ? 'Retenido' : result.pagoEstado === 'pendiente' ? 'Pendiente' : 'Habilitado'}</td>
+              <td><div className="mandante-proyectos-contractor-actions"><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver contratista</button><button type="button" className="danger" disabled={projectArchived || Boolean(savingId)} onClick={() => void finishParticipation(contractor)}><Archive /> {savingId === contractor.id ? 'Actualizando…' : 'Finalizar'}</button></div></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      {selected.contractors.length === 0 && <div className="mandante-proyectos-empty">Todavía no hay contratistas activos en este proyecto.</div>}
+    </article>
+
+    {historical.length > 0 && <article className="mandante-proyectos-section-card mandante-proyectos-panel mandante-proyectos-retired">
+      <div className="mandante-proyectos-section-head"><div><h2>Participaciones finalizadas</h2><p>Empresas que ya no operan en el proyecto. Sus documentos, trabajadores y revisiones permanecen en el historial.</p></div></div>
+      <div className="mandante-proyectos-retired-list">{historical.map(contractor => <div key={contractor.id}>
+        <span><strong>{contractor.nombre}</strong><small>RUT {contractor.rut} · relación finalizada</small></span>
+        <div className="mandante-proyectos-history-actions"><button type="button" onClick={() => onOpen(selected.project.id, contractor.id)}>Ver historial</button><button type="button" disabled={projectArchived || Boolean(savingId)} onClick={() => void reactivateParticipation(contractor)}><RotateCcw /> {savingId === contractor.id ? 'Reactivando…' : 'Reactivar'}</button></div>
+      </div>)}</div>
+    </article>}
+  </>;
 }
 
 function RequirementsPanel({ requirements, retiredRequirements, projectArchived, onAdd, onChanged, showToast }: {
