@@ -30,3 +30,29 @@ export async function setContractorParent(projectId: string, contractorId: strin
   }
   await hydrateCoreDataFromSupabase(session);
 }
+
+
+export async function setContractorProjectActive(projectId: string, contractorId: string, active: boolean): Promise<void> {
+  const session = await restoreSupabaseSession();
+  if (!session || !['admin', 'mandante'].includes(session.role)) {
+    throw new Error('Tu sesión no permite administrar la participación del contratista.');
+  }
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/set_contractor_project_active`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session._supabase.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      p_project_key: projectId,
+      p_contractor_key: contractorId,
+      p_active: active,
+    }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.message || payload?.hint || 'No fue posible actualizar la participación del contratista.');
+  }
+  await hydrateCoreDataFromSupabase(session);
+}
