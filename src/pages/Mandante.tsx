@@ -8,8 +8,8 @@ import {
   Building2, Plug, Save, ShieldAlert, ToggleRight, FolderOpen, ClipboardList,
   Pencil, Archive, Trash2, ChevronRight, MapPin, CalendarDays, Briefcase, Key, Activity, Menu, ChevronLeft
 } from 'lucide-react';
-import { getContratistas, saveContratistas, getProyectos, saveProyectos, getMandantes, calcularEstadoAcreditacion, calcularEstadoTrabajador, getRequisitos, saveRequisitos, esVencidoPorFecha, calcularAccesoPago, getAlertasVigencia, esPorVencerPorFecha, logoutUser, getCurrentSession, nombresDocumentoCoinciden } from '../data/businessStore';
-import { Contratista, Mandante } from '../types';
+import { getContratistas, getProyectos, getMandantes, getRequisitos, saveRequisitos, logoutUser, getCurrentSession } from '../data/businessStore';
+import { Mandante } from '../types';
 import ConfigTab from './mandante/ConfigTab';
 import type { ConfigTabId } from './mandante/config/configUtils';
 import DashboardTab from './mandante/DashboardTab';
@@ -25,6 +25,7 @@ import { buildMandanteNotifications, type OperationalNotification } from '../dat
 import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getServiciosProyecto } from '../data/operationalCore';
+import { buildMandanteContractorsData } from './mandante/contractorsData';
 
 export default function MandantePortal() {
   const { revision: dataSyncRevision } = useDataSync();
@@ -146,66 +147,8 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
       criticidad: r.criticidad,
       alertaDias: r.alertaDias
     })));
-    setContractorsData(buildContractorsData(allContratistas, activeProjectId));
+    setContractorsData(buildMandanteContractorsData(allContratistas, activeProjectId));
   }, [activeProjectId, dataSyncRevision]);
-
-  const buildContractorsData = (contratistasList: Contratista[], projId: string) => {
-    const projReqs = getRequisitos().filter(r => r.proyectoId === projId && r.activo !== false);
-
-    return contratistasList.filter(c => 
-      c.proyectos.includes(projId)
-    ).map(c => {
-      const reqs: Record<string, boolean> = {};
-      const status: Record<string, string> = {};
-
-      projReqs.forEach(req => {
-        reqs[req.id] = req.obligatorio;
-        if (req.destino === 'empresa') {
-          const doc = c.documentos.find(d =>
-            d.proyectoId === projId && nombresDocumentoCoinciden(d.nombre, req.nombre)
-          );
-          status[req.id] = doc ? (doc.estado === 'aprobado' ? 'ok' : doc.estado === 'por_vencer' ? 'warn' : doc.estado === 'rechazado' ? 'error' : 'pending') : 'na';
-        } else {
-          const workers = c.trabajadores || [];
-          if (workers.length === 0) {
-            status[req.id] = 'na';
-          } else {
-            let hasError = false;
-            let hasPending = false;
-            let hasWarn = false;
-            
-            workers.forEach(w => {
-              const doc = w.documentos?.find(d =>
-                d.proyectoId === projId && nombresDocumentoCoinciden(d.nombre, req.nombre)
-              );
-              if (!doc) {
-                if (req.obligatorio) hasPending = true;
-              } else {
-                const isVencido = esVencidoPorFecha(doc.vencimiento);
-                if (doc.estado === 'rechazado' || isVencido) hasError = true;
-                else if (doc.estado === 'pendiente' || doc.estado === 'revision') hasPending = true;
-                else if (doc.estado === 'por_vencer') hasWarn = true;
-              }
-            });
-
-            if (hasError) status[req.id] = 'error';
-            else if (hasPending) status[req.id] = 'pending';
-            else if (hasWarn) status[req.id] = 'warn';
-            else status[req.id] = 'ok';
-          }
-        }
-      });
-
-      return {
-        id: c.id,
-        name: c.nombre,
-        rut: c.rut,
-        reqs,
-        status,
-        isNew: c.isNew
-      };
-    });
-  };
 
   const [contractorsData, setContractorsData] = useState<any[]>([]);
 
@@ -238,7 +181,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
       await confirmBusinessPersistence('core');
       const updatedReqs = getRequisitos().filter(r => r.proyectoId === activeProjectId && r.activo !== false);
       setDocumentRequirements(updatedReqs.map(r => ({ id: r.id, name: r.nombre, category: r.categoria, frequency: r.frecuencia, obligatorio: r.obligatorio, destino: r.destino, criticidad: r.criticidad, alertaDias: r.alertaDias })));
-      setContractorsData(buildContractorsData(allContratistas, activeProjectId));
+      setContractorsData(buildMandanteContractorsData(allContratistas, activeProjectId));
       setIsAddDocModalOpen(false);
       setNewDocForm({ name: '', category: 'Laboral', frequency: 'Mensual', destino: 'empresa', obligatorio: true, criticidad: 'bloquea_pago', description: '', checklist: '', categories: '', bloqueaTrabajo: false, bloqueaAsignacion: false, servicioId: '', dueDays: 5 });
       showToast('Requisito agregado con éxito');
