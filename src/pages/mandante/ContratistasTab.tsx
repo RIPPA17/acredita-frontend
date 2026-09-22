@@ -8,6 +8,7 @@ import {
   esPorVencerPorFecha,
   esTrabajadorAsignado,
   esVencidoPorFecha,
+  getImpactosRequisito,
   getRequisitos,
   obtenerDiasRestantes,
 } from '../../data/businessStore';
@@ -69,6 +70,19 @@ const workerStateLabel = (state: ReturnType<typeof calcularEstadoTrabajador>) =>
     : state === 'rechazado'
       ? 'Bloqueado'
       : 'En proceso';
+
+const workerAccessLabel = (state: ReturnType<typeof calcularAccesoTrabajador>) =>
+  state === 'habilitado' ? 'Habilitado' : state === 'pendiente' ? 'Pendiente' : 'Bloqueado';
+
+const requirementImpactLabel = (requirement: Requisito) => {
+  const impacts = getImpactosRequisito(requirement);
+  const labels: string[] = [];
+  if (impacts.acceso) labels.push('ingreso');
+  if (impacts.trabajo) labels.push('trabajo');
+  if (impacts.asignacion) labels.push('asignación');
+  if (impacts.pago) labels.push('pago');
+  return labels.length ? `Afecta: ${labels.join(', ')}` : 'Sin bloqueo operativo';
+};
 
 const contractorAccessState = (contractor: Contratista, projectId: string, workers: Trabajador[]) => {
   const company = calcularAccesoPago(contractor, projectId);
