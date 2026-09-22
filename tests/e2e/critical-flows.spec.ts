@@ -930,6 +930,85 @@ test('05d Proyecto archivado mantiene la matriz documental en solo lectura', asy
   await expect(page.getByText('Proyecto archivado: la matriz se conserva para consulta e historial.')).toBeVisible();
 });
 
+test('05e Mandante administra jerarquía, baja, historial y reactivación por proyecto', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { contractorHierarchy: true });
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+
+  const rowA = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
+  const rowB = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto B' }).first();
+  await expect(rowA).toBeVisible();
+  await expect(rowB).toBeVisible();
+
+  const relationA = rowA.getByLabel('Relación de Contratista Piloto A');
+  await relationA.selectOption('contratista_piloto_b');
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_parent'
+    && item.body?.p_project_key === 'proyecto_piloto'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_parent_contractor_key === 'contratista_piloto_b'
+  )).toBeTruthy();
+  await expect(relationA).toHaveValue('contratista_piloto_b');
+
+  page.once('dialog', dialog => dialog.accept());
+  await rowA.getByRole('button', { name: 'Finalizar' }).click();
+  await expect(page.getByRole('heading', { name: 'Participaciones finalizadas' })).toBeVisible();
+  const historical = page.locator('.mandante-proyectos-retired-list').filter({ hasText: 'Contratista Piloto A' });
+  await expect(historical).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_project_active'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === false
+  )).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Servicios', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Servicios y contratos finalizados' })).toBeVisible();
+  await expect(page.getByText('SRV-01', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await historical.getByRole('button', { name: 'Reactivar' }).click();
+  const restoredRow = page.locator('tbody tr').filter({ hasText: 'Contratista Piloto A' }).first();
+  await expect(restoredRow).toBeVisible();
+  await expect(restoredRow.getByLabel('Relación de Contratista Piloto A')).toHaveValue('');
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/set_contractor_project_active'
+    && item.body?.p_contractor_key === 'contratista_piloto_a'
+    && item.body?.p_active === true
+  )).toBeTruthy();
+});
+
+test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { invitationFlow: true });
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByRole('button', { name: 'Invitar contratista' }).click();
+
+  await expect(page.getByText('pendiente@contratista.invalid')).toBeVisible();
+  await expect(page.getByText('Pendiente', { exact: true })).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Cancelar invitación de pendiente@contratista.invalid' }).click();
+
+  await expect(page.getByText('Cancelada', { exact: true })).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/cancel_contractor_invitation'
+    && item.body?.p_invitation_id === INVITATION
+  )).toBeTruthy();
+});
+
+test('05g Servicios impide códigos duplicados para el mismo contratista', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await openMandanteProject(page);
+  await page.getByRole('button', { name: 'Servicios', exact: true }).click();
+  await page.getByRole('button', { name: 'Nuevo servicio' }).click();
+
+  await page.getByPlaceholder('Ej. OC-2026-014').fill('SRV-01');
+  await page.getByPlaceholder('Ej. Mantención eléctrica planta norte').fill('Servicio duplicado QA');
+  await page.getByRole('button', { name: 'Crear servicio' }).click();
+
+  await expect(page.getByText('Ese contratista ya tiene un servicio o contrato con el mismo código en este proyecto.')).toBeVisible();
+});
+
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await openMandanteProject(page);
