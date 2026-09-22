@@ -14,6 +14,7 @@ import {
 } from '../../data/businessStore';
 import { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile } from '../../data/supabaseDocumentStorage';
+import { getObligacionesDocumentales } from '../../data/operationalCore';
 import { getEstadoDocumentoEfectivo, normalizarNombreDocumento } from '../contratista/documentosUtils';
 import { companyObligationSummary } from './proyectos/proyectosUtils';
 import {
@@ -82,6 +83,25 @@ const requirementImpactLabel = (requirement: Requisito) => {
   if (impacts.asignacion) labels.push('asignación');
   if (impacts.pago) labels.push('pago');
   return labels.length ? `Afecta: ${labels.join(', ')}` : 'Sin bloqueo operativo';
+};
+
+const contractorCompliance = (projectId: string, contractorId: string) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const obligations = getObligacionesDocumentales().filter(item =>
+    item.proyectoId === projectId
+    && item.contratistaId === contractorId
+    && item.activo
+    && item.periodoInicio <= today
+    && item.estado !== 'no_aplica'
+  );
+  if (obligations.length === 0) return { percent: null, inReview: 0, blocked: 0, pending: 0 };
+  const satisfied = obligations.filter(item => item.estado === 'aprobado' || item.estado === 'por_vencer').length;
+  return {
+    percent: Math.round((satisfied / obligations.length) * 100),
+    inReview: obligations.filter(item => item.estado === 'revision').length,
+    blocked: obligations.filter(item => item.estado === 'rechazado' || item.estado === 'vencido').length,
+    pending: obligations.filter(item => item.estado === 'pendiente').length,
+  };
 };
 
 const contractorAccessState = (contractor: Contratista, projectId: string, workers: Trabajador[]) => {
