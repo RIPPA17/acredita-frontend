@@ -329,7 +329,7 @@ export default function AdminPortal() {
 
           {busquedaAbierta && busquedaGlobal.trim().length > 0 && (
             <div className="absolute left-0 top-11 w-full bg-white rounded-xl shadow-2xl border border-cream3 z-[350] max-h-[420px] overflow-y-auto">
-              {resultadosBusqueda.length === 0 ? (
+              {resultadosPorTipo.total === 0 ? (
                 <div className="p-4 text-center text-[12.5px] text-gray-400">
                   Sin resultados para "{busquedaGlobal}"
                 </div>
