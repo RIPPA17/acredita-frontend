@@ -1,12 +1,15 @@
 import React from 'react';
-import { Copy, Send, X } from 'lucide-react';
+import { Copy, Send, Trash2, X } from 'lucide-react';
 import type { Contratista, Proyecto } from '../types';
 import { restoreSupabaseSession } from '../data/supabaseAuth';
 import { isValidRut } from '../utils/rut';
 import {
+  cancelContractorInvitation,
   contractorInvitationLink,
   createContractorInvitation,
+  getProjectInvitations,
   sendContractorInvitationEmail,
+  type ProjectInvitation,
 } from '../data/supabaseInvitations';
 
 type Props = {
@@ -15,9 +18,10 @@ type Props = {
   contractors: Contratista[];
   projects: Proyecto[];
   showToast: (msg: string, type?: 'success' | 'error' | 'warning') => void;
+  initialProjectKey?: string;
 };
 
-export default function ContractorInvitationModal({ open, onClose, contractors, projects, showToast }: Props) {
+export default function ContractorInvitationModal({ open, onClose, contractors, projects, showToast, initialProjectKey }: Props) {
   const [mode, setMode] = React.useState<'existing' | 'new'>('new');
   const [contractorKey, setContractorKey] = React.useState('');
   const [name, setName] = React.useState('');
@@ -28,6 +32,16 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
   const [submitting, setSubmitting] = React.useState(false);
   const [inviteLink, setInviteLink] = React.useState<string | null>(null);
   const [mailSent, setMailSent] = React.useState(false);
+  const [projectInvitations, setProjectInvitations] = React.useState<ProjectInvitation[]>([]);
+  const [loadingInvitations, setLoadingInvitations] = React.useState(false);
+  const [cancellingInvitationId, setCancellingInvitationId] = React.useState<string | null>(null);
+
+  const activeProjects = React.useMemo(() => projects.filter(project =>
+    ['activo', 'active'].includes(String(project.estado || '').trim().toLocaleLowerCase('es'))
+  ), [projects]);
+  const selectedProject = activeProjects.find(project => project.id === projectKey);
+  const activeContractorIds = new Set(selectedProject?.contratistasActivos ?? selectedProject?.contratistas ?? []);
+  const availableContractors = contractors.filter(contractor => !activeContractorIds.has(contractor.id));
 
   React.useEffect(() => {
     if (!open) return;
@@ -36,11 +50,40 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
     setName('');
     setRut('');
     setEmail('');
-    setProjectKey(projects[0]?.id || '');
+    setProjectKey(activeProjects.some(project => project.id === initialProjectKey) ? (initialProjectKey || '') : (activeProjects[0]?.id || ''));
     setMessage('');
     setInviteLink(null);
     setMailSent(false);
-  }, [open, projects]);
+  }, [open, activeProjects, initialProjectKey]);
+
+  const refreshInvitations = React.useCallback(async () => {
+    if (!open || !projectKey) {
+      setProjectInvitations([]);
+      return;
+    }
+    setLoadingInvitations(true);
+    try {
+      const session = await restoreSupabaseSession();
+      if (!session || (session.role !== 'mandante' && session.role !== 'admin')) {
+        setProjectInvitations([]);
+        return;
+      }
+      setProjectInvitations(await getProjectInvitations({ session, projectKey }));
+    } catch (error) {
+      console.error('No fue posible cargar las invitaciones del proyecto.', error);
+      setProjectInvitations([]);
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }, [open, projectKey]);
+
+  React.useEffect(() => {
+    void refreshInvitations();
+  }, [refreshInvitations]);
+
+  React.useEffect(() => {
+    if (contractorKey && activeContractorIds.has(contractorKey)) setContractorKey('');
+  }, [projectKey, contractorKey, activeContractorIds]);
 
   if (!open) return null;
 
@@ -81,9 +124,11 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
         await sendContractorInvitationEmail(invitation.invitation_id, invitation.token, session._supabase.accessToken);
         setMailSent(true);
         showToast(`Invitación enviada a ${email.trim().toLowerCase()}`);
+        await refreshInvitations();
       } catch {
         setMailSent(false);
         showToast('Invitación creada. El correo no pudo enviarse; puedes copiar el enlace.', 'warning');
+        await refreshInvitations();
       }
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible crear la invitación', 'error');
@@ -91,6 +136,29 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
       setSubmitting(false);
     }
   };
+
+  const cancelInvitation = async (invitation: ProjectInvitation) => {
+    if (cancellingInvitationId || invitation.status !== 'pending') return;
+    if (!window.confirm(`¿Cancelar la invitación enviada a ${invitation.invited_email || 'este correo'}?`)) return;
+    setCancellingInvitationId(invitation.id);
+    try {
+      const session = await restoreSupabaseSession();
+      if (!session || (session.role !== 'mandante' && session.role !== 'admin')) throw new Error('Tu sesión autorizada venció');
+      await cancelContractorInvitation(session, invitation.id);
+      await refreshInvitations();
+      showToast('Invitación cancelada.', 'warning');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible cancelar la invitación', 'error');
+    } finally {
+      setCancellingInvitationId(null);
+    }
+  };
+
+  const invitationStatusLabel = (status: ProjectInvitation['status']) =>
+    status === 'pending' ? 'Pendiente' :
+    status === 'accepted' ? 'Aceptada' :
+    status === 'rejected' ? 'Rechazada' :
+    status === 'expired' ? 'Vencida' : 'Cancelada';
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -114,7 +182,7 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
               <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Contratista</label>
               <select value={contractorKey} onChange={(e) => setContractorKey(e.target.value)} className="form-input w-full" required>
                 <option value="">Selecciona un contratista...</option>
-                {contractors.map((contractor) => <option key={contractor.id} value={contractor.id}>{contractor.nombre} ({contractor.rut})</option>)}
+                {availableContractors.map((contractor) => <option key={contractor.id} value={contractor.id}>{contractor.nombre} ({contractor.rut})</option>)}
               </select>
             </div>
           ) : (
@@ -140,13 +208,27 @@ export default function ContractorInvitationModal({ open, onClose, contractors, 
             <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Proyecto</label>
             <select value={projectKey} onChange={(e) => setProjectKey(e.target.value)} className="form-input w-full" required>
               <option value="">Selecciona un proyecto...</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.nombre}</option>)}
+              {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.nombre}</option>)}
             </select>
           </div>
 
           <div>
             <label className="block text-[13.2px] font-medium text-gray-700 mb-1.5">Mensaje opcional</label>
             <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="form-input w-full resize-none" rows={3} placeholder="Te invitamos a completar la acreditación para este proyecto." />
+          </div>
+
+          <div className="rounded-lg border border-cream3 bg-cream2/50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div><strong className="text-[12px] text-navy">Invitaciones de este proyecto</strong><p className="mt-0.5 text-[10.5px] text-gray-500">Puedes revisar el estado y cancelar las que aún no fueron aceptadas.</p></div>
+              {loadingInvitations && <span className="text-[10px] text-gray-400">Actualizando…</span>}
+            </div>
+            <div className="mt-2 flex max-h-44 flex-col gap-2 overflow-y-auto">
+              {projectInvitations.slice(0, 8).map(invitation => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-md border border-cream3 bg-white px-3 py-2">
+                <span className="min-w-0"><strong className="block truncate text-[11px] text-navy">{invitation.contractor_name || invitation.invited_email || 'Contratista'}</strong><small className="block truncate text-[9.5px] text-gray-500">{invitation.invited_email || 'Sin correo'} · {invitationStatusLabel(invitation.status)}</small></span>
+                {invitation.status === 'pending' && <button type="button" aria-label={`Cancelar invitación de ${invitation.invited_email || 'contratista'}`} disabled={Boolean(cancellingInvitationId)} onClick={() => void cancelInvitation(invitation)} className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 size={12} /> {cancellingInvitationId === invitation.id ? 'Cancelando…' : 'Cancelar'}</button>}
+              </div>)}
+              {!loadingInvitations && projectInvitations.length === 0 && <p className="py-2 text-[10.5px] text-gray-500">No hay invitaciones registradas para este proyecto.</p>}
+            </div>
           </div>
 
           {inviteLink && (
