@@ -1,7 +1,7 @@
 import {
   calcularAccesoPago,
+  calcularAccesoTrabajador,
   calcularEstadoAcreditacion,
-  calcularEstadoTrabajador,
   esTrabajadorAsignado,
   getRequisitos,
 } from '../../../data/businessStore';
@@ -116,10 +116,9 @@ export function buildProjectPresentations(
       state: executiveSummary?.state || 'En proceso',
       contractors,
       workers,
-      workersEnabled: workers.filter(({ worker }) => {
-        const state = calcularEstadoTrabajador(worker, project.id);
-        return state === 'aprobado' || state === 'por_vencer';
-      }).length,
+      workersEnabled: workers.filter(({ contractor, worker }) =>
+        calcularAccesoTrabajador(worker, project.id, contractor.id) === 'habilitado'
+      ).length,
       access: accessPayment.some(item => item.accesoEstado === 'bloqueado') ? 'Con bloqueos' : accessPayment.some(item => item.accesoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       payment: accessPayment.some(item => item.pagoEstado === 'bloqueado') ? 'Con retenciones' : accessPayment.some(item => item.pagoEstado === 'pendiente') ? 'Pendiente' : 'Habilitado',
       obligations,
