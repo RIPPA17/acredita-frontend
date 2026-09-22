@@ -1015,6 +1015,47 @@ test('05g Servicios impide códigos duplicados para el mismo contratista', async
   await expect(page.getByText('Ese contratista ya tiene un servicio o contrato con el mismo código en este proyecto.')).toBeVisible();
 });
 
+test('05h Mandante distingue acceso pendiente de acceso bloqueado en trabajadores', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'pending' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  await expect(page.getByText('Pendiente', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('Afecta: ingreso, trabajo, asignación')).toBeVisible();
+});
+
+test('05i Mandante ve motivo y corrección de un documento rechazado', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'rejected' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+  await page.getByRole('button', { name: /Certificado ODI/ }).click();
+
+  await expect(page.getByText('Documento rechazado', { exact: true })).toBeVisible();
+  await expect(page.getByText('Falta la firma del trabajador en la última página.')).toBeVisible();
+  await expect(page.getByText('Qué debe corregirse: Sube nuevamente el ODI firmado.')).toBeVisible();
+  await expect(page.getByText('Afecta: ingreso, trabajo, asignación')).toBeVisible();
+});
+
+test('05j Mandante ve renovación en revisión sin perder la versión vigente', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'renewal_review' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+  await page.getByRole('button', { name: /Certificado ODI/ }).click();
+
+  await expect(page.getByText('Hay una versión nueva en trámite')).toBeVisible();
+  await expect(page.getByText(/Versión 2 · En revisión por Acredita/)).toBeVisible();
+  await expect(page.getByText('La versión vigente anterior no se reemplaza hasta que la nueva sea aprobada.')).toBeVisible();
+});
+
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await openMandanteProject(page);
