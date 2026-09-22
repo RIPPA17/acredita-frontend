@@ -5,7 +5,7 @@ import {
   esPorVencerPorFecha,
   esTrabajadorAsignado,
   calcularEstadoAcreditacion,
-} from '../../data/localStorageDb';
+} from '../../data/businessStore';
 import { Contratista, Proyecto, Mandante, Documento, Requisito } from '../../types';
 import { buildDocumentoQueueKey } from './colaUtils';
 
