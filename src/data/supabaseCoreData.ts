@@ -30,6 +30,9 @@ type BackendProject = {
   responsible_name: string | null;
   responsible_email: string | null;
   responsible_phone: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
+  archive_reason: string | null;
 };
 
 type BackendContratista = {
@@ -226,7 +229,7 @@ function fallbackContractor(id: string): Contratista | undefined {
 async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
   const [mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
-    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone'),
+    selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone,archived_at,archived_by,archive_reason'),
     selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active,parent_accreditation_id'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
@@ -274,7 +277,7 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
     const projectKey = projectKeyByUuid.get(row.project_id);
     const contractorKey = contractorKeyByUuid.get(row.contratista_id);
     if (!projectKey || !contractorKey) return;
-    if (session.role === 'contratista' || row.is_active) {
+    {
       const visible = contractorsByProject.get(projectKey) || [];
       visible.push(contractorKey);
       contractorsByProject.set(projectKey, visible);
@@ -341,6 +344,9 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         responsableNombre: row.responsible_name || fallback?.responsableNombre,
         responsableEmail: row.responsible_email || fallback?.responsableEmail,
         responsableTelefono: row.responsible_phone || fallback?.responsableTelefono,
+        archivadoEn: row.archived_at || fallback?.archivadoEn,
+        archivadoPor: row.archived_by || fallback?.archivadoPor,
+        motivoArchivo: row.archive_reason || fallback?.motivoArchivo,
       };
     });
 
@@ -604,6 +610,8 @@ async function syncAccreditations(
   for (const project of scopedProjects) {
     const projectUuid = projectUuidByKey.get(project.id);
     if (!projectUuid) continue;
+    const projectActive = ['activo', 'active'].includes(String(project.estado || '').trim().toLocaleLowerCase('es'));
+    if (!projectActive) continue;
     for (const contractorKey of (project.contratistasActivos ?? project.contratistas)) {
       const contractorUuid = contractorUuidByKey.get(contractorKey);
       if (!contractorUuid) continue;
