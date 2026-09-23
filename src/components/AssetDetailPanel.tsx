@@ -30,6 +30,12 @@ const statusLabel: Record<string, string> = {
   pendiente: 'Pendiente', en_revision: 'En revisión', aprobado: 'Aprobado', rechazado: 'Rechazado', vencido: 'Vencido',
 };
 
+const operatorStatusLabel: Record<AssetOperatorAssignment['effectiveStatus'], string> = {
+  activo: 'Operativo',
+  suspendido: 'No habilitado',
+  finalizado: 'Finalizado',
+};
+
 export default function AssetDetailPanel({
   asset,
   projectKey,
@@ -203,11 +209,13 @@ export default function AssetDetailPanel({
     catch (error) { showToast(error instanceof Error ? error.message : 'No fue posible actualizar el operador.', 'error'); }
   };
 
+  const operationalOperators = operators.filter(item => item.operationallyEligible).length;
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[610] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-[980px] max-h-[calc(100vh-24px)] overflow-y-auto" onClick={event => event.stopPropagation()}>
         <header className="flex justify-between items-start p-5 border-b">
-          <div><h3 className="font-semibold text-navy text-lg">{readOnly ? 'Historial del activo' : 'Gestión operacional'} · {asset.identifier}</h3><p className="text-xs text-gray-500">{asset.name} · Estado registrado: {asset.status} · Acceso {readOnly ? 'histórico' : asset.accessAllowed ? 'habilitado' : 'no habilitado'}</p>{!asset.active && <p className="mt-1 text-xs text-gray-500">Retirado{asset.retiredAt ? ` el ${asset.retiredAt.slice(0, 10)}` : ''}{asset.retirementReason ? ` · ${asset.retirementReason}` : ''}</p>}</div>
+          <div><h3 className="font-semibold text-navy text-lg">{readOnly ? 'Historial del activo' : 'Gestión operacional'} · {asset.identifier}</h3><p className="text-xs text-gray-500">{asset.name} · Ingreso {readOnly ? 'histórico' : asset.accessAllowed ? 'habilitado' : 'no habilitado'} · Operación {readOnly ? 'histórica' : asset.accessAllowed && operationalOperators > 0 ? 'habilitada' : 'no habilitada'}</p>{asset.active && asset.accessAllowed && operationalOperators === 0 && <p className="mt-1 text-xs text-amber-700">El activo puede ingresar, pero no debe operar hasta tener un operador actualmente habilitado.</p>}{!asset.active && <p className="mt-1 text-xs text-gray-500">Retirado{asset.retiredAt ? ` el ${asset.retiredAt.slice(0, 10)}` : ''}{asset.retirementReason ? ` · ${asset.retirementReason}` : ''}</p>}</div>
           <div className="flex gap-2"><button type="button" onClick={() => void load()} aria-label="Actualizar"><RefreshCw /></button><button type="button" onClick={onClose} aria-label="Cerrar"><X /></button></div>
         </header>
 
@@ -255,10 +263,10 @@ export default function AssetDetailPanel({
           </section>
 
           <section className="border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3"><UserRound /><div><h4 className="font-semibold text-navy">Operadores asignados</h4><p className="text-sm text-gray-500">Solo trabajadores activos, acreditados y con acceso habilitado pueden operar el activo. La vigencia no debe superar su contrato laboral.</p></div></div>
-            {!readOnly && candidates.length === 0 && <p className="mb-3 text-sm text-gray-500">No hay trabajadores habilitados disponibles para asignar como operador.</p>}
-            {!readOnly && candidates.length > 0 && <form onSubmit={submitOperator} className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4"><select required value={operatorForm.workerAssignmentId} onChange={event => setOperatorForm({ ...operatorForm, workerAssignmentId: event.target.value })} className="form-input p-2 border rounded sm:col-span-2">{candidates.map(item => <option key={item.workerAssignmentId} value={item.workerAssignmentId}>{item.fullName} · {item.rut} · {item.accessStatus}</option>)}</select><input type="date" required value={operatorForm.validFrom} onChange={event => setOperatorForm({ ...operatorForm, validFrom: event.target.value })} className="form-input p-2 border rounded" /><input type="date" value={operatorForm.validUntil} onChange={event => setOperatorForm({ ...operatorForm, validUntil: event.target.value })} className="form-input p-2 border rounded" /><button className="btn btn-primary sm:col-span-4" disabled={saving}><Plus /> Asignar operador</button></form>}
-            <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Trabajador</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead><tbody>{operators.map(item => <tr key={item.id}><td><strong>{item.fullName}</strong><small>{item.rut}{item.jobTitle ? ` · ${item.jobTitle}` : ''}</small></td><td>{item.validFrom} — {item.validUntil || 'Sin término'}</td><td>{item.status}</td><td>{!readOnly && item.status === 'activo' && <button type="button" onClick={() => void changeOperatorStatus(item.id, 'finalizado')}>Finalizar</button>}</td></tr>)}</tbody></table></div>
+            <div className="flex items-center gap-2 mb-3"><UserRound /><div><h4 className="font-semibold text-navy">Operadores asignados</h4><p className="text-sm text-gray-500">Para operar no basta con poder ingresar: el trabajador también debe estar habilitado para trabajar y para esta asignación. La vigencia no puede superar su contrato laboral.</p></div></div>
+            {!readOnly && candidates.length === 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">No hay trabajadores actualmente habilitados para operar este activo.</p>}
+            {!readOnly && candidates.length > 0 && <form onSubmit={submitOperator} className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4"><select required value={operatorForm.workerAssignmentId} onChange={event => setOperatorForm({ ...operatorForm, workerAssignmentId: event.target.value })} className="form-input p-2 border rounded sm:col-span-2">{candidates.map(item => <option key={item.workerAssignmentId} value={item.workerAssignmentId}>{item.fullName} · {item.rut} · habilitado para operar</option>)}</select><input type="date" required value={operatorForm.validFrom} onChange={event => setOperatorForm({ ...operatorForm, validFrom: event.target.value })} className="form-input p-2 border rounded" /><input type="date" value={operatorForm.validUntil} onChange={event => setOperatorForm({ ...operatorForm, validUntil: event.target.value })} className="form-input p-2 border rounded" /><button className="btn btn-primary sm:col-span-4" disabled={saving}><Plus /> Asignar operador</button></form>}
+            <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Trabajador</th><th>Vigencia</th><th>Estado actual</th><th>Motivo</th><th></th></tr></thead><tbody>{operators.map(item => <tr key={item.id}><td><strong>{item.fullName}</strong><small>{item.rut}{item.jobTitle ? ` · ${item.jobTitle}` : ''}</small></td><td>{item.validFrom} — {item.validUntil || 'Sin término'}</td><td><b className={`mandante-proyectos-badge ${item.effectiveStatus === 'activo' ? 'green' : item.effectiveStatus === 'suspendido' ? 'yellow' : ''}`}>{operatorStatusLabel[item.effectiveStatus]}</b></td><td>{item.issueReason || 'Sin impedimentos operativos.'}</td><td>{!readOnly && item.status === 'activo' && <button type="button" onClick={() => void changeOperatorStatus(item.id, 'finalizado')}>Finalizar</button>}</td></tr>)}</tbody></table></div>
             {operators.length === 0 && <p className="text-sm text-gray-500 mt-2">Sin operadores asignados.</p>}
           </section>
         </div>}
