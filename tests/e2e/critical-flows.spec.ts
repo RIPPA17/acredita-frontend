@@ -49,6 +49,7 @@ type MockOptions = {
   paymentWorkflow?: boolean;
   contractorHierarchy?: boolean;
   invitationFlow?: boolean;
+  historicalWorkerOnly?: boolean;
 };
 
 function appSession(role: Role) {
@@ -66,7 +67,7 @@ function appSession(role: Role) {
 function fixtures(role: Role, options: MockOptions) {
   const paymentStatus = options.paymentStatus || 'observado';
   const workerScenario = options.workerDocumentScenario;
-  const workerComplete = Boolean(options.historicalProject || workerScenario || options.bulkReentry);
+  const workerComplete = Boolean(options.historicalProject || workerScenario || options.bulkReentry || options.historicalWorkerOnly);
   const workerHasDocument = Boolean(workerScenario && workerScenario !== 'pending');
   const workerVersions = workerScenario === 'review' ? [
     { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi.pdf', metadata: { frontend_document_id: 'doc_worker_odi' } },
@@ -131,21 +132,21 @@ function fixtures(role: Role, options: MockOptions) {
       contract_work_or_task: null,
       special_labor_regime: null,
       special_labor_regime_detail: null,
-      is_active: true,
+      is_active: !options.historicalWorkerOnly,
     }],
     worker_assignments: options.emptyProject ? [] : [
       {
         id: ASSIGNMENT,
         accreditation_id: ACCREDITATION,
         worker_id: WORKER,
-        is_active: !options.bulkReentry,
+        is_active: !options.bulkReentry && !options.historicalWorkerOnly,
         service_id: SERVICE,
         job_title: 'Operador',
         categories: ['general'],
-        assignment_status: options.bulkReentry ? 'baja' : 'activa',
-        access_status: options.bulkReentry ? 'bloqueado' : 'pendiente',
-        assigned_at: options.bulkReentry ? '2026-07-01' : '2026-09-01',
-        unassigned_at: options.bulkReentry ? '2026-08-31' : null,
+        assignment_status: options.bulkReentry || options.historicalWorkerOnly ? 'baja' : 'activa',
+        access_status: options.bulkReentry || options.historicalWorkerOnly ? 'bloqueado' : 'pendiente',
+        assigned_at: options.bulkReentry || options.historicalWorkerOnly ? '2026-07-01' : '2026-09-01',
+        unassigned_at: options.bulkReentry || options.historicalWorkerOnly ? '2026-08-31' : null,
         contract_type_snapshot: workerComplete ? 'indefinido' : null,
         contract_start_date_snapshot: workerComplete ? '2026-07-01' : null,
         contract_end_date_snapshot: null,
@@ -252,7 +253,7 @@ function fixtures(role: Role, options: MockOptions) {
         payment_pending_count: 0,
       }] : []),
     ],
-    worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{
+    worker_accreditation_statuses: options.emptyProject || options.bulkReentry || options.historicalWorkerOnly ? [] : [{
       worker_assignment_id: ASSIGNMENT,
       worker_id: WORKER,
       worker_rut: options.bulkReentry ? '12.345.678-5' : '18.123.456-7',
