@@ -1507,7 +1507,7 @@ test('10da Activo separa ingreso de operación y reconoce operador realmente hab
   await expect(page.getByText(/Ingreso habilitado · Operación habilitada/)).toBeVisible();
   await expect(page.getByText('Operativo', { exact: true })).toBeVisible();
   await expect(page.getByText('Sin impedimentos operativos.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('option', { name: /Trabajador Piloto.*habilitado para operar/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Trabajador Piloto.*habilitado para operar/ })).toHaveCount(1);
 });
 
 test('10db Activo puede ingresar pero no operar si el operador pierde permiso de trabajo', async ({ page }) => {
