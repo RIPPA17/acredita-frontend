@@ -25,6 +25,7 @@ export type StoredNotificationSeverity = 'critical' | 'action' | 'preventive' | 
 export interface StoredNotification {
   key: string;
   eventType: string;
+  audience?: string;
   category: StoredNotificationCategory;
   severity: StoredNotificationSeverity;
   status: StoredNotificationStatus;
@@ -60,6 +61,7 @@ type PreferenceRow = {
 type NotificationRow = {
   notification_key: string;
   event_type: string;
+  audience: string | null;
   category: StoredNotificationCategory;
   severity: StoredNotificationSeverity;
   status: StoredNotificationStatus;
@@ -174,7 +176,7 @@ export async function loadStoredNotifications(
   const session = await requireSession(sessionHint);
   assertOwnProfile(session, profileId);
   const url = new URL(`${SUPABASE_URL}/rest/v1/notifications`);
-  url.searchParams.set('select', 'notification_key,event_type,category,severity,status,title,body,action_label,action_kind,project_key,contractor_key,worker_rut,requirement_key,document_id,payment_case_id,support_ticket_id,occurred_at,resolved_at,occurrence_count,action_payload');
+  url.searchParams.set('select', 'notification_key,event_type,audience,category,severity,status,title,body,action_label,action_kind,project_key,contractor_key,worker_rut,requirement_key,document_id,payment_case_id,support_ticket_id,occurred_at,resolved_at,occurrence_count,action_payload');
   url.searchParams.set('recipient_profile_id', `eq.${profileId}`);
   url.searchParams.set('order', 'occurred_at.desc');
   url.searchParams.set('limit', '150');
@@ -184,6 +186,7 @@ export async function loadStoredNotifications(
   return rows.map(row => ({
     key: row.notification_key,
     eventType: row.event_type,
+    audience: row.audience || undefined,
     category: row.category,
     severity: row.severity,
     status: row.status,
