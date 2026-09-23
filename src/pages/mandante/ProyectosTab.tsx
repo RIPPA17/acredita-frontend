@@ -505,7 +505,11 @@ function ContractorsPanel({
 }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const contractorById = new Map(allContractors.map(item => [item.id, item]));
-  const historical = (selected.project.contratistasHistoricos || [])
+  const activeContractors = projectArchived ? [] : selected.contractors;
+  const historicalIds = projectArchived
+    ? [...new Set([...selected.contractors.map(item => item.id), ...(selected.project.contratistasHistoricos || [])])]
+    : (selected.project.contratistasHistoricos || []);
+  const historical = historicalIds
     .map(id => contractorById.get(id))
     .filter((item): item is Contratista => Boolean(item));
 
@@ -589,7 +593,7 @@ function ContractorsPanel({
       <div className="mandante-proyectos-table-wrap">
         <table>
           <thead><tr><th>Contratista</th><th>Relación en este proyecto</th><th>Acreditación</th><th>Trabajadores</th><th>Acceso</th><th>Pago</th><th>Acciones</th></tr></thead>
-          <tbody>{selected.contractors.map(contractor => {
+          <tbody>{activeContractors.map(contractor => {
             const accreditation = accreditationLabel(calcularEstadoAcreditacion(contractor, selected.project.id));
             const assigned = (contractor.trabajadores || []).filter(worker => esTrabajadorAsignado(worker, selected.project.id, projects));
             const workerAccess = assigned.map(worker => calcularAccesoTrabajador(worker, selected.project.id, contractor.id));
@@ -603,7 +607,7 @@ function ContractorsPanel({
             const currentParentId = parentForProject(contractor) || '';
             return <tr key={contractor.id}>
               <td><strong>{contractor.nombre}</strong><small>{contractor.rut}</small></td>
-              <td><select aria-label={`Relación de ${contractor.nombre}`} value={currentParentId} disabled={projectArchived || savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{selected.contractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td>
+              <td><select aria-label={`Relación de ${contractor.nombre}`} value={currentParentId} disabled={projectArchived || savingId === contractor.id} onChange={event => void updateParent(contractor, event.target.value)}><option value="">Principal</option>{activeContractors.filter(item => canBeParent(item, contractor.id)).map(item => <option value={item.id} key={item.id}>Subcontratista de {item.nombre}</option>)}</select></td>
               <td><b className={`mandante-proyectos-badge ${stateClass(accreditation)}`}>{accreditation}</b></td>
               <td>{enabled}/{assigned.length}</td>
               <td>{accessState}</td>
@@ -613,7 +617,7 @@ function ContractorsPanel({
           })}</tbody>
         </table>
       </div>
-      {selected.contractors.length === 0 && <div className="mandante-proyectos-empty">Todavía no hay contratistas activos en este proyecto.</div>}
+      {activeContractors.length === 0 && <div className="mandante-proyectos-empty">{projectArchived ? 'No hay relaciones activas: todas las participaciones quedaron en el historial.' : 'Todavía no hay contratistas activos en este proyecto.'}</div>}
     </article>
 
     {historical.length > 0 && <article className="mandante-proyectos-section-card mandante-proyectos-panel mandante-proyectos-retired">
