@@ -1057,6 +1057,73 @@ test('05j Mandante ve renovación en revisión sin perder la versión vigente', 
   await expect(page.getByText('La versión vigente anterior no se reemplaza hasta que la nueva sea aprobada.')).toBeVisible();
 });
 
+test('05k Mandante ve ficha laboral incompleta como causa de pendiente', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  await expect(page.getByRole('heading', { name: 'Control operativo' })).toBeVisible();
+  await expect(page.getByText(/Ficha laboral incompleta: tipo de contrato, fecha de inicio del contrato/).first()).toBeVisible();
+  await expect(page.getByText('Ficha incompleta', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Falta: tipo de contrato, fecha de inicio del contrato/)).toBeVisible();
+});
+
+test('05l Mandante distingue revisión interna de una pendiente del contratista', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'review' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  const access = page.locator('.mandante-worker-gate').filter({ hasText: 'Ingreso a faena' });
+  const work = page.locator('.mandante-worker-gate').filter({ hasText: 'Permiso para trabajar' });
+  const assignment = page.locator('.mandante-worker-gate').filter({ hasText: 'Asignación operativa' });
+  await expect(access.getByText('Pendiente', { exact: true })).toBeVisible();
+  await expect(work.getByText('Pendiente', { exact: true })).toBeVisible();
+  await expect(assignment.getByText('Pendiente', { exact: true })).toBeVisible();
+  await expect(access.getByText(/Certificado ODI.*en revisión por Acredita/)).toBeVisible();
+  await expect(access.getByText('Responsable actual: Acredita')).toBeVisible();
+});
+
+test('05m Mandante ve las tres compuertas bloqueadas y la causa exacta', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'rejected' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  for (const label of ['Ingreso a faena', 'Permiso para trabajar', 'Asignación operativa']) {
+    const gate = page.locator('.mandante-worker-gate').filter({ hasText: label });
+    await expect(gate.getByText('Bloqueado', { exact: true })).toBeVisible();
+    await expect(gate.getByText(/Certificado ODI.*rechazado/)).toBeVisible();
+    await expect(gate.getByText('Responsable actual: Contratista')).toBeVisible();
+  }
+});
+
+test('05n Mandante conserva trabajador retirado y su período histórico', async ({ page }) => {
+  await protectedPage(page, 'mandante', { historicalWorkerOnly: true });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+
+  await expect(page.getByText('1', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await page.getByLabel('Filtrar relación del trabajador').selectOption('history');
+  await expect(page.getByRole('button', { name: /Trabajador Piloto/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: /Trabajador Piloto/ }).first().click();
+
+  await expect(page.getByText('Retirado', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Historial de asignaciones')).toBeVisible();
+  await expect(page.getByText('01 jul 2026 → 31 ago 2026')).toBeVisible();
+  await expect(page.getByText('Indefinido', { exact: true })).toBeVisible();
+  await expect(page.getByText('SRV-01 · Servicio Piloto')).toBeVisible();
+});
+
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await openMandanteProject(page);
