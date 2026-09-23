@@ -36,6 +36,9 @@ export interface Proyecto {
   responsableNombre?: string;
   responsableEmail?: string;
   responsableTelefono?: string;
+  archivadoEn?: string;
+  archivadoPor?: string;
+  motivoArchivo?: string;
 }
 
 export type EstadoAsignacion = 'activa' | 'inactiva' | 'baja';
@@ -192,7 +195,7 @@ export interface CierreDocumental {
   proyectoId: string;
   periodoInicio: string;
   periodoFin: string;
-  estado: 'abierto' | 'en_revision' | 'cerrado' | 'reabierto';
+  estado: 'abierto' | 'en_revision' | 'cerrado' | 'reabierto' | 'cancelado';
   fechaCargaHasta?: string;
   fechaCierre?: string;
   snapshot?: Record<string, unknown>;
