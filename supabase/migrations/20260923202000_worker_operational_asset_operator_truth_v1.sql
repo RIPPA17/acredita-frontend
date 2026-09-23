@@ -202,7 +202,7 @@ gate_counts as (
   group by worker_assignment_id
 )
 select
-  was.worker_assignment_id,
+  was.assignment_id as worker_assignment_id,
   was.accreditation_id,
   was.project_id,
   was.contratista_id,
@@ -221,7 +221,7 @@ select
   coalesce(gc.assignment_blocked_count,0)::integer as assignment_blocked_count,
   coalesce(gc.assignment_pending_count,0)::integer as assignment_pending_count
 from public.worker_accreditation_statuses was
-left join gate_counts gc on gc.worker_assignment_id=was.worker_assignment_id;
+left join gate_counts gc on gc.worker_assignment_id=was.assignment_id;
 
 revoke all on public.worker_operational_permissions from anon;
 grant select on public.worker_operational_permissions to authenticated,service_role;
