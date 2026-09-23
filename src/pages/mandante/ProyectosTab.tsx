@@ -36,6 +36,7 @@ interface Props {
   setNewDocForm: (value: any) => void; setIsAddDocModalOpen: (value: boolean) => void;
   proyectoArchivado: boolean; setProyectoArchivado: (value: boolean) => void;
   selectedProjectId: string | null; setSelectedProjectId: (value: string | null) => void; onOpenContractor: (projectId: string, contractorId: string) => void;
+  operationFocus?: { mode: 'evaluacion' | 'pago' | 'ticket'; itemId?: string } | null;
   [key: string]: any;
 }
 type ProjectMetadata = Proyecto & Partial<{ direccion: string; ubicacion: string; comuna: string; ciudad: string; region: string; fechaInicio: string; inicio: string; fecha_inicio: string }>;
@@ -121,7 +122,7 @@ function DocumentationBlock({ summary }: { summary: ProjectPresentation }) {
   </div>;
 }
 
-export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor, setShowInvitarModal }: Props) {
+export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, misProyectos, mandanteId, allContratistas, proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes, showToast, setNewDocForm, setIsAddDocModalOpen, proyectoArchivado, setProyectoArchivado, selectedProjectId, setSelectedProjectId, onOpenContractor, setShowInvitarModal, operationFocus }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('Todos los estados');
   const [configuring, setConfiguring] = useState(false);
@@ -414,7 +415,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} retiredRequirements={retiredRequirements} projectArchived={selected.project.estado === 'Archivado'} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
     {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
-    {detailTab === 'operacion' && <OperationsCenter project={selected.project} contractors={selected.contractors} showToast={showToast} />}
+    {detailTab === 'operacion' && <OperationsCenter project={selected.project} contractors={selected.contractors} showToast={showToast} focus={operationFocus} />}
     {detailTab === 'acreditaciones' && <AccreditationsPanel selected={selected} requirements={requirements} onOpen={onOpenContractor} />}
   </section>;
 }

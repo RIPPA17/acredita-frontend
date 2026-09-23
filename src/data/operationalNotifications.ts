@@ -1,8 +1,16 @@
 import type { Contratista, Proyecto } from '../types';
-import { calcularEstadoAcreditacion, getAlertasVigencia } from './businessStore';
+import { calcularEstadoAcreditacion, getAlertasVigencia, getRequisitos } from './businessStore';
+import type { StoredNotification } from './supabaseNotifications';
 
 export type OperationalNotificationType = 'accion' | 'preventiva' | 'revision' | 'positiva';
-export type OperationalNotificationDestination = 'cola' | 'acreditacion' | 'proyecto';
+export type OperationalNotificationDestination =
+  | 'cola'
+  | 'acreditacion'
+  | 'proyecto'
+  | 'trabajador'
+  | 'documento'
+  | 'operacion'
+  | 'soporte';
 
 export interface OperationalNotification {
   id: string;
@@ -14,6 +22,11 @@ export interface OperationalNotification {
   destino: OperationalNotificationDestination;
   proyectoId?: string;
   contratistaId?: string;
+  workerRut?: string;
+  requirementId?: string;
+  documentId?: string;
+  operationMode?: 'evaluacion' | 'pago' | 'ticket';
+  operationItemId?: string;
   prioridad: number;
 }
 
@@ -73,24 +86,123 @@ function buildStatusNotifications(contratistas: Contratista[], proyectos: Proyec
 
 function buildExpiryNotifications(proyectos: Proyecto[]): OperationalNotification[] {
   const allowed = new Set(proyectos.map(item => item.id));
+  const requisitos = getRequisitos();
   return getAlertasVigencia()
     .filter(alerta => allowed.has(alerta.proyectoId))
-    .map(alerta => ({
-      id: `${alerta.bloquea ? 'vencido' : 'por-vencer'}:${alerta.id}:${alerta.vencimiento}`,
-      tipo: alerta.bloquea ? 'accion' as const : 'preventiva' as const,
-      titulo: alerta.trabajadorNombre
-        ? `${alerta.documentoNombre} de ${alerta.trabajadorNombre} ${alerta.bloquea ? 'está vencido' : `vence en ${alerta.diasRestantes} días`}`
-        : `${alerta.documentoNombre} de ${alerta.empresaNombre} ${alerta.bloquea ? 'está vencido' : `vence en ${alerta.diasRestantes} días`}`,
-      descripcion: alerta.bloquea
-        ? `${alerta.empresaNombre} tiene una obligación vencida en ${alerta.proyectoNombre}.`
-        : `Vigencia preventiva en ${alerta.proyectoNombre}; aún no bloquea la acreditación.`,
-      fecha: alerta.vencimiento,
-      cta: 'Ver proyecto',
-      destino: 'proyecto' as const,
-      proyectoId: alerta.proyectoId,
-      contratistaId: alerta.empresaId,
-      prioridad: alerta.bloquea ? 1 : 2,
-    }));
+    .map(alerta => {
+      const requirement = requisitos.find(item =>
+        item.proyectoId === alerta.proyectoId
+        && item.destino === (alerta.trabajadorRut ? 'trabajador' : 'empresa')
+        && item.nombre.trim().toLocaleLowerCase('es') === alerta.documentoNombre.trim().toLocaleLowerCase('es')
+      );
+      return {
+        id: `${alerta.bloquea ? 'vencido' : 'por-vencer'}:${alerta.id}:${alerta.vencimiento}`,
+        tipo: alerta.bloquea ? 'accion' as const : 'preventiva' as const,
+        titulo: alerta.trabajadorNombre
+          ? `${alerta.documentoNombre} de ${alerta.trabajadorNombre} ${alerta.bloquea ? 'está vencido' : `vence en ${alerta.diasRestantes} días`}`
+          : `${alerta.documentoNombre} de ${alerta.empresaNombre} ${alerta.bloquea ? 'está vencido' : `vence en ${alerta.diasRestantes} días`}`,
+        descripcion: alerta.bloquea
+          ? `${alerta.empresaNombre} tiene una obligación vencida en ${alerta.proyectoNombre}.`
+          : `Vigencia preventiva en ${alerta.proyectoNombre}; aún no bloquea la acreditación.`,
+        fecha: alerta.vencimiento,
+        cta: alerta.trabajadorRut ? 'Ver trabajador' : 'Ver documento',
+        destino: alerta.trabajadorRut ? 'trabajador' as const : 'documento' as const,
+        proyectoId: alerta.proyectoId,
+        contratistaId: alerta.empresaId,
+        workerRut: alerta.trabajadorRut,
+        requirementId: requirement?.id,
+        documentId: alerta.documentoId,
+        prioridad: alerta.bloquea ? 1 : 2,
+      };
+    });
+}
+
+function storedType(item: StoredNotification): OperationalNotificationType {
+  if (item.category === 'preventiva' || item.severity === 'preventive') return 'preventiva';
+  if (item.category === 'revision') return 'revision';
+  if (item.category === 'positiva') return 'positiva';
+  return 'accion';
+}
+
+function storedPriority(item: StoredNotification): number {
+  if (item.severity === 'critical') return 0;
+  if (item.severity === 'action') return 1;
+  if (item.severity === 'preventive') return 2;
+  if (item.category === 'revision') return 3;
+  return 4;
+}
+
+function storedDestination(item: StoredNotification): OperationalNotificationDestination {
+  if (item.paymentCaseId) return 'operacion';
+  if (item.supportTicketId) return 'soporte';
+  if (item.actionKind === 'trabajador') return 'trabajador';
+  if (item.actionKind === 'documentos') return 'documento';
+  if (item.actionKind === 'acreditacion') return 'acreditacion';
+  if (item.actionKind === 'operacion') return 'operacion';
+  if (item.actionKind === 'soporte') return 'soporte';
+  return 'proyecto';
+}
+
+function persistedMandanteNotifications(items: StoredNotification[]): OperationalNotification[] {
+  return items
+    .filter(item => item.status === 'active' && (!item.audience || item.audience === 'mandante'))
+    .map(item => {
+      const payload = item.actionPayload || {};
+      const evaluationId = typeof payload.evaluationId === 'string' ? payload.evaluationId : undefined;
+      const actionPlanId = typeof payload.actionPlanId === 'string' ? payload.actionPlanId : undefined;
+      const destination = storedDestination(item);
+      const operationMode = item.paymentCaseId
+        ? 'pago' as const
+        : item.supportTicketId
+          ? 'ticket' as const
+          : item.eventType.startsWith('action_plan_')
+            ? 'evaluacion' as const
+            : undefined;
+      return {
+        id: item.key,
+        tipo: storedType(item),
+        titulo: item.title,
+        descripcion: item.body,
+        fecha: item.occurredAt,
+        cta: item.actionLabel,
+        destino: destination,
+        proyectoId: item.projectKey,
+        contratistaId: item.contractorKey,
+        workerRut: item.workerRut,
+        requirementId: item.requirementKey,
+        documentId: item.documentId,
+        operationMode,
+        operationItemId: item.paymentCaseId || item.supportTicketId || evaluationId || actionPlanId,
+        prioridad: storedPriority(item),
+      };
+    });
+}
+
+function semanticKey(item: OperationalNotification): string {
+  if (item.operationMode && item.operationItemId) return `operation:${item.operationMode}:${item.operationItemId}`;
+  if (item.destino === 'documento' || item.destino === 'trabajador') {
+    return `document:${item.proyectoId || ''}:${item.contratistaId || ''}:${item.workerRut || ''}:${item.requirementId || item.documentId || item.titulo}`;
+  }
+  if (item.destino === 'acreditacion') {
+    const state = item.tipo === 'positiva' ? 'ok' : 'issue';
+    return `accreditation:${item.proyectoId || ''}:${item.contratistaId || ''}:${state}`;
+  }
+  return item.id;
+}
+
+export function mergeMandanteNotifications(
+  current: OperationalNotification[],
+  stored: StoredNotification[],
+): OperationalNotification[] {
+  const result: OperationalNotification[] = [];
+  const seen = new Set<string>();
+  for (const item of [...persistedMandanteNotifications(stored), ...current]) {
+    const key = semanticKey(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result.sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo, 'es'));
 }
 
 export function buildMandanteNotifications(
@@ -100,7 +212,7 @@ export function buildMandanteNotifications(
 ): OperationalNotification[] {
   const propios = proyectos.filter(item => item.mandanteId === mandanteId);
   return [...buildStatusNotifications(contratistas, propios), ...buildExpiryNotifications(propios)]
-    .sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo));
+    .sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo, 'es'));
 }
 
 export function buildAdminNotifications(
@@ -120,5 +232,5 @@ export function buildAdminNotifications(
       prioridad: 1,
     });
   }
-  return items.sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo));
+  return items.sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo, 'es'));
 }

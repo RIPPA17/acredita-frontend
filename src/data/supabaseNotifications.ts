@@ -25,6 +25,7 @@ export type StoredNotificationSeverity = 'critical' | 'action' | 'preventive' | 
 export interface StoredNotification {
   key: string;
   eventType: string;
+  audience?: string;
   category: StoredNotificationCategory;
   severity: StoredNotificationSeverity;
   status: StoredNotificationStatus;
@@ -33,13 +34,16 @@ export interface StoredNotification {
   actionLabel: string;
   actionKind: 'documentos' | 'trabajador' | 'acreditacion' | 'operacion' | 'soporte' | 'proyecto';
   projectKey?: string;
+  contractorKey?: string;
   workerRut?: string;
   requirementKey?: string;
+  documentId?: string;
   paymentCaseId?: string;
   supportTicketId?: string;
   occurredAt: string;
   resolvedAt?: string;
   occurrenceCount: number;
+  actionPayload?: Record<string, unknown>;
 }
 
 type PreferenceRow = {
@@ -57,6 +61,7 @@ type PreferenceRow = {
 type NotificationRow = {
   notification_key: string;
   event_type: string;
+  audience: string | null;
   category: StoredNotificationCategory;
   severity: StoredNotificationSeverity;
   status: StoredNotificationStatus;
@@ -65,13 +70,16 @@ type NotificationRow = {
   action_label: string;
   action_kind: StoredNotification['actionKind'];
   project_key: string | null;
+  contractor_key: string | null;
   worker_rut: string | null;
   requirement_key: string | null;
+  document_id: string | null;
   payment_case_id: string | null;
   support_ticket_id: string | null;
   occurred_at: string;
   resolved_at: string | null;
   occurrence_count: number;
+  action_payload: Record<string, unknown> | null;
 };
 
 type ReadRow = { notification_key: string };
@@ -168,7 +176,7 @@ export async function loadStoredNotifications(
   const session = await requireSession(sessionHint);
   assertOwnProfile(session, profileId);
   const url = new URL(`${SUPABASE_URL}/rest/v1/notifications`);
-  url.searchParams.set('select', 'notification_key,event_type,category,severity,status,title,body,action_label,action_kind,project_key,worker_rut,requirement_key,payment_case_id,support_ticket_id,occurred_at,resolved_at,occurrence_count');
+  url.searchParams.set('select', 'notification_key,event_type,audience,category,severity,status,title,body,action_label,action_kind,project_key,contractor_key,worker_rut,requirement_key,document_id,payment_case_id,support_ticket_id,occurred_at,resolved_at,occurrence_count,action_payload');
   url.searchParams.set('recipient_profile_id', `eq.${profileId}`);
   url.searchParams.set('order', 'occurred_at.desc');
   url.searchParams.set('limit', '150');
@@ -178,6 +186,7 @@ export async function loadStoredNotifications(
   return rows.map(row => ({
     key: row.notification_key,
     eventType: row.event_type,
+    audience: row.audience || undefined,
     category: row.category,
     severity: row.severity,
     status: row.status,
@@ -186,13 +195,16 @@ export async function loadStoredNotifications(
     actionLabel: row.action_label,
     actionKind: row.action_kind,
     projectKey: row.project_key || undefined,
+    contractorKey: row.contractor_key || undefined,
     workerRut: row.worker_rut || undefined,
     requirementKey: row.requirement_key || undefined,
+    documentId: row.document_id || undefined,
     paymentCaseId: row.payment_case_id || undefined,
     supportTicketId: row.support_ticket_id || undefined,
     occurredAt: row.occurred_at,
     resolvedAt: row.resolved_at || undefined,
     occurrenceCount: row.occurrence_count,
+    actionPayload: row.action_payload || undefined,
   }));
 }
 

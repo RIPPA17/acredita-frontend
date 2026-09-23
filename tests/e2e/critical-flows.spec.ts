@@ -402,6 +402,8 @@ function fixtures(role: Role, options: MockOptions) {
     notifications: options.notificationScenario ? [
       {
         notification_key: 'support_reply:e2e',
+        audience: role === 'mandante' ? 'mandante' : 'contratista',
+        contractor_key: 'contratista_piloto_a',
         event_type: 'support_reply',
         category: 'informativa',
         severity: 'info',
@@ -419,6 +421,8 @@ function fixtures(role: Role, options: MockOptions) {
       },
       {
         notification_key: 'requirement_changed:e2e',
+        audience: role === 'mandante' ? 'mandante' : 'contratista',
+        contractor_key: 'contratista_piloto_a',
         event_type: 'requirement_changed',
         category: 'accion',
         severity: 'action',
@@ -430,12 +434,15 @@ function fixtures(role: Role, options: MockOptions) {
         project_key: 'proyecto_piloto',
         worker_rut: null,
         requirement_key: 'req_f30',
+        action_payload: { projectKey: 'proyecto_piloto', contractorKey: 'contratista_piloto_a', requirementKey: 'req_f30' },
         occurred_at: '2026-09-20T16:00:00Z',
         resolved_at: null,
         occurrence_count: 1,
       },
       ...(options.paymentWorkflow ? [{
         notification_key: `payment_blocked:${PAYMENT}`,
+        audience: role === 'mandante' ? 'mandante' : 'contratista',
+        contractor_key: 'contratista_piloto_a',
         event_type: 'payment_blocked',
         category: 'accion',
         severity: 'critical',
@@ -448,12 +455,15 @@ function fixtures(role: Role, options: MockOptions) {
         worker_rut: null,
         requirement_key: null,
         payment_case_id: PAYMENT,
+        action_payload: { projectKey: 'proyecto_piloto', contractorKey: 'contratista_piloto_a', paymentCaseId: PAYMENT },
         occurred_at: '2026-09-20T17:30:00Z',
         resolved_at: null,
         occurrence_count: 1,
       }] : []),
       ...(options.evaluationWorkflow ? [{
         notification_key: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
+        audience: role === 'mandante' ? 'mandante' : 'contratista',
+        contractor_key: 'contratista_piloto_a',
         event_type: `action_plan_submitted:${ACTION_PLAN_REVIEW}`,
         category: 'revision',
         severity: 'info',
@@ -465,12 +475,15 @@ function fixtures(role: Role, options: MockOptions) {
         project_key: 'proyecto_piloto',
         worker_rut: null,
         requirement_key: null,
+        action_payload: { projectKey: 'proyecto_piloto', contractorKey: 'contratista_piloto_a', actionPlanId: ACTION_PLAN_REVIEW, evaluationId: EVALUATION_REVIEW },
         occurred_at: '2026-09-20T17:00:00Z',
         resolved_at: null,
         occurrence_count: 1,
       }] : []),
       {
         notification_key: 'payment_blocked:e2e-old',
+        audience: role === 'mandante' ? 'mandante' : 'contratista',
+        contractor_key: 'contratista_piloto_a',
         event_type: 'payment_blocked',
         category: 'accion',
         severity: 'critical',
@@ -1539,6 +1552,57 @@ test('10zd Mandante no puede liberar pago mientras el período documental siga a
   await expect(page.getByText('Pago aún no habilitado.', { exact: true })).toBeVisible();
   await expect(page.getByText(/El período documental debe cerrarse antes de liberar el pago/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Registrar decisión' })).toBeDisabled();
+});
+
+test('10ze Mandante abre una alerta de pago retenido en el estado de pago exacto', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', { notificationScenario: true, paymentWorkflow: true, paymentStatus: 'retenido' });
+  await page.goto('/mandante');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones operativas');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Pago retenido agosto' });
+  await expect(item).toBeVisible();
+  await item.getByRole('button', { name: 'Ver pago' }).click();
+
+  await expect(page.getByText('Operación avanzada', { exact: true })).toBeVisible();
+  await expect(page.getByText('Aprobaciones y cumplimiento del pago', { exact: true })).toBeVisible();
+  await expect(page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' })).toBeVisible();
+  await expect.poll(() => ctx.mutations.some(entry =>
+    entry.method === 'POST'
+    && entry.path === '/rest/v1/notification_reads'
+    && Array.isArray(entry.body)
+    && entry.body.some((row: any) => row.notification_key === `payment_blocked:${PAYMENT}`)
+  )).toBe(true);
+});
+
+test('10zf Mandante abre una acción enviada a revisión en la evaluación exacta', async ({ page }) => {
+  await protectedPage(page, 'mandante', { notificationScenario: true, evaluationWorkflow: true });
+  await page.goto('/mandante');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones operativas');
+  const item = panel.locator('.notif2-item').filter({ hasText: 'Plan de acción enviado a revisión' });
+  await expect(item).toBeVisible();
+  await item.getByRole('button', { name: 'Ver plan' }).click();
+
+  await expect(page.getByText('Operación avanzada', { exact: true })).toBeVisible();
+  await expect(page.getByText('Planes de acción', { exact: true })).toBeVisible();
+  await expect(page.getByText('Cerrar hallazgo de seguridad', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Aprobar cierre' })).toBeVisible();
+});
+
+test('10zg Mandante abre un documento próximo a vencer en el requisito exacto', async ({ page }) => {
+  await protectedPage(page, 'mandante', { renewalScenario: true });
+  await page.goto('/mandante');
+
+  await page.getByRole('button', { name: 'Abrir notificaciones' }).click();
+  const panel = page.getByLabel('Notificaciones operativas');
+  const item = panel.locator('.notif2-item').filter({ hasText: /F30 \/ F31 SII de Contratista Piloto A vence en/ });
+  await expect(item).toBeVisible();
+  await item.getByRole('button', { name: 'Ver documento' }).click();
+
+  await expect(page.getByRole('heading', { name: 'F30 / F31 SII' })).toBeVisible();
+  await expect(page.getByText('Contratista Piloto A · Proyecto Piloto QA', { exact: true })).toBeVisible();
 });
 
 test('10e Matriz retira requisitos sin borrarlos', async ({ page }) => {
