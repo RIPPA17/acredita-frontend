@@ -1,0 +1,1 @@
+create index if not exists projects_archived_by_idx on public.projects(archived_by) where archived_by is not null;
