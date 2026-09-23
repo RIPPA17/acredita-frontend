@@ -1079,12 +1079,17 @@ test('05l Mandante distingue revisión interna de una pendiente del contratista'
   await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
   await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
 
-  const access = page.locator('.mandante-worker-gate').filter({ hasText: 'Ingreso a faena' });
-  const work = page.locator('.mandante-worker-gate').filter({ hasText: 'Permiso para trabajar' });
-  const assignment = page.locator('.mandante-worker-gate').filter({ hasText: 'Asignación operativa' });
-  await expect(access.getByText('Pendiente', { exact: true })).toBeVisible();
-  await expect(work.getByText('Pendiente', { exact: true })).toBeVisible();
-  await expect(assignment.getByText('Pendiente', { exact: true })).toBeVisible();
+  const gates = page.locator('.mandante-worker-gate');
+  await expect(gates).toHaveCount(3);
+  const access = gates.nth(0);
+  const work = gates.nth(1);
+  const assignment = gates.nth(2);
+  await expect(access.getByText('Ingreso a faena', { exact: true })).toBeVisible();
+  await expect(work.getByText('Permiso para trabajar', { exact: true })).toBeVisible();
+  await expect(assignment.getByText('Asignación operativa', { exact: true })).toBeVisible();
+  await expect(access.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
+  await expect(work.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
+  await expect(assignment.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
   await expect(access.getByText(/Certificado ODI.*en revisión por Acredita/)).toBeVisible();
   await expect(access.getByText('Responsable actual: Acredita')).toBeVisible();
 });
@@ -1097,9 +1102,11 @@ test('05m Mandante ve las tres compuertas bloqueadas y la causa exacta', async (
   await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
   await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
 
-  for (const label of ['Ingreso a faena', 'Permiso para trabajar', 'Asignación operativa']) {
-    const gate = page.locator('.mandante-worker-gate').filter({ hasText: label });
-    await expect(gate.getByText('Bloqueado', { exact: true })).toBeVisible();
+  const gates = page.locator('.mandante-worker-gate');
+  await expect(gates).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) {
+    const gate = gates.nth(index);
+    await expect(gate.locator('.mandante-contratistas-state')).toHaveText('Bloqueado');
     await expect(gate.getByText(/Certificado ODI.*rechazado/)).toBeVisible();
     await expect(gate.getByText('Responsable actual: Contratista')).toBeVisible();
   }
