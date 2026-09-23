@@ -1112,7 +1112,8 @@ test('05n Mandante conserva trabajador retirado y su período histórico', async
   await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
   await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
 
-  await expect(page.getByText('1', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  const historySummary = page.locator('.mandante-worker-summary > div').filter({ hasText: 'períodos históricos' });
+  await expect(historySummary.getByText('1', { exact: true })).toBeVisible();
   await page.getByLabel('Filtrar relación del trabajador').selectOption('history');
   await expect(page.getByRole('button', { name: /Trabajador Piloto/ }).first()).toBeVisible();
   await page.getByRole('button', { name: /Trabajador Piloto/ }).first().click();
