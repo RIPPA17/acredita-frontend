@@ -31,7 +31,7 @@ import ListPagination from '../../components/ListPagination';
 
 type ContractorTab = 'resumen' | 'acreditaciones' | 'trabajadores' | 'documentos';
 type AttentionFilter = 'Todos' | 'Con problemas' | 'Al día';
-type Focus = { projectId: string; workerRut?: string } | null;
+type Focus = { projectId: string; workerRut?: string; requirementId?: string; documentId?: string } | null;
 type WorkerContext = { projectId: string; workerRut: string; assignmentId?: string };
 type DocumentContext = { projectId: string; documentId?: string; workerRut?: string; requirementId?: string };
 
@@ -200,7 +200,15 @@ export default function ContratistasTab({
 
   useEffect(() => {
     if (!focus) return;
-    if (focus.workerRut) {
+    if (focus.requirementId || focus.documentId) {
+      setActiveTab('documentos');
+      setSelectedDocumentContext({
+        projectId: focus.projectId,
+        workerRut: focus.workerRut,
+        requirementId: focus.requirementId,
+        documentId: focus.documentId,
+      });
+    } else if (focus.workerRut) {
       setActiveTab('trabajadores');
       setSelectedWorkerContext({ projectId: focus.projectId, workerRut: focus.workerRut });
     } else {
@@ -696,12 +704,20 @@ function DocumentsV5({
       ? (contractor.trabajadores || []).find(item => item.rut === context.workerRut)
       : undefined;
     const documents = worker ? worker.documentos : contractor.documentos;
-    const document = (documents || []).find(item => item.id === context.documentId);
     const requirement = requirements.find(item => item.id === context.requirementId)
-      || (project && document
-        ? requirements.find(item =>
-            item.proyectoId === project.id &&
-            normalizarNombreDocumento(item.nombre) === normalizarNombreDocumento(document.nombre)
+      || (project && context.documentId
+        ? requirements.find(item => {
+            const candidate = (documents || []).find(documentItem => documentItem.id === context.documentId);
+            return candidate
+              && item.proyectoId === project.id
+              && normalizarNombreDocumento(item.nombre) === normalizarNombreDocumento(candidate.nombre);
+          })
+        : undefined);
+    const document = (documents || []).find(item => item.id === context.documentId)
+      || (project && requirement
+        ? (documents || []).find(item =>
+            item.proyectoId === project.id
+            && normalizarNombreDocumento(item.nombre) === normalizarNombreDocumento(requirement.nombre)
           )
         : undefined);
     const state = document ? effectiveState(document, requirement) : 'Pendiente';
