@@ -24,6 +24,7 @@ import IntegrationsPanel from './IntegrationsPanel';
 import { proyectoOperativoParaContratista } from '../data/operationalCore';
 
 type Mode = 'evaluacion' | 'pago' | 'ticket' | 'integracion';
+export type OperationsCenterFocus = { mode: Exclude<Mode, 'integracion'>; itemId?: string };
 
 const evaluationLabel: Record<EvaluationRecord['status'], string> = {
   borrador: 'Borrador',
@@ -69,10 +70,12 @@ export default function OperationsCenter({
   project,
   contractors,
   showToast,
+  focus,
 }: {
   project: Proyecto;
   contractors: Contratista[];
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+  focus?: OperationsCenterFocus | null;
 }) {
   const [data, setData] = useState<{ evaluations: EvaluationRecord[]; payments: PaymentRecord[]; periods: CompliancePeriodRecord[]; tickets: TicketRecord[] }>({ evaluations: [], payments: [], periods: [], tickets: [] });
   const [loading, setLoading] = useState(true);
@@ -109,6 +112,22 @@ export default function OperationsCenter({
       setContractor(operationalContractors[0]?.id || '');
     }
   }, [operationalContractors, contractor]);
+  useEffect(() => {
+    if (!focus) return;
+    setMode(focus.mode);
+    if (!focus.itemId) {
+      setExpanded(undefined);
+      return;
+    }
+    const exists = focus.mode === 'pago'
+      ? data.payments.some(item => item.id === focus.itemId)
+      : focus.mode === 'ticket'
+        ? data.tickets.some(item => item.id === focus.itemId)
+        : data.evaluations.some(item => item.id === focus.itemId);
+    if (!exists) return;
+    const prefix = focus.mode === 'pago' ? 'pay' : focus.mode === 'ticket' ? 'ticket' : 'eval';
+    setExpanded(`${prefix}:${focus.itemId}`);
+  }, [focus?.mode, focus?.itemId, data.evaluations, data.payments, data.tickets]);
 
   const today = new Date().toISOString().slice(0,10);
   const selectablePeriods = data.periods.filter(period => period.period_start <= today);
