@@ -50,6 +50,9 @@ type MockOptions = {
   contractorHierarchy?: boolean;
   invitationFlow?: boolean;
   historicalWorkerOnly?: boolean;
+  assetOperatorEligible?: boolean;
+  assetOperatorSuspended?: boolean;
+  paymentOpenPeriod?: boolean;
 };
 
 function appSession(role: Role) {
@@ -218,8 +221,8 @@ function fixtures(role: Role, options: MockOptions) {
       period_end: '2026-08-31',
       upload_deadline: '2026-09-06',
       review_deadline: '2026-09-11',
-      status: 'cerrado',
-      closed_at: '2026-09-12T10:00:00Z',
+      status: options.paymentOpenPeriod ? 'abierto' : 'cerrado',
+      closed_at: options.paymentOpenPeriod ? null : '2026-09-12T10:00:00Z',
       reopened_at: null,
       reopen_reason: null,
     }] : [],
@@ -512,6 +515,7 @@ function fixtures(role: Role, options: MockOptions) {
         approved_documents: 2,
         blocking_documents: 0,
         next_expiry: '2026-10-20',
+        active_operators: options.assetOperatorEligible ? 1 : 0,
       },
       {
         id: 'aa000000-0000-4000-8000-000000000002',
@@ -539,6 +543,7 @@ function fixtures(role: Role, options: MockOptions) {
         approved_documents: 2,
         blocking_documents: 0,
         next_expiry: null,
+        active_operators: 0,
       },
     ] : [],
     asset_requirement_templates: options.assetLifecycle ? [
@@ -573,8 +578,33 @@ function fixtures(role: Role, options: MockOptions) {
     asset_documents: [],
     asset_inspections: [],
     asset_maintenance: [],
-    asset_operator_candidates: [],
+    asset_operator_candidates: options.assetLifecycle && options.assetOperatorEligible ? [{
+      worker_assignment_id: ASSIGNMENT,
+      accreditation_id: ACCREDITATION,
+      project_key: 'proyecto_piloto',
+      contractor_key: 'contratista_piloto_a',
+      worker_id: WORKER,
+      full_name: 'Trabajador Piloto',
+      rut: '18.123.456-7',
+      job_title: 'Operador',
+      access_status: 'habilitado',
+    }] : [],
     asset_operator_assignments: [],
+    asset_operator_assignment_details: options.assetLifecycle && (options.assetOperatorEligible || options.assetOperatorSuspended) ? [{
+      id: 'ac000000-0000-4000-8000-000000000001',
+      asset_id: 'aa000000-0000-4000-8000-000000000001',
+      worker_assignment_id: ASSIGNMENT,
+      full_name: 'Trabajador Piloto',
+      rut: '18.123.456-7',
+      job_title: 'Operador',
+      valid_from: '2026-09-01',
+      valid_until: null,
+      status: 'activo',
+      created_at: '2026-09-01T12:00:00Z',
+      effective_status: options.assetOperatorEligible ? 'activo' : 'suspendido',
+      operationally_eligible: Boolean(options.assetOperatorEligible),
+      issue_reason: options.assetOperatorEligible ? null : 'El trabajador no está habilitado para trabajar.',
+    }] : [],
     review_activity: [],
   } as Record<string, unknown[]>;
 }
@@ -662,7 +692,7 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(options.paymentWorkflow ? {
+          body: JSON.stringify(options.paymentWorkflow && !options.paymentOpenPeriod ? {
             eligible: true,
             periodStatus: 'cerrado',
             compliancePercent: 100,
@@ -1462,6 +1492,53 @@ test('10d Activos permite retiro formal y conserva activos históricos', async (
     && item.body?.is_active === false
     && item.body?.retirement_reason === 'Fin de contrato del activo'
   )).toBe(true);
+});
+
+test('10da Activo separa ingreso de operación y reconoce operador realmente habilitado', async ({ page }) => {
+  await protectedPage(page, 'mandante', { assetLifecycle: true, assetOperatorEligible: true, workerDocumentScenario: 'renewal_review' });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
+  const activeRow = page.locator('tr').filter({ hasText: 'Camión activo' });
+  await expect(activeRow.getByText('Permitido', { exact: true })).toBeVisible();
+  await expect(activeRow.getByText('1 operador habilitado', { exact: true })).toBeVisible();
+
+  await activeRow.getByRole('button', { name: 'Gestionar' }).click();
+  await expect(page.getByText(/Ingreso habilitado · Operación habilitada/)).toBeVisible();
+  await expect(page.getByText('Operativo', { exact: true })).toBeVisible();
+  await expect(page.getByText('Sin impedimentos operativos.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Trabajador Piloto.*habilitado para operar/ })).toHaveCount(1);
+});
+
+test('10db Activo puede ingresar pero no operar si el operador pierde permiso de trabajo', async ({ page }) => {
+  await protectedPage(page, 'mandante', { assetLifecycle: true, assetOperatorSuspended: true });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Activos', exact: true }).click();
+  const activeRow = page.locator('tr').filter({ hasText: 'Camión activo' });
+  await expect(activeRow.getByText('Permitido', { exact: true })).toBeVisible();
+  await expect(activeRow.getByText('Sin operador habilitado', { exact: true })).toBeVisible();
+
+  await activeRow.getByRole('button', { name: 'Gestionar' }).click();
+  await expect(page.getByText(/Ingreso habilitado · Operación no habilitada/)).toBeVisible();
+  await expect(page.getByText('El activo puede ingresar, pero no debe operar hasta tener un operador actualmente habilitado.')).toBeVisible();
+  await expect(page.getByText('No habilitado', { exact: true })).toBeVisible();
+  await expect(page.getByText('El trabajador no está habilitado para trabajar.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No hay trabajadores actualmente habilitados para operar este activo.')).toBeVisible();
+});
+
+test('10zd Mandante no puede liberar pago mientras el período documental siga abierto', async ({ page }) => {
+  await protectedPage(page, 'mandante', { paymentWorkflow: true, paymentOpenPeriod: true, paymentStatus: 'observado' });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: 'Operacion', exact: true }).click();
+  await page.getByRole('button', { name: /Estados de pago/ }).click();
+
+  const row = page.locator('tr').filter({ hasText: '2026-08-01 — 2026-08-31' });
+  await row.getByRole('button', { name: 'Detalle e historial' }).click();
+  await expect(page.getByText('Pago aún no habilitado.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/El período documental debe cerrarse antes de liberar el pago/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Registrar decisión' })).toBeDisabled();
 });
 
 test('10e Matriz retira requisitos sin borrarlos', async ({ page }) => {

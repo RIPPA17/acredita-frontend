@@ -30,6 +30,7 @@ export interface OperationalAsset {
   approvedDocuments: number;
   blockingDocuments: number;
   nextExpiry?: string;
+  activeOperators: number;
 }
 
 export interface AssetDocument {
@@ -120,6 +121,9 @@ export interface AssetOperatorAssignment {
   validFrom: string;
   validUntil?: string;
   status: 'activo' | 'suspendido' | 'finalizado';
+  effectiveStatus: 'activo' | 'suspendido' | 'finalizado';
+  operationallyEligible: boolean;
+  issueReason?: string;
 }
 
 export interface LibraryDocument {
@@ -173,6 +177,7 @@ type RegistryRow = {
   approved_documents: number;
   blocking_documents: number;
   next_expiry: string | null;
+  active_operators: number;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -233,6 +238,7 @@ const mapRow = (row: RegistryRow): OperationalAsset => ({
   approvedDocuments: row.approved_documents || 0,
   blockingDocuments: row.blocking_documents || 0,
   nextExpiry: row.next_expiry || undefined,
+  activeOperators: row.active_operators || 0,
 });
 
 export async function listAssets(
@@ -635,27 +641,33 @@ export async function listOperatorCandidates(projectKey: string, contractorKey: 
 }
 
 export async function listAssetOperators(assetId: string): Promise<AssetOperatorAssignment[]> {
-  const [rows, candidates] = await Promise.all([
-    request<Array<{
-      id: string; worker_assignment_id: string; valid_from: string; valid_until: string | null;
-      status: AssetOperatorAssignment['status'];
-    }>>(`asset_operator_assignments?select=id,worker_assignment_id,valid_from,valid_until,status&asset_id=eq.${assetId}&order=created_at.desc`),
-    request<Array<{ worker_assignment_id: string; full_name: string; rut: string; job_title: string | null }>>('asset_operator_candidates?select=worker_assignment_id,full_name,rut,job_title'),
-  ]);
-  const byAssignment = new Map(candidates.map(item => [item.worker_assignment_id, item]));
-  return rows.map(row => {
-    const person = byAssignment.get(row.worker_assignment_id);
-    return {
-      id: row.id,
-      workerAssignmentId: row.worker_assignment_id,
-      fullName: person?.full_name || 'Trabajador no disponible',
-      rut: person?.rut || '—',
-      jobTitle: person?.job_title || undefined,
-      validFrom: row.valid_from,
-      validUntil: row.valid_until || undefined,
-      status: row.status,
-    };
-  });
+  const rows = await request<Array<{
+    id: string;
+    worker_assignment_id: string;
+    full_name: string;
+    rut: string;
+    job_title: string | null;
+    valid_from: string;
+    valid_until: string | null;
+    status: AssetOperatorAssignment['status'];
+    effective_status: AssetOperatorAssignment['effectiveStatus'];
+    operationally_eligible: boolean;
+    issue_reason: string | null;
+  }>>(`asset_operator_assignment_details?select=*&asset_id=eq.${assetId}&order=created_at.desc`);
+
+  return rows.map(row => ({
+    id: row.id,
+    workerAssignmentId: row.worker_assignment_id,
+    fullName: row.full_name,
+    rut: row.rut,
+    jobTitle: row.job_title || undefined,
+    validFrom: row.valid_from,
+    validUntil: row.valid_until || undefined,
+    status: row.status,
+    effectiveStatus: row.effective_status,
+    operationallyEligible: row.operationally_eligible,
+    issueReason: row.issue_reason || undefined,
+  }));
 }
 
 export async function assignAssetOperator(
