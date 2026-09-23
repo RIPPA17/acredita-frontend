@@ -145,7 +145,7 @@ function storedDestination(item: StoredNotification): OperationalNotificationDes
 
 function persistedMandanteNotifications(items: StoredNotification[]): OperationalNotification[] {
   return items
-    .filter(item => item.status === 'active')
+    .filter(item => item.status === 'active' && (!item.audience || item.audience === 'mandante'))
     .map(item => {
       const payload = item.actionPayload || {};
       const evaluationId = typeof payload.evaluationId === 'string' ? payload.evaluationId : undefined;
