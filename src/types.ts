@@ -75,6 +75,7 @@ export type RegimenEspecialLaboral =
 
 export interface Trabajador {
   id?: string;
+  activo?: boolean;
   nombre: string;
   rut: string;
   estado: 'aprobado' | 'por_vencer' | 'rechazado' | 'pendiente';
