@@ -21,8 +21,8 @@ import { useDataSync } from '../components/DataSyncContext';
 import { usePortalTab } from '../hooks/usePortalTab';
 import { useSidebarPreference } from '../hooks/useSidebarPreference';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
-import { buildMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
-import { loadReadNotificationKeys, markNotificationKeysRead } from '../data/supabaseNotifications';
+import { buildMandanteNotifications, mergeMandanteNotifications, type OperationalNotification } from '../data/operationalNotifications';
+import { loadReadNotificationKeys, loadStoredNotifications, markNotificationKeysRead, type StoredNotification } from '../data/supabaseNotifications';
 import { confirmBusinessPersistence } from '../data/supabasePersistence';
 import { getServiciosProyecto } from '../data/operationalCore';
 import { buildMandanteContractorsData } from './mandante/contractorsData';
@@ -56,13 +56,15 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
   const [configHasUnsavedChanges, setConfigHasUnsavedChanges] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [notificacionesLeidas, setNotificacionesLeidas] = useState<Set<string>>(new Set());
+  const [notificacionesPersistidas, setNotificacionesPersistidas] = useState<StoredNotification[]>([]);
   const [activeProjectTab, setActiveProjectTab] = useState('resumen');
   const [editingContractorId, setEditingContractorId] = useState<string | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'warning'} | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [vistaContratistas, setVistaContratistas] = useState<'proyectos' | string>('proyectos');
   const [selectedContratista, setSelectedContratista] = useState<string | null>(null);
-  const [contractorFocus, setContractorFocus] = useState<{ projectId: string; workerRut?: string } | null>(null);
+  const [contractorFocus, setContractorFocus] = useState<{ projectId: string; workerRut?: string; requirementId?: string; documentId?: string } | null>(null);
+  const [operationFocus, setOperationFocus] = useState<{ mode: 'evaluacion' | 'pago' | 'ticket'; itemId?: string } | null>(null);
   const [ajustesEditando, setAjustesEditando] = useState(false);
   const [proyectoArchivado, setProyectoArchivado] = useState(false);
   const [proyectoSeleccionadoAjustes, setProyectoSeleccionadoAjustes] = useState<string | null>(null);
@@ -72,17 +74,41 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
   const misProyectos = allProyectos.filter(p => p.mandanteId === mandanteLogueado.id);
 
-  const notificacionesOperativas = buildMandanteNotifications(mandanteLogueado.id, allContratistas, allProyectos);
+  const notificacionesActuales = buildMandanteNotifications(mandanteLogueado.id, allContratistas, allProyectos);
+  const notificacionesOperativas = mergeMandanteNotifications(notificacionesActuales, notificacionesPersistidas);
   const notificacionesSinLeer = notificacionesOperativas.filter(item => !notificacionesLeidas.has(item.id)).length;
 
   React.useEffect(() => {
     if (!session?.profileId) return;
     let cancelled = false;
-    loadReadNotificationKeys(session.profileId, session)
-      .then(keys => { if (!cancelled) setNotificacionesLeidas(keys); })
-      .catch(() => { if (!cancelled) setNotificacionesLeidas(new Set()); });
+    Promise.all([
+      loadReadNotificationKeys(session.profileId, session),
+      loadStoredNotifications(session.profileId, session),
+    ]).then(([keys, stored]) => {
+      if (cancelled) return;
+      setNotificacionesLeidas(keys);
+      setNotificacionesPersistidas(stored);
+    }).catch(() => {
+      if (cancelled) return;
+      setNotificacionesLeidas(new Set());
+      setNotificacionesPersistidas([]);
+    });
     return () => { cancelled = true; };
-  }, [session?.profileId]);
+  }, [session?.profileId, dataSyncRevision]);
+
+  React.useEffect(() => {
+    if (!showNotif || !session?.profileId) return;
+    let cancelled = false;
+    Promise.all([
+      loadReadNotificationKeys(session.profileId, session),
+      loadStoredNotifications(session.profileId, session),
+    ]).then(([keys, stored]) => {
+      if (cancelled) return;
+      setNotificacionesLeidas(keys);
+      setNotificacionesPersistidas(stored);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [showNotif, session?.profileId, dataSyncRevision]);
 
   const marcarNotificacionesLeidas = (ids: string[]) => {
     setNotificacionesLeidas(actual => {
@@ -94,6 +120,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
   };
 
   const goToProject = (projectId: string) => {
+    setOperationFocus(null);
     setSelectedProjectId(projectId);
     setProyectoSeleccionadoAjustes(projectId);
     setActiveTab('proyectos');
@@ -102,8 +129,32 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
 
   const abrirNotificacionOperativa = (notificacion: OperationalNotification) => {
     marcarNotificacionesLeidas([notificacion.id]);
-    if (notificacion.proyectoId) goToProject(notificacion.proyectoId);
-    else setActiveTab('proyectos');
+    const projectId = notificacion.proyectoId;
+
+    if (projectId && notificacion.contratistaId && ['acreditacion', 'trabajador', 'documento'].includes(notificacion.destino)) {
+      setOperationFocus(null);
+      setSelectedProjectId(projectId);
+      setSelectedContratista(notificacion.contratistaId);
+      setContractorFocus({
+        projectId,
+        workerRut: notificacion.workerRut,
+        requirementId: notificacion.requirementId,
+        documentId: notificacion.documentId,
+      });
+      setActiveTab('contratistas');
+    } else if (projectId && ['operacion', 'soporte'].includes(notificacion.destino)) {
+      const mode = notificacion.destino === 'soporte' ? 'ticket' : notificacion.operationMode || 'evaluacion';
+      setSelectedProjectId(projectId);
+      setProyectoSeleccionadoAjustes(projectId);
+      setActiveProjectTab('operacion');
+      setOperationFocus({ mode, itemId: notificacion.operationItemId });
+      setActiveTab('proyectos');
+    } else if (projectId) {
+      goToProject(projectId);
+    } else {
+      setOperationFocus(null);
+      setActiveTab('proyectos');
+    }
     setShowNotif(false);
   };
 
@@ -414,6 +465,7 @@ function MandantePortalContent({ mandanteLogueado, dataSyncRevision }: { mandant
               selectedProjectId={selectedProjectId}
               setSelectedProjectId={setSelectedProjectId}
               setShowInvitarModal={setShowInvitarModal}
+              operationFocus={operationFocus}
               contractorsData={contractorsData}
               documentRequirements={documentRequirements}
               editingContractorId={editingContractorId}
