@@ -355,83 +355,224 @@ function WorkersV5({
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState(focus?.projectId || 'all');
   const [stateFilter, setStateFilter] = useState('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<'active' | 'history' | 'all'>('active');
   const [page, setPage] = useState(1);
-  const context = selectedContext;
-  const project = context ? projects.find(item => item.id === context.projectId) : undefined;
-  const worker = context ? (contractor.trabajadores || []).find(item => item.rut === context.workerRut) : undefined;
 
-  const rows = projects
-    .flatMap(projectItem =>
-      (contractor.trabajadores || [])
-        .filter(workerItem => esTrabajadorAsignado(workerItem, projectItem.id, allProjects))
-        .map(workerItem => ({
-          project: projectItem,
-          worker: workerItem,
-          state: calcularEstadoTrabajador(workerItem, projectItem.id),
-        })),
-    )
+  const rawRows = projects.flatMap(projectItem =>
+    (contractor.trabajadores || []).flatMap(workerItem => {
+      const projectAssignments = (workerItem.asignaciones || []).filter(item => item.proyectoId === projectItem.id);
+      const buildRow = (assignment?: AsignacionTrabajador) => {
+        const active = assignment ? assignment.estado === 'activa' : esTrabajadorAsignado(workerItem, projectItem.id, allProjects);
+        const state = active ? calcularEstadoTrabajador(workerItem, projectItem.id) : null;
+        const access = active ? evaluarHabilitacionTrabajador(workerItem, projectItem.id, 'acceso', contractor.id) : null;
+        const work = active ? evaluarHabilitacionTrabajador(workerItem, projectItem.id, 'trabajo', contractor.id) : null;
+        const assignmentGate = active ? evaluarHabilitacionTrabajador(workerItem, projectItem.id, 'asignacion', contractor.id) : null;
+        const issue = [access, work, assignmentGate].find(item => item?.estado === 'bloqueado')
+          || [access, work, assignmentGate].find(item => item?.estado === 'pendiente');
+        return { project: projectItem, worker: workerItem, assignment, active, state, access, work, assignmentGate, issue };
+      };
+
+      if (projectAssignments.length > 0) return projectAssignments.map(item => buildRow(item));
+      if (esTrabajadorAsignado(workerItem, projectItem.id, allProjects)) return [buildRow()];
+      return [];
+    }),
+  );
+
+  const rows = rawRows
     .filter(row =>
       (projectFilter === 'all' || row.project.id === projectFilter)
-      && (stateFilter === 'all' || row.state === stateFilter)
-      && `${row.worker.nombre} ${row.worker.rut}`.toLowerCase().includes(search.toLowerCase())
-    );
+      && (assignmentFilter === 'all' || (assignmentFilter === 'active' ? row.active : !row.active))
+      && (stateFilter === 'all' || (row.active && row.state === stateFilter))
+      && `${row.worker.nombre} ${row.worker.rut} ${row.assignment?.cargo || row.worker.cargo || ''}`.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      const aDate = a.assignment?.fechaIngreso || '';
+      const bDate = b.assignment?.fechaIngreso || '';
+      return bDate.localeCompare(aDate);
+    });
+
+  const activeRows = rawRows.filter(row => row.active);
+  const activeEnabled = activeRows.filter(row => row.access?.estado === 'habilitado').length;
+  const activeBlocked = activeRows.filter(row =>
+    row.access?.estado === 'bloqueado' || row.work?.estado === 'bloqueado' || row.assignmentGate?.estado === 'bloqueado'
+  ).length;
+  const activePending = activeRows.filter(row =>
+    !(
+      row.access?.estado === 'bloqueado'
+      || row.work?.estado === 'bloqueado'
+      || row.assignmentGate?.estado === 'bloqueado'
+    )
+    && (
+      row.access?.estado === 'pendiente'
+      || row.work?.estado === 'pendiente'
+      || row.assignmentGate?.estado === 'pendiente'
+    )
+  ).length;
+  const historicalCount = rawRows.filter(row => !row.active).length;
 
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const hayFiltros = Boolean(search.trim()) || projectFilter !== 'all' || stateFilter !== 'all';
+  const hayFiltros = Boolean(search.trim()) || projectFilter !== 'all' || stateFilter !== 'all' || assignmentFilter !== 'active';
 
   useEffect(() => {
     setPage(1);
-  }, [search, projectFilter, stateFilter]);
+  }, [search, projectFilter, stateFilter, assignmentFilter]);
+
+  const context = selectedContext;
+  const project = context ? projects.find(item => item.id === context.projectId) : undefined;
+  const worker = context ? (contractor.trabajadores || []).find(item => item.rut === context.workerRut) : undefined;
+  const assignment = context && worker
+    ? (context.assignmentId
+      ? (worker.asignaciones || []).find(item => item.id === context.assignmentId)
+      : (worker.asignaciones || []).find(item => item.proyectoId === context.projectId && item.estado === 'activa')
+        || (worker.asignaciones || [])
+          .filter(item => item.proyectoId === context.projectId)
+          .sort((a, b) => (b.fechaIngreso || '').localeCompare(a.fechaIngreso || ''))[0])
+    : undefined;
 
   if (project && worker) {
-    const state = calcularEstadoTrabajador(worker, project.id);
+    const historical = Boolean(assignment && assignment.estado !== 'activa');
+    const state = historical ? null : calcularEstadoTrabajador(worker, project.id);
+    const access = historical ? null : evaluarHabilitacionTrabajador(worker, project.id, 'acceso', contractor.id);
+    const work = historical ? null : evaluarHabilitacionTrabajador(worker, project.id, 'trabajo', contractor.id);
+    const assignmentGate = historical ? null : evaluarHabilitacionTrabajador(worker, project.id, 'asignacion', contractor.id);
     const reqs = getRequisitos().filter(requirement =>
       requirement.proyectoId === project.id
       && requirement.activo !== false
       && requirement.obligatorio
       && requirement.destino === 'trabajador'
     );
+    const service = assignment?.servicioId ? getServicios().find(item => item.id === assignment.servicioId) : undefined;
+    const fichaProblems = historical ? [] : getProblemasFichaTrabajador(worker, project.id, contractor.id);
+    const contractType = assignment?.tipoContrato || worker.tipoContrato;
+    const contractStart = assignment?.fechaInicioContrato || worker.fechaInicioContrato;
+    const contractEnd = assignment?.fechaTerminoContrato || worker.fechaTerminoContrato;
+    const workOrTask = assignment?.obraFaenaContrato || worker.obraFaenaContrato;
+    const specialRegime = assignment?.regimenEspecial || worker.regimenEspecial;
+    const specialRegimeDetail = assignment?.detalleRegimenEspecial || worker.detalleRegimenEspecial;
+    const workerHistory = (worker.asignaciones || [])
+      .map(item => ({ assignment: item, project: allProjects.find(projectItem => projectItem.id === item.proyectoId) }))
+      .sort((a, b) => (b.assignment.fechaIngreso || '').localeCompare(a.assignment.fechaIngreso || ''));
+
+    const gateCard = (
+      title: string,
+      result: ReturnType<typeof evaluarHabilitacionTrabajador> | null,
+      historicalLabel = 'Retirado',
+    ) => <div className="mandante-worker-gate">
+      <span>{title}</span>
+      {result
+        ? <><b className={`mandante-contratistas-state ${gateClass(result.estado)}`}>{gateLabel(result.estado)}</b><p>{result.motivo || 'Sin impedimentos operativos.'}</p><small>{result.responsable === 'interno' ? 'Responsable actual: Acredita' : result.responsable === 'contratista' ? 'Responsable actual: Contratista' : 'Sin acción pendiente'}</small></>
+        : <><b className="mandante-contratistas-state gray">{historicalLabel}</b><p>Este período ya no está operativo.</p></>}
+    </div>;
+
     return <div className="mandante-contratistas-panel">
       <button type="button" className="mandante-contratistas-back" onClick={() => onSelect(null)}><ArrowLeft /> Volver a trabajadores</button>
+
       <div className="mandante-contratistas-worker-detail">
         <aside>
           <strong>{worker.nombre}</strong>
           <span>{worker.rut}</span>
-          <span>{worker.cargo || 'Sin cargo registrado'}</span>
+          <span>{assignment?.cargo || worker.cargo || 'Sin cargo registrado'}</span>
           <span>{project.nombre}</span>
-          <b className={`mandante-contratistas-state ${badgeClass(workerStateLabel(state))}`}>{workerStateLabel(state)}</b>
-          <em>{workerAccessLabel(calcularAccesoTrabajador(worker, project.id, contractor.id))}</em>
+          {historical
+            ? <b className="mandante-contratistas-state gray">Retirado</b>
+            : <b className={`mandante-contratistas-state ${badgeClass(workerStateLabel(state!))}`}>{workerStateLabel(state!)}</b>}
+          <em>{historical ? `Salida ${formatWorkerDate(assignment?.fechaSalida)}` : workerAccessLabel(calcularAccesoTrabajador(worker, project.id, contractor.id))}</em>
         </aside>
-        <article className="mandante-contratistas-card">
-          <h2>Documentación del trabajador</h2>
-          {reqs.map(requirement => {
-            const document = findRequirementDocument(contractor, requirement, project.id, worker);
-            const documentState = document ? getEstadoDocumentoEfectivo(document, requirement) : 'Pendiente';
-            return <button
-              type="button"
-              className="mandante-contratistas-doc-row"
-              key={requirement.id}
-              onClick={() => onOpenDocument({ projectId: project.id, workerRut: worker.rut, documentId: document?.id, requirementId: requirement.id })}
-            >
-              <span><strong>{requirement.nombre}</strong><small>{project.nombre} · {requirementImpactLabel(requirement)}</small></span>
-              <b className={`mandante-contratistas-state ${badgeClass(documentState)}`}>{documentState}</b>
-              <span>Ver documento</span>
-            </button>;
-          })}
-        </article>
+
+        <div className="mandante-worker-control">
+          <article className="mandante-contratistas-card">
+            <div className="mandante-worker-control-head">
+              <div><h2>Control operativo</h2><p>Separación entre vínculo, ingreso, trabajo y asignación en faena.</p></div>
+              <b className={historical ? 'mandante-contratistas-state gray' : `mandante-contratistas-state ${badgeClass(workerStateLabel(state!))}`}>{historical ? 'Histórico' : workerStateLabel(state!)}</b>
+            </div>
+            <div className="mandante-worker-gates">
+              {gateCard('Ingreso a faena', access)}
+              {gateCard('Permiso para trabajar', work)}
+              {gateCard('Asignación operativa', assignmentGate)}
+            </div>
+          </article>
+
+          <article className="mandante-contratistas-card">
+            <h2>Asignación y ficha laboral</h2>
+            <div className="mandante-worker-facts">
+              <div><span>Vínculo</span><strong>{historical ? 'Retirado' : 'Activo'}</strong></div>
+              <div><span>Ingreso</span><strong>{formatWorkerDate(assignment?.fechaIngreso)}</strong></div>
+              <div><span>Salida</span><strong>{formatWorkerDate(assignment?.fechaSalida)}</strong></div>
+              <div><span>Servicio / contrato</span><strong>{service ? `${service.codigo} · ${service.nombre}` : assignment?.servicioId ? assignment.servicioId : 'No informado'}</strong></div>
+              <div><span>Cargo en este período</span><strong>{assignment?.cargo || worker.cargo || 'No informado'}</strong></div>
+              <div><span>Categorías</span><strong>{assignment?.categorias?.length ? assignment.categorias.join(', ') : 'No informadas'}</strong></div>
+              <div><span>Tipo de contrato</span><strong>{contractTypeLabel(contractType)}</strong></div>
+              <div><span>Inicio de contrato</span><strong>{formatWorkerDate(contractStart)}</strong></div>
+              <div><span>Término de contrato</span><strong>{formatWorkerDate(contractEnd)}</strong></div>
+              {workOrTask && <div><span>Obra o faena contractual</span><strong>{workOrTask}</strong></div>}
+              {specialRegime && <div><span>Régimen especial</span><strong>{specialRegime}{specialRegimeDetail ? ` · ${specialRegimeDetail}` : ''}</strong></div>}
+            </div>
+            {!historical && fichaProblems.length > 0 && <div className="mandante-worker-warning"><AlertCircle /><span><strong>Ficha incompleta</strong><small>Falta: {fichaProblems.join(', ')}. Mientras no se complete, el trabajador no debe considerarse plenamente habilitado.</small></span></div>}
+          </article>
+
+          <article className="mandante-contratistas-card">
+            <h2>Documentación del trabajador</h2>
+            <p>{historical ? 'Documentación asociada al trabajador. El período se conserva solo para consulta.' : 'Abre cualquier requisito para revisar el documento y su estado.'}</p>
+            {reqs.map(requirement => {
+              const document = findRequirementDocument(contractor, requirement, project.id, worker);
+              const documentState = document ? getEstadoDocumentoEfectivo(document, requirement) : 'Pendiente';
+              return <button
+                type="button"
+                className="mandante-contratistas-doc-row"
+                key={requirement.id}
+                onClick={() => onOpenDocument({ projectId: project.id, workerRut: worker.rut, documentId: document?.id, requirementId: requirement.id })}
+              >
+                <span><strong>{requirement.nombre}</strong><small>{project.nombre} · {requirementImpactLabel(requirement)}</small></span>
+                <b className={`mandante-contratistas-state ${badgeClass(documentState)}`}>{documentState}</b>
+                <span>Ver documento</span>
+              </button>;
+            })}
+          </article>
+
+          <article className="mandante-contratistas-card">
+            <h2>Historial de asignaciones</h2>
+            <p>Los retiros y reingresos quedan como períodos separados.</p>
+            <div className="mandante-worker-history">
+              {workerHistory.map(item => <button
+                type="button"
+                key={item.assignment.id}
+                className={item.assignment.id === assignment?.id ? 'selected' : ''}
+                onClick={() => item.project && onSelect({ projectId: item.assignment.proyectoId, workerRut: worker.rut, assignmentId: item.assignment.id })}
+              >
+                <span><strong>{item.project?.nombre || item.assignment.proyectoId}</strong><small>{formatWorkerDate(item.assignment.fechaIngreso)} → {item.assignment.estado === 'activa' ? 'Actual' : formatWorkerDate(item.assignment.fechaSalida)}</small></span>
+                <b className={item.assignment.estado === 'activa' ? 'mandante-contratistas-state green' : 'mandante-contratistas-state gray'}>{item.assignment.estado === 'activa' ? 'Activo' : 'Retirado'}</b>
+              </button>)}
+              {workerHistory.length === 0 && <p>No hay períodos históricos adicionales.</p>}
+            </div>
+          </article>
+        </div>
       </div>
     </div>;
   }
 
   return <div className="mandante-contratistas-panel">
+    <div className="mandante-worker-summary">
+      <div><strong>{activeRows.length}</strong><span>asignaciones activas</span></div>
+      <div><strong>{activeEnabled}</strong><span>con ingreso habilitado</span></div>
+      <div><strong>{activePending}</strong><span>pendientes</span></div>
+      <div><strong>{activeBlocked}</strong><span>bloqueadas</span></div>
+      <div><strong>{historicalCount}</strong><span>períodos históricos</span></div>
+    </div>
+
     <div className="mandante-contratistas-local-filters">
       <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar trabajador..." />
       <select value={projectFilter} onChange={event => setProjectFilter(event.target.value)}>
         <option value="all">Todos los proyectos</option>
         {projects.map(projectItem => <option value={projectItem.id} key={projectItem.id}>{projectItem.nombre}</option>)}
+      </select>
+      <select aria-label="Filtrar relación del trabajador" value={assignmentFilter} onChange={event => setAssignmentFilter(event.target.value as 'active' | 'history' | 'all')}>
+        <option value="active">Asignaciones activas</option>
+        <option value="history">Historial / retirados</option>
+        <option value="all">Activos e históricos</option>
       </select>
       <select value={stateFilter} onChange={event => setStateFilter(event.target.value)}>
         <option value="all">Todos los estados</option>
@@ -440,29 +581,34 @@ function WorkersV5({
         <option value="pendiente">En proceso</option>
         <option value="rechazado">Bloqueado</option>
       </select>
-      {hayFiltros && <button type="button" className="btn btn-ghost text-[12px]" onClick={() => { setSearch(''); setProjectFilter('all'); setStateFilter('all'); }}>Limpiar filtros</button>}
+      {hayFiltros && <button type="button" className="btn btn-ghost text-[12px]" onClick={() => { setSearch(''); setProjectFilter('all'); setAssignmentFilter('active'); setStateFilter('all'); }}>Limpiar filtros</button>}
     </div>
+
     <article className="mandante-contratistas-card">
-      <h2>Trabajadores</h2>
+      <h2>Control de trabajadores</h2>
+      <p>El vínculo al proyecto no equivale a estar habilitado: ingreso, trabajo y asignación se controlan por separado.</p>
       <div className="mandante-contratistas-table-wrap">
         <table>
-          <thead><tr><th>Trabajador</th><th>RUT</th><th>Proyecto</th><th>Cargo</th><th>Estado</th><th>Acceso</th></tr></thead>
+          <thead><tr><th>Trabajador</th><th>Proyecto</th><th>Vínculo</th><th>Ingreso</th><th>Trabajo</th><th>Asignación</th><th>Motivo / responsable</th></tr></thead>
           <tbody>{pageRows.map(row => <tr
-            key={`${row.project.id}:${row.worker.rut}`}
+            key={row.assignment?.id || `${row.project.id}:${row.worker.rut}`}
             className={row.project.id === focus?.projectId && row.worker.rut === focus?.workerRut ? 'worker-focus' : ''}
-            onClick={() => onSelect({ projectId: row.project.id, workerRut: row.worker.rut })}
+            onClick={() => onSelect({ projectId: row.project.id, workerRut: row.worker.rut, assignmentId: row.assignment?.id })}
           >
-            <td><button type="button">{row.worker.nombre}</button></td>
-            <td>{row.worker.rut}</td>
+            <td><button type="button"><strong>{row.worker.nombre}</strong><small>{row.worker.rut} · {row.assignment?.cargo || row.worker.cargo || 'Sin cargo'}</small></button></td>
             <td>{row.project.nombre}</td>
-            <td>{row.worker.cargo || '—'}</td>
-            <td><b className={`mandante-contratistas-state ${badgeClass(workerStateLabel(row.state))}`}>{workerStateLabel(row.state)}</b></td>
-            <td>{workerAccessLabel(calcularAccesoTrabajador(row.worker, row.project.id, contractor.id))}</td>
+            <td>{row.active ? <b className="mandante-contratistas-state green">Activo</b> : <><b className="mandante-contratistas-state gray">Retirado</b><small>{formatWorkerDate(row.assignment?.fechaSalida)}</small></>}</td>
+            <td>{row.access ? <b className={`mandante-contratistas-state ${gateClass(row.access.estado)}`}>{gateLabel(row.access.estado)}</b> : '—'}</td>
+            <td>{row.work ? <b className={`mandante-contratistas-state ${gateClass(row.work.estado)}`}>{gateLabel(row.work.estado)}</b> : '—'}</td>
+            <td>{row.assignmentGate ? <b className={`mandante-contratistas-state ${gateClass(row.assignmentGate.estado)}`}>{gateLabel(row.assignmentGate.estado)}</b> : '—'}</td>
+            <td>{row.active
+              ? <span className="mandante-worker-row-reason"><strong>{row.issue?.motivo || 'Sin impedimentos'}</strong><small>{row.issue?.responsable === 'interno' ? 'Acredita' : row.issue?.responsable === 'contratista' ? 'Contratista' : 'Sin acción pendiente'}</small></span>
+              : <span className="mandante-worker-row-reason"><strong>Período finalizado</strong><small>Solo historial</small></span>}</td>
           </tr>)}</tbody>
         </table>
       </div>
       {rows.length === 0 && <p>No hay trabajadores que coincidan con los filtros.</p>}
-      <ListPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={setPage} label="trabajadores" />
+      <ListPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={setPage} label="asignaciones de trabajadores" />
     </article>
   </div>;
 }
