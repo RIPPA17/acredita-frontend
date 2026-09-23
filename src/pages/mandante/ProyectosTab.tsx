@@ -453,6 +453,31 @@ function ProjectFormFields({ form, setForm, disabled }: { form: ProjectForm; set
 }
 
 function SummaryPanel({ selected, executive }: { selected: ProjectPresentation; executive: ReturnType<typeof buildMandanteProjectSummaries>[number] | null }) {
+  const historical = selected.project.estado === 'Archivado';
+  if (historical) {
+    const closedAt = selected.project.archivadoEn
+      ? new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(selected.project.archivadoEn))
+      : selected.project.fechaTermino || 'Fecha no registrada';
+    return <div className="mandante-proyectos-panel">
+      <div className="mandante-proyectos-kpis">
+        <div><BriefcaseBusiness /><span>Contratistas históricos</span><strong>{selected.contractors.length}</strong></div>
+        <div><UsersRound /><span>Trabajadores registrados</span><strong>{selected.workers.length}</strong></div>
+        <div><Archive /><span>Estado</span><strong>Histórico</strong></div>
+        <div><CalendarDays /><span>Cierre</span><strong>{selected.project.fechaTermino || 'Registrado'}</strong></div>
+      </div>
+      <article className="mandante-proyectos-section-card">
+        <h2>Cierre e historial</h2>
+        <p>Este proyecto ya no genera operación, alertas ni nuevas decisiones. Sus antecedentes permanecen disponibles como expediente histórico.</p>
+        <dl className="mandante-proyectos-summary-list">
+          <div><dt>Fecha de archivo</dt><dd>{closedAt}</dd></div>
+          <div><dt>Motivo de cierre</dt><dd>{selected.project.motivoArchivo || 'Proyecto archivado'}</dd></div>
+          <div><dt>Obligaciones documentales registradas</dt><dd>{selected.obligations.total}</dd></div>
+          <div><dt>Modo</dt><dd>Solo consulta</dd></div>
+        </dl>
+      </article>
+    </div>;
+  }
+
   return <div className="mandante-proyectos-panel"><div className="mandante-proyectos-kpis"><div><BriefcaseBusiness /><span>Contratistas</span><strong>{selected.contractors.length}</strong></div><div><UsersRound /><span>Trabajadores habilitados</span><strong>{selected.workersEnabled}/{selected.workers.length}</strong></div><div className={selected.access === 'Habilitado' ? 'good' : 'bad'}><KeyRound /><span>Acceso</span><strong>{selected.access}</strong></div><div className={selected.payment === 'Habilitado' ? 'good' : 'bad'}><WalletCards /><span>Pago</span><strong>{selected.payment}</strong></div></div>
     <div className="mandante-proyectos-two-columns"><article className="mandante-proyectos-section-card"><h2>Requiere atención</h2><p>Problemas que afectan la operación o el avance de la acreditación.</p><div className="mandante-proyectos-attention-list">{(executive?.priorities || []).map(priority => <div key={priority.key}><span className={priority.kind === 'por_vencer' ? 'yellow' : 'red'}>{priority.kind === 'por_vencer' ? <Clock3 /> : <AlertCircle />}</span><div><strong>{priority.title}</strong><p>{priority.detail}</p></div></div>)}{!executive?.priorities.length && <div className="mandante-proyectos-clear"><CheckCircle2 /> No hay casos que requieran acción.</div>}</div></article>
       <article className="mandante-proyectos-section-card"><h2>Situación general</h2><p>Resumen del estado actual del proyecto.</p><dl className="mandante-proyectos-summary-list"><div><dt>Acreditaciones aprobadas</dt><dd>{selected.approvedAccreditations} de {selected.contractors.length}</dd></div><div><dt>Acreditaciones bloqueadas</dt><dd>{selected.blockedAccreditations}</dd></div><div><dt>Casos que requieren atención</dt><dd>{selected.attentionCount}</dd></div><div><dt>En revisión por Acredita</dt><dd>{selected.inReview}</dd></div></dl></article></div>
