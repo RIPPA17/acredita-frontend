@@ -1038,7 +1038,7 @@ test('05da Mandante cierra proyecto completo y conserva expediente histórico en
   page.once('dialog', dialog => dialog.accept('Fin de obra y cierre contractual'));
   await page.getByRole('button', { name: /Archivar proyecto/ }).click();
 
-  await expect(page.getByText('Proyecto histórico · solo consulta.', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('Expediente histórico del proyecto. La información permanece disponible, sin acciones operativas.', { exact: true })).toBeVisible();
   await expect(page.getByText('Fin de obra y cierre contractual', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('Cierre e historial', { exact: true })).toBeVisible();
   await expect(page.getByText('Histórico', { exact: true }).first()).toBeVisible();
