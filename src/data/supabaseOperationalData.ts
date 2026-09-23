@@ -535,7 +535,11 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
   }
 
   const workersByContractor = new Map<string, Trabajador[]>();
-  for (const backendWorker of rows.workers.filter(w => w.is_active)) {
+  const visibleWorkers = rows.workers.filter(worker =>
+    worker.is_active
+    || (session.role === 'mandante' && (assignmentsByWorker.get(worker.id)?.length || 0) > 0)
+  );
+  for (const backendWorker of visibleWorkers) {
     const contractorKey = contractorKeyByUuid.get(backendWorker.contratista_id);
     if (!contractorKey) continue;
     const localContractor = contractors.find(c => c.id === contractorKey);
@@ -591,6 +595,7 @@ export async function hydrateOperationalDataFromSupabase(session: SupabaseUserSe
     const firstProject = assignedProjectKeys.map(key => projectByKey.get(key)).find(Boolean);
     const worker: Trabajador = {
       estado: 'pendiente' as const,
+      activo: backendWorker.is_active,
       nombre: backendWorker.full_name,
       rut: backendWorker.rut,
       cargo: backendWorker.job_title || undefined,
