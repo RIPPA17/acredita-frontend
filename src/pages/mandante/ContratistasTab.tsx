@@ -8,13 +8,15 @@ import {
   esPorVencerPorFecha,
   esTrabajadorAsignado,
   esVencidoPorFecha,
+  evaluarHabilitacionTrabajador,
   getImpactosRequisito,
+  getProblemasFichaTrabajador,
   getRequisitos,
   obtenerDiasRestantes,
 } from '../../data/businessStore';
-import { Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
+import { AsignacionTrabajador, Contratista, Documento, Proyecto, Requisito, Trabajador } from '../../types';
 import { openDocumentFile } from '../../data/supabaseDocumentStorage';
-import { getObligacionesDocumentales } from '../../data/operationalCore';
+import { getObligacionesDocumentales, getServicios } from '../../data/operationalCore';
 import { getEstadoDocumentoEfectivo, normalizarNombreDocumento } from '../contratista/documentosUtils';
 import { companyObligationSummary } from './proyectos/proyectosUtils';
 import {
@@ -30,7 +32,7 @@ import ListPagination from '../../components/ListPagination';
 type ContractorTab = 'resumen' | 'acreditaciones' | 'trabajadores' | 'documentos';
 type AttentionFilter = 'Todos' | 'Con problemas' | 'Al día';
 type Focus = { projectId: string; workerRut?: string } | null;
-type WorkerContext = { projectId: string; workerRut: string };
+type WorkerContext = { projectId: string; workerRut: string; assignmentId?: string };
 type DocumentContext = { projectId: string; documentId?: string; workerRut?: string; requirementId?: string };
 
 interface Props {
@@ -74,6 +76,25 @@ const workerStateLabel = (state: ReturnType<typeof calcularEstadoTrabajador>) =>
 
 const workerAccessLabel = (state: ReturnType<typeof calcularAccesoTrabajador>) =>
   state === 'habilitado' ? 'Habilitado' : state === 'pendiente' ? 'Pendiente' : 'Bloqueado';
+
+const gateLabel = (state: 'habilitado' | 'pendiente' | 'bloqueado') =>
+  state === 'habilitado' ? 'Habilitado' : state === 'pendiente' ? 'Pendiente' : 'Bloqueado';
+
+const gateClass = (state: 'habilitado' | 'pendiente' | 'bloqueado') =>
+  state === 'habilitado' ? 'green' : state === 'bloqueado' ? 'red' : 'yellow';
+
+const formatWorkerDate = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(value.length === 10 ? `${value}T12:00:00Z` : value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date).replace(/\./g, '');
+};
+
+const contractTypeLabel = (value?: string) =>
+  value === 'indefinido' ? 'Indefinido'
+    : value === 'plazo_fijo' ? 'Plazo fijo'
+      : value === 'obra_faena' ? 'Obra o faena'
+        : 'No informado';
 
 const requirementImpactLabel = (requirement: Requisito) => {
   const impacts = getImpactosRequisito(requirement);
