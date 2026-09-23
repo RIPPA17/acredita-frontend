@@ -1,6 +1,8 @@
 import { getSupabaseSessionForRequest, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './supabaseAuth';
 import { hydrateCoreDataFromSupabase } from './supabaseCoreData';
 import { hydrateOperationalDataFromSupabase } from './supabaseOperationalData';
+import { getRuntimeArray, setRuntimeArray } from './businessRuntimeCache';
+import type { Proyecto } from '../types';
 
 async function parseResponse(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => ({}));
@@ -31,11 +33,32 @@ export async function archiveMandanteProject(projectKey: string, reason: string)
     },
     body: JSON.stringify({ p_project_key: projectKey, p_reason: normalizedReason }),
   });
-  await parseResponse(response);
+  const payload = await parseResponse(response) as any;
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  const projects = getRuntimeArray<Proyecto>('acredita_proyectos', []);
+  setRuntimeArray<Proyecto>('acredita_proyectos', projects.map(project => {
+    if (project.id !== projectKey) return project;
+    const historical = [...new Set([...(project.contratistas || []), ...(project.contratistasHistoricos || [])])];
+    return {
+      ...project,
+      estado: 'Archivado',
+      fechaTermino: row?.ends_at || project.fechaTermino,
+      archivadoEn: row?.archived_at || new Date().toISOString(),
+      archivadoPor: row?.archived_by || project.archivadoPor,
+      motivoArchivo: row?.archive_reason || normalizedReason,
+      contratistas: historical,
+      contratistasActivos: [],
+      contratistasHistoricos: historical,
+    };
+  }));
 
-  // El cierre cambia varias capas a la vez (relaciones, trabajadores,
-  // servicios, obligaciones y períodos). Rehidratar evita que una copia local
-  // antigua intente reactivar algo que ya pasó a historial.
-  await hydrateCoreDataFromSupabase(session);
-  await hydrateOperationalDataFromSupabase(session);
+  // El cierre ya fue confirmado por la base. Intentamos refrescar todas las
+  // capas para mostrar el snapshot definitivo, pero un fallo de refresco no
+  // debe presentar el cierre exitoso como si hubiera fallado.
+  try {
+    await hydrateCoreDataFromSupabase(session);
+    await hydrateOperationalDataFromSupabase(session);
+  } catch (error) {
+    console.warn('El proyecto se cerró correctamente, pero no fue posible refrescar toda la vista en este instante.', error);
+  }
 }
