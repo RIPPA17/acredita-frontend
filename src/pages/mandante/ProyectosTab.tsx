@@ -13,9 +13,10 @@ import { setContractorParent, setContractorProjectActive } from '../../data/supa
 import AssetsPanel from '../../components/AssetsPanel';
 import { downloadProjectPackage } from '../../data/projectReports';
 import OperationsCenter from '../../components/OperationsCenter';
+import { archiveMandanteProject } from '../../data/supabaseProjectLifecycle';
 
 type DetailTab = 'resumen' | 'contratistas' | 'servicios' | 'activos' | 'requisitos' | 'periodos' | 'operacion' | 'acreditaciones';
-type ProjectFilter = 'Todos los estados' | 'Bloqueado' | 'En proceso' | 'Acreditado';
+type ProjectFilter = 'Todos los estados' | 'Bloqueado' | 'En proceso' | 'Acreditado' | 'Histórico';
 type RequirementEditForm = {
   frequency: string;
   criticidad: Requisito['criticidad'];
@@ -94,7 +95,7 @@ const projectAdministrativeLabel = (project: Proyecto) => project.estado === 'Ar
     ? 'Proyecto en borrador'
     : 'Proyecto activo';
 
-const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' || state === 'Borrador' ? 'gray' : 'yellow';
+const stateClass = (state: string) => state === 'Acreditado' || state === 'Al día' ? 'green' : state === 'Bloqueado' || state === 'Con problemas' ? 'red' : state === 'Sin requisitos' || state === 'Borrador' || state === 'Histórico' ? 'gray' : 'yellow';
 const accreditationLabel = (state: ReturnType<typeof calcularEstadoAcreditacion>) => state === 'Aprobado' ? 'Acreditado' : state === 'Vencido/Bloqueado' ? 'Bloqueado' : 'En proceso';
 const projectLocation = (project: Proyecto) => {
   const item = project as ProjectMetadata;
@@ -156,10 +157,13 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
     responsableTelefono: projectForm.responsableTelefono || undefined,
   } : null;
   const readiness = projectCandidate ? projectReadiness(projectCandidate) : null;
-  const visible = summaries.filter(summary => filter === 'Todos los estados' || summary.state === filter).filter(summary => {
+  const visible = summaries.filter(summary =>
+    filter === 'Todos los estados'
+      || (filter === 'Histórico' ? summary.project.estado === 'Archivado' : summary.project.estado !== 'Archivado' && summary.state === filter)
+  ).filter(summary => {
     const query = search.trim().toLocaleLowerCase('es');
     return !query || `${summary.project.nombre} ${projectLocation(summary.project)}`.toLocaleLowerCase('es').includes(query);
-  }).sort((a, b) => projectStateRank[a.state] - projectStateRank[b.state] || a.project.nombre.localeCompare(b.project.nombre, 'es'));
+  }).sort((a, b) => Number(a.project.estado === 'Archivado') - Number(b.project.estado === 'Archivado') || projectStateRank[a.state] - projectStateRank[b.state] || a.project.nombre.localeCompare(b.project.nombre, 'es'));
 
   const openProject = (summary: ProjectPresentation) => {
     setProyectoSeleccionadoAjustes(summary.project.id); setSelectedProjectId(summary.project.id); setProyectoArchivado(summary.project.estado === 'Archivado'); setActiveProjectTab('resumen'); setConfiguring(false); window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -296,22 +300,30 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
   };
 
   const archiveProject = async () => {
-    if (!selected) return;
-    const confirmed = window.confirm(`¿Archivar "${selected.project.nombre}"?\n\nEl proyecto dejará de considerarse activo, pero conservará su información y trazabilidad.`);
-    if (!confirmed) return;
-    const projects = getProyectos(); const index = projects.findIndex(project => project.id === selected.project.id);
-    if (index < 0) return;
-    projects[index].estado = 'Archivado';
-    saveProyectos(projects);
+    if (!selected || savingProject) return;
+    const reason = window.prompt(
+      `Motivo de cierre de "${selected.project.nombre}":\n\nAl archivar, el proyecto pasa definitivamente a historial: se finalizan sus relaciones operativas y queda disponible solo para consulta.`,
+    )?.trim();
+    if (reason === undefined) return;
+    if (reason.length < 3) {
+      showToast('Indica un motivo de cierre de al menos 3 caracteres.', 'warning');
+      return;
+    }
+    setSavingProject(true);
     try {
-      await confirmBusinessPersistence('core');
+      await archiveMandanteProject(selected.project.id, reason);
       setProyectoArchivado(true);
       setProjectsVersion(value => value + 1);
-      showToast('Proyecto archivado', 'warning');
+      setContractorsVersion(value => value + 1);
+      setServicesVersion(value => value + 1);
+      setPeriodsVersion(value => value + 1);
+      setConfiguring(false);
+      showToast('Proyecto cerrado y enviado a historial', 'warning');
     } catch (error) {
-      setProyectoArchivado(getProyectos().find(project => project.id === selected.project.id)?.estado === 'Archivado');
       console.error('No fue posible archivar el proyecto.', error);
-      showToast('No fue posible archivar el proyecto. Intenta nuevamente.', 'error');
+      showToast(error instanceof Error ? error.message : 'No fue posible cerrar el proyecto.', 'error');
+    } finally {
+      setSavingProject(false);
     }
   };
   const addRequirement = () => {
@@ -331,11 +343,11 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
         <div className="mandante-proyectos-toolbar">
           <button type="button" className="mandante-proyectos-primary-action" onClick={() => { setProjectForm(emptyProjectForm()); setIsCreateProjectOpen(true); }}><Plus /> Nuevo proyecto</button>
           <label><span className="sr-only">Buscar proyecto</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar proyecto..." /></label>
-          <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option></select></label>
+          <label><span className="sr-only">Filtrar por estado</span><select value={filter} onChange={event => setFilter(event.target.value as ProjectFilter)}><option>Todos los estados</option><option>Bloqueado</option><option>En proceso</option><option>Acreditado</option><option>Histórico</option></select></label>
         </div>
       </header>
       <div className="mandante-proyectos-grid">{visible.map(summary => <button type="button" className="mandante-proyectos-card" key={summary.project.id} onClick={() => openProject(summary)}>
-        <div className="mandante-proyectos-cover"><div><span>{projectAdministrativeLabel(summary.project)}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.project.estado === 'Borrador' ? 'Borrador' : summary.state)}`}>{summary.project.estado === 'Borrador' ? 'Borrador' : summary.state}</b></div>
+        <div className="mandante-proyectos-cover"><div><span>{projectAdministrativeLabel(summary.project)}</span><h2>{summary.project.nombre}</h2></div><b className={`mandante-proyectos-badge ${stateClass(summary.project.estado === 'Borrador' ? 'Borrador' : summary.project.estado === 'Archivado' ? 'Histórico' : summary.state)}`}>{summary.project.estado === 'Borrador' ? 'Borrador' : summary.project.estado === 'Archivado' ? 'Histórico' : summary.state}</b></div>
         <div className="mandante-proyectos-card-body"><div className="mandante-proyectos-presentation"><span><MapPin />{projectLocation(summary.project)}</span><span><CalendarDays />{projectStartDate(summary.project)}</span></div>
           <div className="mandante-proyectos-people"><span><strong>{summary.workers.length}</strong>Trabajadores</span><span><strong>{summary.contractors.length}</strong>Contratistas</span></div><DocumentationBlock summary={summary} /><span className="mandante-proyectos-open">Ver proyecto <ChevronRight /></span></div>
       </button>)}</div>
@@ -385,7 +397,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
           <div className="mandante-proyectos-readiness">{readiness?.items.map(item => <div key={item.label} className={item.ok ? 'ready' : 'pending'}>{item.ok ? <CheckCircle2 /> : <AlertCircle />}<span>{item.label}</span><strong>{item.ok ? 'Listo' : 'Pendiente'}</strong></div>)}</div>
           {selected.project.estado === 'Borrador' && <button type="button" className="mandante-proyectos-activate" disabled={savingProject || !readiness?.ready} onClick={() => void activateProject()}><CheckCircle2 /> {readiness?.ready ? 'Activar proyecto' : 'Completa los datos para activar'}</button>}
           {selected.project.estado === 'Activo' && <div className="mandante-proyectos-active-note"><CheckCircle2 /> El proyecto está activo y disponible para la operación.</div>}
-          {selected.project.estado === 'Archivado' && <div className="mandante-proyectos-archived-note"><Archive /> El proyecto está archivado y se mantiene solo para consulta e historial.</div>}
+          {selected.project.estado === 'Archivado' && <div className="mandante-proyectos-archived-note"><Archive /><span><strong>Proyecto histórico · solo consulta.</strong>{selected.project.archivadoEn ? ` Cerrado el ${new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(selected.project.archivadoEn))}.` : ''}{selected.project.motivoArchivo ? ` Motivo: ${selected.project.motivoArchivo}` : ''}</span></div>}
         </section>
       </div>
 
@@ -395,7 +407,7 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
 
   return <section className="mandante-proyectos mandante-proyectos-detail fade-in">
     <button type="button" className="mandante-proyectos-back" onClick={backToProjects}><ArrowLeft /> Volver a proyectos</button>
-    <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
+    <header className="mandante-proyectos-hero"><div><span>{projectAdministrativeLabel(selected.project)}</span><h1>{selected.project.nombre}</h1><p>{selected.project.estado === 'Borrador' ? 'Completa la configuración antes de comenzar la operación.' : selected.project.estado === 'Archivado' ? 'Expediente histórico del proyecto. La información permanece disponible, sin acciones operativas.' : 'Gestiona la acreditación completa del proyecto desde un espacio dedicado.'}</p></div><div className="mandante-proyectos-hero-actions"><b className={`mandante-proyectos-badge ${stateClass(selected.project.estado === 'Borrador' ? 'Borrador' : selected.state)}`}>{selected.project.estado === 'Borrador' ? 'Borrador' : selected.state}</b><button type="button" onClick={openProjectConfiguration}><Settings2 /> Administrar proyecto</button></div></header>
     <nav className="mandante-proyectos-tabs" aria-label="Secciones del proyecto">{(['resumen', 'contratistas', 'servicios', 'activos', 'requisitos', 'periodos', 'operacion', 'acreditaciones'] as DetailTab[]).map(tab => <button type="button" key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setActiveProjectTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
     {detailTab === 'resumen' && <SummaryPanel selected={selected} executive={executive} />}
     {detailTab === 'contratistas' && <ContractorsPanel
@@ -412,9 +424,9 @@ export default function ProyectosTab({ activeProjectTab, setActiveProjectTab, mi
       showToast={showToast}
     />}
     {detailTab === 'servicios' && <ServicesPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id, undefined, true)} onChanged={() => setServicesVersion(value => value + 1)} showToast={showToast} />}
-    {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id)} showToast={showToast} />}
+    {detailTab === 'activos' && <AssetsPanel project={selected.project} contractors={selected.contractors} services={getServiciosProyecto(selected.project.id, undefined, true)} showToast={showToast} readOnly={selected.project.estado === 'Archivado'} />}
     {detailTab === 'requisitos' && <RequirementsPanel requirements={requirements} retiredRequirements={retiredRequirements} projectArchived={selected.project.estado === 'Archivado'} onAdd={addRequirement} onChanged={() => setRequirementsVersion(value => value + 1)} showToast={showToast} />}
-    {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} />}
+    {detailTab === 'periodos' && <CompliancePeriodsPanel periods={getCierresDocumentales().filter(item => item.proyectoId === selected.project.id)} onChanged={() => setPeriodsVersion(value => value + 1)} showToast={showToast} readOnly={selected.project.estado === 'Archivado'} />}
     {detailTab === 'operacion' && <OperationsCenter project={selected.project} contractors={selected.contractors} showToast={showToast} focus={operationFocus} />}
     {detailTab === 'acreditaciones' && <AccreditationsPanel selected={selected} requirements={requirements} onOpen={onOpenContractor} />}
   </section>;
