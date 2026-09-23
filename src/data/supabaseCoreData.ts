@@ -646,7 +646,10 @@ async function syncRequirements(
   const token = session._supabase.accessToken;
   const backendServices = await selectRows<BackendService>('services', token, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active');
   const serviceUuidByKey = new Map(backendServices.filter(item => item.integration_key).map(item => [item.integration_key as string, item.id]));
-  const scoped = scopeLocalRequirements(session, localRequirements, localProjects);
+  const operationalProjects = scopeLocalProjects(session, localProjects).filter(project =>
+    ['activo', 'active'].includes(String(project.estado || '').trim().toLocaleLowerCase('es'))
+  );
+  const scoped = scopeLocalRequirements(session, localRequirements, operationalProjects);
   const payload = scoped.map((requirement, index) => {
     const frequency = backendFrequency(requirement.frecuencia);
     return {
@@ -675,7 +678,7 @@ async function syncRequirements(
   if (payload.length > 0) await insertRows('requirements', token, payload, 'integration_key');
 
   const backend = await selectRows<BackendRequirement>('requirements', token, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days');
-  const scopedProjectUuids = new Set(scopeLocalProjects(session, localProjects).map(project => projectUuidByKey.get(project.id)).filter(Boolean) as string[]);
+  const scopedProjectUuids = new Set(operationalProjects.map(project => projectUuidByKey.get(project.id)).filter(Boolean) as string[]);
   const desiredKeys = new Set(payload.map(row => row.integration_key));
 
   for (const requirement of backend) {
@@ -694,7 +697,9 @@ async function syncServices(
 ): Promise<void> {
   if (session.role === 'contratista') return;
   const token = session._supabase.accessToken;
-  const scopedProjectIds = new Set(scopeLocalProjects(session, projects).map(item => item.id));
+  const scopedProjectIds = new Set(scopeLocalProjects(session, projects)
+    .filter(project => ['activo', 'active'].includes(String(project.estado || '').trim().toLocaleLowerCase('es')))
+    .map(item => item.id));
   const accreditationByContext = new Map(rows.accreditations.map(item => [`${item.project_id}:${item.contratista_id}`, item]));
   const desired = services.filter(item => scopedProjectIds.has(item.proyectoId));
   for (const service of desired) {
