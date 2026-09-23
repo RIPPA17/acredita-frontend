@@ -49,6 +49,7 @@ type MockOptions = {
   paymentWorkflow?: boolean;
   contractorHierarchy?: boolean;
   invitationFlow?: boolean;
+  historicalWorkerOnly?: boolean;
 };
 
 function appSession(role: Role) {
@@ -66,7 +67,7 @@ function appSession(role: Role) {
 function fixtures(role: Role, options: MockOptions) {
   const paymentStatus = options.paymentStatus || 'observado';
   const workerScenario = options.workerDocumentScenario;
-  const workerComplete = Boolean(options.historicalProject || workerScenario || options.bulkReentry);
+  const workerComplete = Boolean(options.historicalProject || workerScenario || options.bulkReentry || options.historicalWorkerOnly);
   const workerHasDocument = Boolean(workerScenario && workerScenario !== 'pending');
   const workerVersions = workerScenario === 'review' ? [
     { id: VERSION_WORKER_V1, document_id: DOCUMENT_WORKER, version_number: 1, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'worker/v1/odi.pdf', original_filename: 'odi.pdf', metadata: { frontend_document_id: 'doc_worker_odi' } },
@@ -131,21 +132,21 @@ function fixtures(role: Role, options: MockOptions) {
       contract_work_or_task: null,
       special_labor_regime: null,
       special_labor_regime_detail: null,
-      is_active: true,
+      is_active: !options.historicalWorkerOnly,
     }],
     worker_assignments: options.emptyProject ? [] : [
       {
         id: ASSIGNMENT,
         accreditation_id: ACCREDITATION,
         worker_id: WORKER,
-        is_active: !options.bulkReentry,
+        is_active: !options.bulkReentry && !options.historicalWorkerOnly,
         service_id: SERVICE,
         job_title: 'Operador',
         categories: ['general'],
-        assignment_status: options.bulkReentry ? 'baja' : 'activa',
-        access_status: options.bulkReentry ? 'bloqueado' : 'pendiente',
-        assigned_at: options.bulkReentry ? '2026-07-01' : '2026-09-01',
-        unassigned_at: options.bulkReentry ? '2026-08-31' : null,
+        assignment_status: options.bulkReentry || options.historicalWorkerOnly ? 'baja' : 'activa',
+        access_status: options.bulkReentry || options.historicalWorkerOnly ? 'bloqueado' : 'pendiente',
+        assigned_at: options.bulkReentry || options.historicalWorkerOnly ? '2026-07-01' : '2026-09-01',
+        unassigned_at: options.bulkReentry || options.historicalWorkerOnly ? '2026-08-31' : null,
         contract_type_snapshot: workerComplete ? 'indefinido' : null,
         contract_start_date_snapshot: workerComplete ? '2026-07-01' : null,
         contract_end_date_snapshot: null,
@@ -252,7 +253,7 @@ function fixtures(role: Role, options: MockOptions) {
         payment_pending_count: 0,
       }] : []),
     ],
-    worker_accreditation_statuses: options.emptyProject || options.bulkReentry ? [] : [{
+    worker_accreditation_statuses: options.emptyProject || options.bulkReentry || options.historicalWorkerOnly ? [] : [{
       worker_assignment_id: ASSIGNMENT,
       worker_id: WORKER,
       worker_rut: options.bulkReentry ? '12.345.678-5' : '18.123.456-7',
@@ -1054,6 +1055,81 @@ test('05j Mandante ve renovación en revisión sin perder la versión vigente', 
   await expect(page.getByText('Hay una versión nueva en trámite')).toBeVisible();
   await expect(page.getByText(/Versión 2 · En revisión por Acredita/)).toBeVisible();
   await expect(page.getByText('La versión vigente anterior no se reemplaza hasta que la nueva sea aprobada.')).toBeVisible();
+});
+
+test('05k Mandante ve ficha laboral incompleta como causa de pendiente', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  await expect(page.getByRole('heading', { name: 'Control operativo' })).toBeVisible();
+  await expect(page.getByText(/Ficha laboral incompleta: tipo de contrato, fecha de inicio del contrato/).first()).toBeVisible();
+  await expect(page.getByText('Ficha incompleta', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Falta: tipo de contrato, fecha de inicio del contrato/)).toBeVisible();
+});
+
+test('05l Mandante distingue revisión interna de una pendiente del contratista', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'review' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  const gates = page.locator('.mandante-worker-gate');
+  await expect(gates).toHaveCount(3);
+  const access = gates.nth(0);
+  const work = gates.nth(1);
+  const assignment = gates.nth(2);
+  await expect(access.getByText('Ingreso a faena', { exact: true })).toBeVisible();
+  await expect(work.getByText('Permiso para trabajar', { exact: true })).toBeVisible();
+  await expect(assignment.getByText('Asignación operativa', { exact: true })).toBeVisible();
+  await expect(access.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
+  await expect(work.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
+  await expect(assignment.locator('.mandante-contratistas-state')).toHaveText('Pendiente');
+  await expect(access.getByText(/Certificado ODI.*en revisión por Acredita/)).toBeVisible();
+  await expect(access.getByText('Responsable actual: Acredita')).toBeVisible();
+});
+
+test('05m Mandante ve las tres compuertas bloqueadas y la causa exacta', async ({ page }) => {
+  await protectedPage(page, 'mandante', { workerDocumentScenario: 'rejected' });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+  await page.getByRole('button', { name: 'Trabajador Piloto' }).first().click();
+
+  const gates = page.locator('.mandante-worker-gate');
+  await expect(gates).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) {
+    const gate = gates.nth(index);
+    await expect(gate.locator('.mandante-contratistas-state')).toHaveText('Bloqueado');
+    await expect(gate.getByText(/Certificado ODI.*rechazado/)).toBeVisible();
+    await expect(gate.getByText('Responsable actual: Contratista')).toBeVisible();
+  }
+});
+
+test('05n Mandante conserva trabajador retirado y su período histórico', async ({ page }) => {
+  await protectedPage(page, 'mandante', { historicalWorkerOnly: true });
+  await page.goto('/mandante');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+  await page.getByRole('button', { name: 'Abrir ficha de Contratista Piloto A' }).click();
+  await page.getByRole('button', { name: 'Trabajadores', exact: true }).click();
+
+  const historySummary = page.locator('.mandante-worker-summary > div').filter({ hasText: 'períodos históricos' });
+  await expect(historySummary.getByText('1', { exact: true })).toBeVisible();
+  await page.getByLabel('Filtrar relación del trabajador').selectOption('history');
+  await expect(page.getByRole('button', { name: /Trabajador Piloto/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: /Trabajador Piloto/ }).first().click();
+
+  await expect(page.getByText('Retirado', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Historial de asignaciones')).toBeVisible();
+  await expect(page.getByText('01 jul 2026 → 31 ago 2026')).toBeVisible();
+  await expect(page.getByText('Indefinido', { exact: true })).toBeVisible();
+  await expect(page.getByText('SRV-01 · Servicio Piloto')).toBeVisible();
 });
 
 test('06 matriz de activos parte sin registros y no auto-habilita nada', async ({ page }) => {

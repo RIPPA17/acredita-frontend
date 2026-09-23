@@ -266,9 +266,9 @@ test('reingreso al mismo proyecto crea un nuevo periodo y conserva la baja anter
   await page.getByPlaceholder('12.345.678-9').fill('13.654.321-0');
   await page.getByPlaceholder('Ej. Operador').fill('Operador senior');
   await page.getByRole('button', { name: 'Agregar trabajador', exact: true }).last().click();
-  await expect(page.getByText('Trabajador agregado con éxito')).toBeVisible();
 
   await expect.poll(() => calls.filter(call => call.method === 'POST' && call.path === '/rest/v1/worker_assignments').length).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole('button', { name: 'Ver carpeta' })).toBeVisible();
   await expect.poll(() => calls.some(call => {
     if (call.method !== 'PATCH' || call.path !== '/rest/v1/worker_assignments' || !call.body) return false;
     const parsed = JSON.parse(call.body);

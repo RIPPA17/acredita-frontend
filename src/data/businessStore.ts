@@ -582,27 +582,66 @@ export function evaluarHabilitacionTrabajador(
   compuerta: 'acceso' | 'trabajo' | 'asignacion' | 'pago',
   contratistaId?: string,
 ): HabilitacionResultado {
-  if (compuerta === 'acceso') {
+  const detalleAcceso = (): HabilitacionResultado => {
     const estado = calcularAccesoTrabajador(w, proyectoId, contratistaId);
+    if (estado === 'habilitado') return { estado };
+
+    const motivos: string[] = [];
+    let responsable: 'interno' | 'contratista' | undefined;
+
+    if (contratoTrabajadorVencido(w)) {
+      motivos.push(`Contrato laboral vencido el ${w.fechaTerminoContrato}`);
+      responsable = 'contratista';
+    }
+
+    const problemasFicha = getProblemasFichaTrabajador(w, proyectoId, contratistaId);
+    if (problemasFicha.length > 0) {
+      motivos.push(`Ficha laboral incompleta: ${problemasFicha.join(', ')}`);
+      responsable = 'contratista';
+    }
+
+    const requisitosAcceso = getRequisitos().filter(req =>
+      req.proyectoId === proyectoId
+      && req.destino === 'trabajador'
+      && req.activo !== false
+      && req.obligatorio
+      && requisitoAplicaATrabajador(req, w, proyectoId)
+      && getImpactosRequisito(req).acceso
+    );
+
+    for (const req of requisitosAcceso) {
+      const doc = buscarDocumentoRequisito(w.documentos || [], req, proyectoId);
+      const bloqueante = estadoBloqueanteRequisito(req, doc);
+      const estadoReq = estadoRequisitoCompuerta(req, doc);
+      if (bloqueante) {
+        motivos.push(`"${req.nombre}" ${bloqueante.toLowerCase()}`);
+        responsable = 'contratista';
+      } else if (estadoReq === 'pendiente') {
+        const detalle = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión por Acredita' : 'pendiente de aprobación';
+        motivos.push(`"${req.nombre}" ${detalle}`);
+        if (responsable !== 'contratista') responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
+      }
+    }
+
     return {
       estado,
-      motivo: estado === 'habilitado'
-        ? undefined
+      motivo: motivos.length
+        ? motivos.join('; ')
         : estado === 'bloqueado'
           ? 'El trabajador tiene un impedimento vigente para ingresar.'
           : 'El trabajador aún tiene antecedentes de acceso pendientes.',
-      responsable: 'contratista',
+      responsable: responsable || 'contratista',
     };
-  }
+  };
 
-  const acceso = calcularAccesoTrabajador(w, proyectoId, contratistaId);
-  if ((compuerta === 'trabajo' || compuerta === 'asignacion') && acceso !== 'habilitado') {
+  const acceso = detalleAcceso();
+  if (compuerta === 'acceso') return acceso;
+
+  if ((compuerta === 'trabajo' || compuerta === 'asignacion') && acceso.estado !== 'habilitado') {
     return {
-      estado: acceso,
-      motivo: acceso === 'bloqueado'
-        ? 'Sin ingreso habilitado no puede trabajar ni materializar una asignación en faena.'
-        : 'El ingreso a faena aún está pendiente.',
-      responsable: 'contratista',
+      estado: acceso.estado,
+      motivo: `Ingreso a faena: ${acceso.motivo || (acceso.estado === 'bloqueado' ? 'bloqueado' : 'pendiente')}`,
+      responsable: acceso.responsable,
     };
   }
 
@@ -630,9 +669,9 @@ export function evaluarHabilitacionTrabajador(
       responsable = 'contratista';
     } else if (estadoReq === 'pendiente' && estado !== 'bloqueado') {
       estado = 'pendiente';
-      const detalle = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión' : 'pendiente de aprobación';
+      const detalle = !doc ? 'no cargado' : doc.estado === 'revision' ? 'en revisión por Acredita' : 'pendiente de aprobación';
       motivos.push(`"${req.nombre}" ${detalle}`);
-      responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
+      if (responsable !== 'contratista') responsable = doc?.estado === 'revision' ? 'interno' : 'contratista';
     }
   }
 
