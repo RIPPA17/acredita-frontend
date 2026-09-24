@@ -137,7 +137,7 @@ export default function AssetsPanel({
 
     {readOnly && <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">Proyecto histórico · activos disponibles solo para consulta.</div>}
 
-    {!contractorKey && <AssetMatrixPanel projectKey={project.id} showToast={showToast} onChanged={() => void load()} />}
+    {!contractorKey && <AssetMatrixPanel projectKey={project.id} showToast={showToast} onChanged={() => void load()} readOnly={readOnly} />}
 
     <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 my-4"><div className="rounded-lg border p-4"><small>Activos</small><strong className="block text-2xl text-navy">{activos.length}</strong></div><div className="rounded-lg border p-4"><small>Ingreso habilitado</small><strong className="block text-2xl text-green-700">{enabled}</strong></div><div className="rounded-lg border p-4"><small>Listos para operar</small><strong className="block text-2xl text-green-700">{readyToOperate}</strong></div><div className="rounded-lg border p-4"><small>Bloqueados</small><strong className="block text-2xl text-red-700">{blocked}</strong></div><div className="rounded-lg border p-4"><small>Históricos</small><strong className="block text-2xl text-gray-600">{historicos.length}</strong></div></div>
 
