@@ -401,7 +401,7 @@ export default function OperationsCenter({
       </div>
     </section>}
 
-    {mode === 'integracion' ? <IntegrationsPanel projectKey={project.id} showToast={showToast} /> : <div className="mt-5 mandante-proyectos-table-wrap">
+    {mode === 'integracion' ? <IntegrationsPanel projectKey={project.id} showToast={showToast} readOnly={readOnlyProject} /> : <div className="mt-5 mandante-proyectos-table-wrap">
       <table><thead><tr><th>Tipo</th><th>Período / asunto</th><th>Resultado</th><th>Estado y acciones</th></tr></thead><tbody>
         {mode === 'evaluacion' && data.evaluations.map(item => {
           const evaluationReadOnly = readOnlyProject || item.accreditation_active === false;
