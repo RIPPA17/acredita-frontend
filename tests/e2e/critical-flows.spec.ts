@@ -647,6 +647,57 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
+      if (url.pathname === '/rest/v1/rpc/archive_project') {
+        const input = request.postDataJSON() as any;
+        const project = (data.projects as any[]).find(item => item.integration_key === input?.p_project_key);
+        if (!project) return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'Proyecto no encontrado.' }) });
+        project.status = 'archived';
+        project.archived_at = '2026-09-23T18:00:00Z';
+        project.archived_by = PROFILE;
+        project.archive_reason = input.p_reason;
+        project.ends_at = project.ends_at || '2026-09-23';
+        const accreditationIds = new Set((data.accreditations as any[]).filter(item => item.project_id === project.id).map(item => item.id));
+        for (const accreditation of data.accreditations as any[]) {
+          if (accreditationIds.has(accreditation.id)) {
+            accreditation.is_active = false;
+            accreditation.parent_accreditation_id = null;
+          }
+        }
+        for (const assignment of data.worker_assignments as any[]) {
+          if (accreditationIds.has(assignment.accreditation_id) && assignment.is_active) {
+            assignment.is_active = false;
+            assignment.assignment_status = 'baja';
+            assignment.access_status = 'bloqueado';
+            assignment.unassigned_at = assignment.unassigned_at || '2026-09-23T18:00:00Z';
+          }
+        }
+        for (const service of data.services as any[]) {
+          if (accreditationIds.has(service.accreditation_id)) {
+            service.is_active = false;
+            service.status = 'finalizado';
+            service.ends_at = service.ends_at || '2026-09-23';
+          }
+        }
+        for (const obligation of data.document_obligations as any[]) {
+          if (accreditationIds.has(obligation.accreditation_id)) obligation.is_active = false;
+        }
+        for (const asset of data.asset_registry as any[]) {
+          if (asset.project_key === project.integration_key) {
+            asset.is_active = false;
+            asset.status = 'inactivo';
+            asset.access_allowed = false;
+            asset.retired_at = '2026-09-23T18:00:00Z';
+            asset.retirement_reason = `Cierre de proyecto: ${input.p_reason}`;
+          }
+        }
+        for (const period of data.compliance_periods as any[]) {
+          if (period.project_id !== project.id) continue;
+          period.status = period.period_start > '2026-09-23' ? 'cancelado' : 'cerrado';
+          period.closed_at = period.closed_at || '2026-09-23T18:00:00Z';
+          period.snapshot = { ...(period.snapshot || {}), projectArchived: true, archiveReason: input.p_reason };
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(project) });
+      }
       if (url.pathname === '/rest/v1/rpc/set_contractor_parent') {
         const project = (data.projects as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_project_key);
         const contractor = (data.contratistas as any[]).find(item => item.integration_key === (request.postDataJSON() as any)?.p_contractor_key);
@@ -972,6 +1023,44 @@ test('05d Proyecto archivado mantiene la matriz documental en solo lectura', asy
   await expect(row.getByRole('button', { name: 'Editar' })).toBeDisabled();
   await expect(row.getByRole('button', { name: 'Retirar' })).toBeDisabled();
   await expect(page.getByText('Proyecto archivado: la matriz se conserva para consulta e historial.')).toBeVisible();
+});
+
+test('05da Mandante cierra proyecto completo y conserva expediente histórico en solo lectura', async ({ page }) => {
+  const ctx = await protectedPage(page, 'mandante', {
+    workerDocumentScenario: 'review',
+    assetLifecycle: true,
+    paymentWorkflow: true,
+    paymentOpenPeriod: true,
+  });
+  await openMandanteProject(page);
+
+  await page.getByRole('button', { name: /Administrar proyecto/ }).click();
+  page.once('dialog', dialog => dialog.accept('Fin de obra y cierre contractual'));
+  await page.getByRole('button', { name: /Archivar proyecto/ }).click();
+
+  await expect(page.getByText('Expediente histórico del proyecto. La información permanece disponible, sin acciones operativas.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Fin de obra y cierre contractual', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('Cierre e historial', { exact: true })).toBeVisible();
+  await expect(page.getByText('Histórico', { exact: true }).first()).toBeVisible();
+
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await expect(page.getByText('Participaciones finalizadas', { exact: true })).toBeVisible();
+  await expect(page.getByText('No hay relaciones activas: todas las participaciones quedaron en el historial.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reactivar' })).toBeDisabled();
+
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Periodos', exact: true }).click();
+  await expect(page.getByText(/Los períodos iniciados quedaron cerrados/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Reabrir|Cerrar período|Enviar a revisión/ })).toHaveCount(0);
+
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Activos', exact: true }).click();
+  await expect(page.getByText('Proyecto histórico · activos disponibles solo para consulta.', { exact: true })).toBeVisible();
+
+  await expect.poll(() => ctx.mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/rest/v1/rpc/archive_project'
+    && item.body?.p_project_key === 'proyecto_piloto'
+    && item.body?.p_reason === 'Fin de obra y cierre contractual'
+  )).toBe(true);
 });
 
 test('05e Mandante administra jerarquía, baja, historial y reactivación por proyecto', async ({ page }) => {

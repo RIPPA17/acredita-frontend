@@ -9,16 +9,19 @@ const LABEL: Record<CierreDocumental['estado'], string> = {
   en_revision: 'En revisión',
   cerrado: 'Cerrado',
   reabierto: 'Reabierto',
+  cancelado: 'Cancelado por cierre',
 };
 
 export default function CompliancePeriodsPanel({
   periods,
   onChanged,
   showToast,
+  readOnly = false,
 }: {
   periods: CierreDocumental[];
   onChanged: () => void;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+  readOnly?: boolean;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
@@ -26,9 +29,10 @@ export default function CompliancePeriodsPanel({
     .filter(period => period.periodoInicio <= today)
     .sort((a, b) => b.periodoInicio.localeCompare(a.periodoInicio))
     .slice(0, 12);
+  const cancelledFuture = periods.filter(period => period.periodoInicio > today && period.estado === 'cancelado').length;
 
   const act = async (period: CierreDocumental, action: 'review' | 'close' | 'reopen') => {
-    if (busyId) return;
+    if (busyId || readOnly) return;
     setBusyId(period.id);
     try {
       if (action === 'close') await closeCompliancePeriod(period.id);
@@ -44,16 +48,19 @@ export default function CompliancePeriodsPanel({
 
   return <article className="mandante-proyectos-section-card mandante-proyectos-panel">
     <div className="mandante-proyectos-section-head"><div><h2>Cierres documentales</h2><p>Cada cierre conserva una fotografía histórica del cumplimiento del proyecto.</p></div></div>
+    {readOnly && <div className="my-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800"><strong>Proyecto histórico · solo consulta.</strong> Los períodos iniciados quedaron cerrados al archivar el proyecto y los futuros dejaron de operar.{cancelledFuture > 0 ? ` ${cancelledFuture} período${cancelledFuture === 1 ? '' : 's'} futuro${cancelledFuture === 1 ? '' : 's'} cancelado${cancelledFuture === 1 ? '' : 's'}.` : ''}</div>}
     <div className="mandante-proyectos-table-wrap"><table><thead><tr><th>Período</th><th>Carga hasta</th><th>Estado</th><th>Cierre</th><th>Acción</th></tr></thead><tbody>{visiblePeriods.map(period => <tr key={period.id}>
       <td><strong>{formatPeriodo(period.periodoInicio, period.periodoFin)}</strong><small>{period.periodoInicio} al {period.periodoFin}</small></td>
       <td>{period.fechaCargaHasta || 'Sin fecha límite'}</td>
       <td><b className={`mandante-proyectos-badge ${period.estado === 'cerrado' ? 'green' : period.estado === 'en_revision' ? 'yellow' : 'gray'}`}>{LABEL[period.estado]}</b></td>
       <td>{period.fechaCierre ? new Date(period.fechaCierre).toLocaleString('es-CL') : '—'}</td>
-      <td>{period.estado === 'abierto' || period.estado === 'reabierto'
-        ? <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'review')}><CalendarClock size={14} /> Enviar a revisión</button>
-        : period.estado === 'en_revision'
-          ? <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'close')}><LockKeyhole size={14} /> Cerrar período</button>
-          : <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'reopen')}><RotateCcw size={14} /> Reabrir</button>}</td>
+      <td>{readOnly || period.estado === 'cancelado'
+        ? <span className="text-xs text-gray-500">Solo consulta</span>
+        : period.estado === 'abierto' || period.estado === 'reabierto'
+          ? <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'review')}><CalendarClock size={14} /> Enviar a revisión</button>
+          : period.estado === 'en_revision'
+            ? <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'close')}><LockKeyhole size={14} /> Cerrar período</button>
+            : <button type="button" disabled={busyId === period.id} onClick={() => void act(period, 'reopen')}><RotateCcw size={14} /> Reabrir</button>}</td>
     </tr>)}</tbody></table></div>
     {visiblePeriods.length === 0 && <div className="mandante-proyectos-empty"><CheckCircle2 /> El proyecto todavía no tiene períodos operacionales generados.</div>}
   </article>;

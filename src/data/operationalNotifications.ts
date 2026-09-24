@@ -210,7 +210,10 @@ export function buildMandanteNotifications(
   contratistas: Contratista[],
   proyectos: Proyecto[],
 ): OperationalNotification[] {
-  const propios = proyectos.filter(item => item.mandanteId === mandanteId);
+  const propios = proyectos.filter(item =>
+    item.mandanteId === mandanteId
+    && ['activo', 'active'].includes(String(item.estado || '').trim().toLocaleLowerCase('es'))
+  );
   return [...buildStatusNotifications(contratistas, propios), ...buildExpiryNotifications(propios)]
     .sort((a, b) => a.prioridad - b.prioridad || a.titulo.localeCompare(b.titulo, 'es'));
 }
@@ -220,7 +223,10 @@ export function buildAdminNotifications(
   proyectos: Proyecto[],
   pendingReviewCount: number,
 ): OperationalNotification[] {
-  const items = [...buildStatusNotifications(contratistas, proyectos), ...buildExpiryNotifications(proyectos)];
+  const activos = proyectos.filter(item =>
+    ['activo', 'active'].includes(String(item.estado || '').trim().toLocaleLowerCase('es'))
+  );
+  const items = [...buildStatusNotifications(contratistas, activos), ...buildExpiryNotifications(activos)];
   if (pendingReviewCount > 0) {
     items.push({
       id: `cola-revision:${pendingReviewCount}`,

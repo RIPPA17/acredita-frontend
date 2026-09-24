@@ -95,11 +95,17 @@ export function buildProjectPresentations(
   const requirements = getRequisitos();
 
   return projects.map(project => {
-    const activeContractorIds = project.contratistasActivos ?? project.contratistas;
-    const contractors = allContractors.filter(contractor => activeContractorIds.includes(contractor.id));
+    const historicalProject = String(project.estado || '').trim().toLocaleLowerCase('es').includes('archiv');
+    const contractorIds = historicalProject
+      ? [...new Set([...(project.contratistas || []), ...(project.contratistasHistoricos || [])])]
+      : (project.contratistasActivos ?? project.contratistas);
+    const contractors = allContractors.filter(contractor => contractorIds.includes(contractor.id));
     const workerMap = new Map<string, { contractor: Contratista; worker: Trabajador }>();
     contractors.forEach(contractor => (contractor.trabajadores || [])
-      .filter(worker => esTrabajadorAsignado(worker, project.id, projects))
+      .filter(worker => historicalProject
+        ? Boolean(worker.asignaciones?.some(assignment => assignment.proyectoId === project.id)
+          || worker.documentos?.some(document => document.proyectoId === project.id))
+        : esTrabajadorAsignado(worker, project.id, projects))
       .forEach(worker => workerMap.set(worker.rut, { contractor, worker })));
     const workers = [...workerMap.values()];
     const obligations = calculateProjectObligations(
