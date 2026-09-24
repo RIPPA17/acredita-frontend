@@ -69,11 +69,10 @@ export default function ContractorInvitationModal({ open, onClose, projects, sho
     } catch (error) {
       console.error('No fue posible cargar el directorio de contratistas.', error);
       setAvailableContractors([]);
-      showToast(error instanceof Error ? error.message : 'No fue posible cargar el directorio de contratistas.', 'error');
     } finally {
       setLoadingContractors(false);
     }
-  }, [open, projectKey, showToast]);
+  }, [open, projectKey]);
 
   const refreshInvitations = React.useCallback(async () => {
     if (!open || !projectKey) {
