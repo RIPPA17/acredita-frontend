@@ -36,6 +36,15 @@ export type ProjectInvitation = {
   send_error: string | null;
 };
 
+export type AvailableProjectContractor = {
+  contractor_key: string;
+  contractor_name: string;
+  contractor_rut: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+};
+
 type CreateInvitationResult = {
   invitation_id: string;
   token: string;
@@ -85,6 +94,15 @@ async function lookupBackendId(table: 'projects' | 'contratistas', integrationKe
   const rows = await parseResponse<Array<{ id: string }>>(response);
   if (!rows[0]?.id) throw new Error(`No se encontró ${table === 'projects' ? 'el proyecto' : 'el contratista'} en Supabase`);
   return rows[0].id;
+}
+
+export async function listAvailableContractorsForProject(input: {
+  session: SupabaseUserSession;
+  projectKey: string;
+}): Promise<AvailableProjectContractor[]> {
+  return rpc<AvailableProjectContractor[]>('list_available_contractors_for_project', {
+    p_project_key: input.projectKey,
+  }, input.session._supabase.accessToken);
 }
 
 export async function createContractorInvitation(input: {
