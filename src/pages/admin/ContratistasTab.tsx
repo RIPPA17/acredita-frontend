@@ -69,13 +69,13 @@ export default function ContratistasTab({
   GLOBAL_PROYECTOS,
   GLOBAL_MANDANTES,
   onVerContratista,
-  setShowInvitarContratistaModal,
+  setShowCrearContratistaModal,
 }: {
   GLOBAL_CONTRATISTAS: Contratista[];
   GLOBAL_PROYECTOS: Proyecto[];
   GLOBAL_MANDANTES: Mandante[];
   onVerContratista: (contratista: Contratista, proyectoId?: string) => void;
-  setShowInvitarContratistaModal: (v: boolean) => void;
+  setShowCrearContratistaModal: (v: boolean) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [proyectoFiltro, setProyectoFiltro] = useState('');
@@ -154,17 +154,17 @@ export default function ContratistasTab({
             </span>
             <h2 className="text-2xl font-semibold text-white mt-1">Contratistas</h2>
             <p className="text-[13.5px] text-gray-300 mt-1.5 max-w-[550px]">
-              Empresas contratistas asignadas a proyectos, con el estado de sus acreditaciones.
+              Empresas contratistas creadas por Acredita, con el estado de sus acreditaciones y proyectos.
             </p>
           </div>
 
           <div className="flex gap-2.5 shrink-0">
             <button
-              onClick={() => setShowInvitarContratistaModal(true)}
+              onClick={() => setShowCrearContratistaModal(true)}
               className="px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-hover to-gold text-white hover:brightness-105 text-[13.5px] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_6px_16px_rgba(179,137,63,0.35)] border-none"
             >
               <UserPlus size={15} />
-              Invitar contratista
+              Crear contratista
             </button>
           </div>
         </div>
