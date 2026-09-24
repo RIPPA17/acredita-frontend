@@ -1059,7 +1059,7 @@ test('05da Mandante cierra proyecto completo y conserva expediente histórico en
   await expect(page.getByRole('button', { name: 'Retirar requisito' })).toHaveCount(0);
 
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Operacion', exact: true }).click();
-  await page.getByRole('button', { name: 'Integraciones', exact: true }).click();
+  await page.getByRole('button', { name: /Integraciones/ }).click();
   await expect(page.getByText('Proyecto histórico · integraciones solo para consulta.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: /Agregar configuración/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Registrar ejecución' })).toHaveCount(0);
