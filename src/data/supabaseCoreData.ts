@@ -518,7 +518,7 @@ async function syncContractors(
       continue;
     }
 
-    if (session.role === 'admin' || session.role === 'mandante') {
+    if (session.role === 'admin') {
       await insertRows('contratistas', token, {
         integration_key: contractor.id,
         name: contractor.nombre,
