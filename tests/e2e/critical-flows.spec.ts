@@ -1053,7 +1053,7 @@ test('05da Mandante cierra proyecto completo y conserva expediente histórico en
   await expect(page.getByRole('button', { name: /Reabrir|Cerrar período|Enviar a revisión/ })).toHaveCount(0);
 
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Activos', exact: true }).click();
-  await expect(page.getByText(/Proyecto histórico · modo consulta/)).toBeVisible();
+  await expect(page.getByText('Proyecto histórico · activos disponibles solo para consulta.', { exact: true })).toBeVisible();
 
   await expect.poll(() => ctx.mutations.some(item =>
     item.method === 'POST'
