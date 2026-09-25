@@ -187,7 +187,7 @@ function fixtures(role: Role, options: MockOptions) {
     document_versions: [
       ...(options.renewalScenario ? [
         { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
-        { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-25', expires_at: '2026-09-24', uploaded_at: '2026-08-25T12:00:00Z', reviewed_at: '2026-08-26T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+        { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-31', expires_at: '2026-09-30', uploaded_at: '2026-08-31T12:00:00Z', reviewed_at: '2026-09-01T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
         { id: VERSION_COMPANY_V3, document_id: DOCUMENT_COMPANY, version_number: 3, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v3/f30-v3.pdf', original_filename: 'f30-v3.pdf', metadata: { frontend_document_id: 'doc_renewal' } },
       ] : []),
       ...workerVersions,
@@ -1150,7 +1150,7 @@ test('05db Admin crea empresa contratista en el directorio maestro', async ({ pa
   await page.getByLabel('RUT del contratista').fill('76.123.456-0');
   await page.getByLabel('Razón social del contratista').fill('Contratista Directorio QA SpA');
   await page.getByLabel('Dirección del contratista').fill('Av. Directorio 100');
-  await page.getByLabel('Responsable del contratista').fill('Ana Responsable');
+  await page.getByRole('textbox', { name: 'Responsable del contratista', exact: true }).fill('Ana Responsable');
   await page.getByLabel('Correo del responsable del contratista').fill('ana@directorio.invalid');
   await page.getByRole('button', { name: 'Crear contratista', exact: true }).click();
 
