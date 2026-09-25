@@ -46,11 +46,11 @@ Deno.serve(async (req: Request) => {
       .from("acredita_memberships")
       .select("role")
       .eq("profile_id", authData.user.id)
-      .eq("role", "admin_acredita")
+      .in("role", ["admin_acredita", "supervisor"])
       .eq("is_active", true)
       .limit(1);
     if (staffError) throw staffError;
-    if (!staff?.length) return json({ error: "Solo Administración Acredita puede reenviar invitaciones de acceso" }, 403);
+    if (!staff?.length) return json({ error: "Tu cuenta de Acredita no tiene permisos para reenviar invitaciones de acceso" }, 403);
 
     const body = await req.json();
     const contractorId = String(body?.contractor_id || "").trim();
