@@ -94,7 +94,9 @@ async function rpc<T>(name: string, body: Record<string, unknown>, accessToken: 
 
 export async function createAdminContractor(input: AdminContractorInput): Promise<CreatedContractor> {
   const session = await getSupabaseSessionForRequest();
-  if (!session || session.role !== 'admin') throw new Error('Solo Administración Acredita puede crear contratistas.');
+  if (!session || session.role !== 'admin' || session.acreditaRole !== 'admin_acredita') {
+    throw new Error('Solo Administración Acredita puede crear contratistas.');
+  }
 
   const response = await fetch(`${SUPABASE_URL}/functions/v1/create-contractor`, {
     method: 'POST',
@@ -132,7 +134,9 @@ export async function createAdminContractor(input: AdminContractorInput): Promis
 
 export async function resendContractorAccessInvitation(contractorId: string): Promise<{ ok: boolean; invited: boolean; linked: boolean }> {
   const session = await getSupabaseSessionForRequest();
-  if (!session || session.role !== 'admin') throw new Error('Solo Administración Acredita puede reenviar accesos de contratistas.');
+  if (!session || session.role !== 'admin' || session.acreditaRole !== 'admin_acredita') {
+    throw new Error('Solo Administración Acredita puede reenviar accesos de contratistas.');
+  }
 
   const response = await fetch(`${SUPABASE_URL}/functions/v1/resend-contractor-access-invitation`, {
     method: 'POST',
