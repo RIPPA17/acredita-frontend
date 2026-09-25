@@ -73,7 +73,7 @@ const iniciales = (nombre: string) =>
 export default function AdminPortal() {
   const navigate = useNavigate();
   const session = getCurrentSession();
-  const isAdminAcredita = session?.acreditaRole === 'admin_acredita';
+  const canManageContractors = ['admin_acredita', 'supervisor'].includes(session?.acreditaRole || '');
   const { revision: dataSyncRevision } = useDataSync();
   const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(
     typeof window !== 'undefined' && window.innerWidth < 1440,
@@ -631,7 +631,7 @@ export default function AdminPortal() {
                 setClienteSeleccionado(contratista);
                 setProyectoContextoContratista(proyectoId || null);
               }}
-              onCreateContractor={isAdminAcredita ? () => setShowCrearContratistaModal(true) : undefined}
+              onCreateContractor={canManageContractors ? () => setShowCrearContratistaModal(true) : undefined}
             />
           )}
 
@@ -745,7 +745,7 @@ export default function AdminPortal() {
       )}
 
       <AdminContractorCreateModal
-        open={isAdminAcredita && showCrearContratistaModal}
+        open={canManageContractors && showCrearContratistaModal}
         onClose={() => setShowCrearContratistaModal(false)}
         onCreated={() => setContratistas([...getContratistas()])}
         showToast={showToast}
