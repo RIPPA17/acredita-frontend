@@ -585,9 +585,9 @@ function ContractorsPanel({
       <div className="mandante-proyectos-section-head">
         <div>
           <h2>Contratistas del proyecto</h2>
-          <p>Administra quién participa en esta obra y la relación entre contratistas principales y subcontratistas.</p>
+          <p>Incorpora empresas registradas por Acredita y administra la relación entre contratistas principales y subcontratistas.</p>
         </div>
-        <button type="button" onClick={onInvite} disabled={projectArchived}><Plus /> {projectArchived ? 'Solo lectura' : 'Invitar contratista'}</button>
+        <button type="button" onClick={onInvite} disabled={projectArchived}><Plus /> {projectArchived ? 'Solo lectura' : 'Incorporar contratista'}</button>
       </div>
       {projectArchived && <div className="mandante-proyectos-readonly-note"><Archive /> Proyecto archivado: las relaciones se mantienen solo para consulta.</div>}
       <div className="mandante-proyectos-table-wrap">

@@ -7,6 +7,7 @@ const PROJECT = '30000000-0000-4000-8000-000000000001';
 const PROJECT_OLD = '30000000-0000-4000-8000-000000000002';
 const CONTRACTOR = '40000000-0000-4000-8000-000000000001';
 const CONTRACTOR_B = '40000000-0000-4000-8000-000000000002';
+const CONTRACTOR_DIRECTORY = '40000000-0000-4000-8000-000000000004';
 const ACCREDITATION = '50000000-0000-4000-8000-000000000001';
 const ACCREDITATION_B = '50000000-0000-4000-8000-000000000003';
 const INVITATION = '51000000-0000-4000-8000-000000000001';
@@ -48,6 +49,7 @@ type MockOptions = {
   evaluationWorkflow?: boolean;
   paymentWorkflow?: boolean;
   contractorHierarchy?: boolean;
+  contractorDirectory?: boolean;
   invitationFlow?: boolean;
   historicalWorkerOnly?: boolean;
   assetOperatorEligible?: boolean;
@@ -92,7 +94,8 @@ function fixtures(role: Role, options: MockOptions) {
     ],
     contratistas: [
       { id: CONTRACTOR, name: 'Contratista Piloto A', rut: '77.000.000-1', legal_name: 'Contratista Piloto A SpA', integration_key: 'contratista_piloto_a', is_active: true, parent_contratista_id: null },
-      ...(options.contractorHierarchy ? [{ id: CONTRACTOR_B, name: 'Contratista Piloto B', rut: '77.000.000-2', legal_name: 'Contratista Piloto B SpA', integration_key: 'contratista_piloto_b', is_active: true, parent_contratista_id: null }] : []),
+      ...(options.contractorHierarchy ? [{ id: CONTRACTOR_B, name: 'Contratista Piloto B', rut: '77.000.000-2', legal_name: 'Contratista Piloto B SpA', address: null, primary_contact_name: 'Contacto B', primary_contact_email: 'b@contratista.invalid', primary_contact_phone: null, integration_key: 'contratista_piloto_b', is_active: true, parent_contratista_id: null }] : []),
+      ...(options.contractorDirectory ? [{ id: CONTRACTOR_DIRECTORY, name: 'Contratista Directorio QA', rut: '76.123.456-0', legal_name: 'Contratista Directorio QA SpA', address: 'Av. Directorio 100', primary_contact_name: 'Ana Responsable', primary_contact_email: 'ana@directorio.invalid', primary_contact_phone: '+56911112222', integration_key: 'contratista_directorio_qa', is_active: true, parent_contratista_id: null }] : []),
     ],
     accreditations: [
       { id: ACCREDITATION, project_id: PROJECT, contratista_id: CONTRACTOR, is_active: !options.inactiveAccreditationOnActiveProject, parent_accreditation_id: null },
@@ -184,7 +187,7 @@ function fixtures(role: Role, options: MockOptions) {
     document_versions: [
       ...(options.renewalScenario ? [
         { id: VERSION_COMPANY_V1, document_id: DOCUMENT_COMPANY, version_number: 1, workflow_status: 'aprobado', issued_at: '2026-07-01', expires_at: '2026-07-31', uploaded_at: '2026-07-01T12:00:00Z', reviewed_at: '2026-07-02T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v1/f30-v1.pdf', original_filename: 'f30-v1.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
-        { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-25', expires_at: '2026-09-24', uploaded_at: '2026-08-25T12:00:00Z', reviewed_at: '2026-08-26T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
+        { id: VERSION_COMPANY_V2, document_id: DOCUMENT_COMPANY, version_number: 2, workflow_status: 'aprobado', issued_at: '2026-08-31', expires_at: '2026-09-30', uploaded_at: '2026-08-31T12:00:00Z', reviewed_at: '2026-09-01T12:00:00Z', rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v2/f30-v2.pdf', original_filename: 'f30-v2.pdf', metadata: { frontend_document_id: 'doc_renewal', reviewer_name: 'Acredita QA' } },
         { id: VERSION_COMPANY_V3, document_id: DOCUMENT_COMPANY, version_number: 3, workflow_status: 'revision', issued_at: null, expires_at: null, uploaded_at: '2026-09-19T12:00:00Z', reviewed_at: null, rejection_reason: null, rejection_explanation: null, rejection_solution: null, storage_bucket: 'acredita-documents', storage_path: 'doc/v3/f30-v3.pdf', original_filename: 'f30-v3.pdf', metadata: { frontend_document_id: 'doc_renewal' } },
       ] : []),
       ...workerVersions,
@@ -647,6 +650,71 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
       }
+      if (url.pathname === '/rest/v1/rpc/admin_create_contractor') {
+        const input = request.postDataJSON() as any;
+        const row = {
+          id: CONTRACTOR_DIRECTORY,
+          name: input.p_name,
+          rut: input.p_rut,
+          legal_name: input.p_legal_name || input.p_name,
+          address: input.p_address || null,
+          primary_contact_name: input.p_contact_name || null,
+          primary_contact_email: input.p_contact_email || null,
+          primary_contact_phone: input.p_contact_phone || null,
+          integration_key: 'contratista_directorio_qa',
+          is_active: true,
+          parent_contratista_id: null,
+        };
+        (data.contratistas as any[]).push(row);
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+          contractor_id: row.id,
+          contractor_key: row.integration_key,
+          contractor_name: row.name,
+          contractor_rut: row.rut,
+        }]) });
+      }
+      if (url.pathname === '/rest/v1/rpc/list_available_contractors_for_project') {
+        const input = request.postDataJSON() as any;
+        const project = (data.projects as any[]).find(item => item.integration_key === input?.p_project_key);
+        const linkedIds = new Set((data.accreditations as any[]).filter(item => item.project_id === project?.id).map(item => item.contratista_id));
+        const rows = (data.contratistas as any[])
+          .filter(item => item.is_active && !linkedIds.has(item.id))
+          .map(item => ({
+            contractor_key: item.integration_key,
+            contractor_name: item.name,
+            contractor_rut: item.rut || '',
+            contact_name: item.primary_contact_name || '',
+            contact_email: item.primary_contact_email || '',
+            contact_phone: item.primary_contact_phone || '',
+          }));
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
+      }
+      if (url.pathname === '/rest/v1/rpc/create_registered_contractor_invitation') {
+        const input = request.postDataJSON() as any;
+        const project = (data.projects as any[]).find(item => item.integration_key === input?.p_project_key);
+        const contractor = (data.contratistas as any[]).find(item => item.integration_key === input?.p_contractor_key);
+        (data.invitations as any[]).push({
+          id: '51000000-0000-4000-8000-000000000099',
+          project_id: project?.id,
+          contratista_id: contractor?.id,
+          invited_email: contractor?.primary_contact_email,
+          status: 'pending',
+          invited_by: PROFILE,
+          accepted_by: null,
+          invited_at: '2026-09-25T12:00:00Z',
+          responded_at: null,
+          expires_at: '2026-10-02T12:00:00Z',
+          contractor_name: contractor?.name,
+          contractor_rut: contractor?.rut,
+          sent_at: null,
+          send_error: null,
+        });
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+          invitation_id: '51000000-0000-4000-8000-000000000099',
+          token: 'token-directorio-qa',
+          expires_at: '2026-10-02T12:00:00Z',
+        }]) });
+      }
       if (url.pathname === '/rest/v1/rpc/archive_project') {
         const input = request.postDataJSON() as any;
         const project = (data.projects as any[]).find(item => item.integration_key === input?.p_project_key);
@@ -1072,6 +1140,49 @@ test('05da Mandante cierra proyecto completo y conserva expediente histórico en
   )).toBe(true);
 });
 
+test('05db Admin crea empresa contratista en el directorio maestro', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'admin');
+  await page.goto('/admin');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+
+  await page.getByRole('button', { name: 'Nuevo contratista' }).click();
+  await page.getByLabel('Nombre comercial del contratista').fill('Contratista Directorio QA');
+  await page.getByLabel('RUT del contratista').fill('76.123.456-0');
+  await page.getByLabel('Razón social del contratista').fill('Contratista Directorio QA SpA');
+  await page.getByLabel('Dirección del contratista').fill('Av. Directorio 100');
+  await page.getByRole('textbox', { name: 'Responsable del contratista', exact: true }).fill('Ana Responsable');
+  await page.getByLabel('Correo del responsable del contratista').fill('ana@directorio.invalid');
+  await page.getByRole('button', { name: 'Crear contratista', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Contratista creado' })).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/admin_create_contractor'
+    && item.body?.p_name === 'Contratista Directorio QA'
+    && item.body?.p_rut === '76.123.456-0'
+    && item.body?.p_contact_email === 'ana@directorio.invalid'
+  )).toBe(true);
+});
+
+test('05dc Mandante solo incorpora contratistas registrados por Acredita', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'mandante', { contractorDirectory: true });
+  await openMandanteProject(page);
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Incorporar contratista' }).click();
+  await expect(page.getByText('Solo puedes seleccionar empresas previamente registradas por Administración Acredita.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Nuevo contratista' })).toHaveCount(0);
+
+  await page.getByRole('combobox', { name: 'Contratista registrado' }).selectOption('contratista_directorio_qa');
+  await expect(page.getByText('Ana Responsable')).toBeVisible();
+  await page.getByRole('button', { name: 'Incorporar contratista', exact: true }).last().click();
+
+  await expect.poll(() => mutations.some(item =>
+    item.path === '/rest/v1/rpc/create_registered_contractor_invitation'
+    && item.body?.p_project_key === 'proyecto_piloto'
+    && item.body?.p_contractor_key === 'contratista_directorio_qa'
+  )).toBe(true);
+});
+
 test('05e Mandante administra jerarquía, baja, historial y reactivación por proyecto', async ({ page }) => {
   const { mutations } = await protectedPage(page, 'mandante', { contractorHierarchy: true });
   await openMandanteProject(page);
@@ -1129,7 +1240,7 @@ test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async
   const { mutations } = await protectedPage(page, 'mandante', { invitationFlow: true });
   await openMandanteProject(page);
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
-  await page.getByRole('button', { name: 'Invitar contratista' }).click();
+  await page.getByRole('button', { name: 'Incorporar contratista' }).click();
 
   const invitationRow = page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Pendiente' }).last();
   await expect(invitationRow).toBeVisible();

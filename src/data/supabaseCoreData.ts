@@ -39,6 +39,11 @@ type BackendContratista = {
   id: string;
   name: string;
   rut: string | null;
+  legal_name: string | null;
+  address: string | null;
+  primary_contact_name: string | null;
+  primary_contact_email: string | null;
+  primary_contact_phone: string | null;
   integration_key: string | null;
   is_active: boolean;
   parent_contratista_id: string | null;
@@ -230,7 +235,7 @@ async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
   const [mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
     selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone,archived_at,archived_by,archive_reason'),
-    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,integration_key,is_active,parent_contratista_id'),
+    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,legal_name,address,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active,parent_accreditation_id'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
     selectRows<BackendService>('services', accessToken, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active'),
@@ -369,6 +374,12 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         id,
         nombre: row.name,
         rut: row.rut || fallback?.rut || '',
+        razonSocial: row.legal_name || fallback?.razonSocial,
+        direccion: row.address || fallback?.direccion,
+        contactoNombre: row.primary_contact_name || fallback?.contactoNombre,
+        contactoEmail: row.primary_contact_email || fallback?.contactoEmail,
+        contactoTelefono: row.primary_contact_phone || fallback?.contactoTelefono,
+        activo: row.is_active,
         proyectos: projectIdsByContractor.get(id) || [],
         contratistaPadreId: row.parent_contratista_id ? contractorKeyByUuid.get(row.parent_contratista_id) : undefined,
         contratistaPadrePorProyecto: Object.fromEntries(
@@ -510,8 +521,12 @@ async function syncContractors(
         await patchRows('contratistas', token, { integration_key: `eq.${contractor.id}` }, {
           name: contractor.nombre,
           rut: contractor.rut || null,
-          legal_name: contractor.nombre,
-          is_active: true,
+          legal_name: contractor.razonSocial || contractor.nombre,
+          address: contractor.direccion || null,
+          primary_contact_name: contractor.contactoNombre || null,
+          primary_contact_email: contractor.contactoEmail || null,
+          primary_contact_phone: contractor.contactoTelefono || null,
+          is_active: contractor.activo !== false,
           updated_at: new Date().toISOString(),
         });
       }
@@ -523,13 +538,17 @@ async function syncContractors(
         integration_key: contractor.id,
         name: contractor.nombre,
         rut: contractor.rut || null,
-        legal_name: contractor.nombre,
-        is_active: true,
+        legal_name: contractor.razonSocial || contractor.nombre,
+        address: contractor.direccion || null,
+        primary_contact_name: contractor.contactoNombre || null,
+        primary_contact_email: contractor.contactoEmail || null,
+        primary_contact_phone: contractor.contactoTelefono || null,
+        is_active: contractor.activo !== false,
       }, 'integration_key');
     }
   }
 
-  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,integration_key,is_active,parent_contratista_id');
+  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,legal_name,address,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id');
   const uuidByKey = new Map(refreshed.filter(row => row.integration_key).map(row => [row.integration_key as string, row.id]));
   if (session.role === 'admin') {
     for (const contractor of scoped) {

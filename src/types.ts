@@ -209,6 +209,12 @@ export interface Contratista {
   documentos: Documento[];
   trabajadores?: Trabajador[];
   isNew?: boolean;
+  razonSocial?: string;
+  direccion?: string;
+  contactoNombre?: string;
+  contactoEmail?: string;
+  contactoTelefono?: string;
+  activo?: boolean;
   contratistaPadreId?: string; // Legado: no usar para decisiones por proyecto
   contratistaPadrePorProyecto?: Record<string, string>;
 }
