@@ -48,6 +48,9 @@ export type CreatedContractor = {
     phone: string;
   };
   invited: boolean;
+  invitation_pending: boolean;
+  invitation_error?: string | null;
+  administrator_linked: boolean;
   existing_user: boolean;
   existing_contractor: boolean;
   master_data_version: number;
@@ -125,6 +128,19 @@ export async function createAdminContractor(input: AdminContractorInput): Promis
   });
 
   return parseResponse<CreatedContractor>(response);
+}
+
+export async function resendContractorAccessInvitation(contractorId: string): Promise<{ ok: boolean; invited: boolean; linked: boolean }> {
+  const session = await getSupabaseSessionForRequest();
+  if (!session || session.role !== 'admin') throw new Error('Solo Administración Acredita puede reenviar accesos de contratistas.');
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/resend-contractor-access-invitation`, {
+    method: 'POST',
+    headers: headers(session._supabase.accessToken),
+    body: JSON.stringify({ contractor_id: contractorId }),
+  });
+
+  return parseResponse<{ ok: boolean; invited: boolean; linked: boolean }>(response);
 }
 
 export async function listAvailableContractorsForProject(projectKey: string): Promise<AvailableContractor[]> {
