@@ -24,6 +24,7 @@ export type CreateAdminContractorResult = {
   };
   invited: boolean;
   existing_user: boolean;
+  existing_contractor?: boolean;
 };
 
 async function parseResponse<T>(response: Response): Promise<T> {
