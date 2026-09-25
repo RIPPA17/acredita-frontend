@@ -1,6 +1,6 @@
 import React from 'react';
-import { Building2, CheckCircle2, UserRound, X } from 'lucide-react';
-import { createAdminContractor } from '../data/supabaseContractorDirectory';
+import { AlertTriangle, Building2, CheckCircle2, RefreshCw, UserRound, X } from 'lucide-react';
+import { createAdminContractor, resendContractorAccessInvitation } from '../data/supabaseContractorDirectory';
 import { restoreSupabaseSession } from '../data/supabaseAuth';
 import { hydrateCoreDataFromSupabase } from '../data/supabaseCoreData';
 import { isValidRut } from '../utils/rut';
@@ -66,7 +66,8 @@ export default function AdminContractorCreateModal({ open, onClose, onCreated, s
   const [form, setForm] = React.useState(emptyForm);
   const [sameAdministrator, setSameAdministrator] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [created, setCreated] = React.useState<{ name: string; email: string; invited: boolean } | null>(null);
+  const [created, setCreated] = React.useState<{ id: string; name: string; email: string; invited: boolean; invitationPending: boolean } | null>(null);
+  const [resending, setResending] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -155,18 +156,43 @@ export default function AdminContractorCreateModal({ open, onClose, onCreated, s
       const session = await restoreSupabaseSession();
       if (session) await hydrateCoreDataFromSupabase(session);
       setCreated({
+        id: result.contractor.id,
         name: result.contractor.name,
         email: result.administrator.email,
         invited: result.invited,
+        invitationPending: result.invitation_pending,
       });
       onCreated();
-      showToast(result.invited
-        ? 'Contratista creado. Invitación enviada a su administrador.'
-        : 'Contratista creado y administrador vinculado.');
+      if (result.invitation_pending) {
+        showToast('Contratista creado correctamente. La invitación de acceso quedó pendiente.', 'warning');
+      } else {
+        showToast(result.invited
+          ? 'Contratista creado. Invitación enviada a su administrador.'
+          : 'Contratista creado y administrador vinculado.');
+      }
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No fue posible crear el contratista.', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resendInvitation = async () => {
+    if (!created || resending) return;
+    setResending(true);
+    try {
+      const result = await resendContractorAccessInvitation(created.id);
+      setCreated(current => current ? { ...current, invited: result.invited || current.invited, invitationPending: false } : current);
+      showToast(result.invited
+        ? 'Invitación de acceso enviada correctamente.'
+        : 'El administrador ya tenía una cuenta y quedó vinculado.');
+      const session = await restoreSupabaseSession();
+      if (session) await hydrateCoreDataFromSupabase(session);
+      onCreated();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No fue posible reenviar la invitación.', 'error');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -183,15 +209,32 @@ export default function AdminContractorCreateModal({ open, onClose, onCreated, s
       </div>
 
       {created ? <div className="p-8 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-700"><CheckCircle2 size={32} /></div>
-        <h4 className="text-lg font-semibold text-navy">Contratista creado completamente</h4>
+        <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${created.invitationPending ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+          {created.invitationPending ? <AlertTriangle size={32} /> : <CheckCircle2 size={32} />}
+        </div>
+        <h4 className="text-lg font-semibold text-navy">{created.invitationPending ? 'Contratista creado' : 'Contratista creado completamente'}</h4>
         <p className="mt-2 text-sm text-gray-600"><strong>{created.name}</strong> ya quedó registrado en el directorio maestro de Acredita.</p>
-        <div className="mx-auto mt-4 max-w-md rounded-lg border border-cream3 bg-cream2/50 p-3 text-left text-xs text-gray-600">
+        <div className={`mx-auto mt-4 max-w-md rounded-lg border p-3 text-left text-xs ${created.invitationPending ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-cream3 bg-cream2/50 text-gray-600'}`}>
           <strong className="block text-navy">Administrador Acredita</strong>
           <span>{created.email}</span>
-          <span className="mt-1 block">{created.invited ? 'Se envió una invitación para crear su acceso.' : 'La cuenta ya existía y quedó vinculada a la empresa.'}</span>
+          <span className="mt-1 block">
+            {created.invitationPending
+              ? 'La empresa quedó creada, pero no fue posible enviar la invitación de acceso. Puedes reintentar cuando el correo esté disponible.'
+              : created.invited
+                ? 'Se envió una invitación para crear su acceso.'
+                : 'La cuenta ya existía y quedó vinculada a la empresa.'}
+          </span>
+          {created.invitationPending && <button
+            type="button"
+            onClick={resendInvitation}
+            disabled={resending}
+            className="btn btn-secondary mt-3 inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={resending ? 'animate-spin' : ''} />
+            {resending ? 'Reintentando…' : 'Reintentar invitación'}
+          </button>}
         </div>
-        <button type="button" onClick={close} className="btn btn-primary mt-6">Cerrar</button>
+        <button type="button" onClick={close} disabled={resending} className="btn btn-primary mt-6 disabled:opacity-60">Cerrar</button>
       </div> : <form onSubmit={submit} className="flex flex-col gap-5 p-5 sm:p-6">
         <section className="rounded-xl border border-cream3 p-4">
           <div className="mb-4">
@@ -259,7 +302,7 @@ export default function AdminContractorCreateModal({ open, onClose, onCreated, s
 
         <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end gap-3 border-t border-cream bg-white p-4 sm:-mx-6 sm:-mb-6">
           <button type="button" onClick={close} disabled={saving} className="btn btn-ghost">Cancelar</button>
-          <button type="submit" disabled={saving || !requiredComplete || rutErrors.company || rutErrors.legal || rutErrors.admin} className="btn btn-primary disabled:opacity-60">{saving ? 'Creando e invitando…' : 'Crear contratista'}</button>
+          <button type="submit" disabled={saving || !requiredComplete || rutErrors.company || rutErrors.legal || rutErrors.admin} className="btn btn-primary disabled:opacity-60">{saving ? 'Creando contratista…' : 'Crear contratista'}</button>
         </div>
       </form>}
     </div>
