@@ -644,6 +644,60 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
     if (url.pathname.startsWith('/auth/v1/token')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'e2e-access', refresh_token: 'e2e-refresh', expires_in: 3600, user: { id: PROFILE, email: `${role}@e2e.invalid` } }) });
     }
+    if (url.pathname === '/functions/v1/create-contractor') {
+      const input = request.postDataJSON() as any;
+      mutations.push({ method: request.method(), path: url.pathname, body: input });
+      const row = {
+        id: CONTRACTOR_DIRECTORY,
+        name: input.company_name,
+        rut: input.rut,
+        legal_name: input.legal_name,
+        company_type: input.company_type,
+        business_activity: input.business_activity,
+        sii_activity_code: input.sii_activity_code,
+        company_email: input.company_email,
+        company_phone: input.company_phone,
+        website: input.website,
+        country: input.country,
+        region: input.region,
+        commune: input.commune,
+        address: input.address,
+        legal_representative_name: input.legal_representative_name,
+        legal_representative_rut: input.legal_representative_rut,
+        legal_representative_email: input.legal_representative_email,
+        legal_representative_phone: input.legal_representative_phone,
+        platform_admin_name: input.admin_full_name,
+        platform_admin_rut: input.admin_rut,
+        platform_admin_email: input.admin_email,
+        platform_admin_phone: input.admin_phone,
+        occupational_insurer: input.occupational_insurer,
+        compensation_fund: input.compensation_fund,
+        employee_count: input.employee_count,
+        master_data_version: 2,
+        master_data_completed_at: '2026-09-25T13:30:00Z',
+        primary_contact_name: input.admin_full_name,
+        primary_contact_email: input.admin_email,
+        primary_contact_phone: input.admin_phone,
+        integration_key: 'contratista_directorio_qa',
+        is_active: true,
+        parent_contratista_id: null,
+      };
+      (data.contratistas as any[]).push(row);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          contractor: { id: row.id, name: row.name, rut: row.rut, integration_key: row.integration_key },
+          administrator: { full_name: input.admin_full_name, rut: input.admin_rut, email: input.admin_email, phone: input.admin_phone },
+          legal_representative: { full_name: input.legal_representative_name, rut: input.legal_representative_rut, email: input.legal_representative_email, phone: input.legal_representative_phone },
+          invited: true,
+          existing_user: false,
+          existing_contractor: false,
+          master_data_version: 2,
+        }),
+      });
+    }
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
         let body: any = null;
@@ -1140,7 +1194,7 @@ test('05da Mandante cierra proyecto completo y conserva expediente histórico en
   )).toBe(true);
 });
 
-test('05db Admin crea empresa contratista en el directorio maestro', async ({ page }) => {
+test('05db Admin crea empresa contratista completa e invita a su administrador', async ({ page }) => {
   const { mutations } = await protectedPage(page, 'admin');
   await page.goto('/admin');
   await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
@@ -1149,17 +1203,41 @@ test('05db Admin crea empresa contratista en el directorio maestro', async ({ pa
   await page.getByLabel('Nombre comercial del contratista').fill('Contratista Directorio QA');
   await page.getByLabel('RUT del contratista').fill('76.123.456-0');
   await page.getByLabel('Razón social del contratista').fill('Contratista Directorio QA SpA');
+  await page.getByLabel('Tipo de empresa').selectOption('spa');
+  await page.getByLabel('Actividad principal del contratista').fill('Montaje industrial');
+  await page.getByLabel('Correo general del contratista').fill('contacto@directorio.invalid');
+  await page.getByLabel('Teléfono general del contratista').fill('+56223456789');
+  await page.getByLabel('Región del contratista').selectOption('Metropolitana de Santiago');
+  await page.getByLabel('Comuna del contratista').fill('Santiago');
   await page.getByLabel('Dirección del contratista').fill('Av. Directorio 100');
-  await page.getByRole('textbox', { name: 'Responsable del contratista', exact: true }).fill('Ana Responsable');
-  await page.getByLabel('Correo del responsable del contratista').fill('ana@directorio.invalid');
+
+  await page.getByLabel('Nombre del representante legal').fill('Ana Responsable');
+  await page.getByLabel('RUT del representante legal').fill('12.345.678-5');
+  await page.getByLabel('Correo del representante legal').fill('ana.legal@directorio.invalid');
+  await page.getByLabel('Teléfono del representante legal').fill('+56911112222');
+
+  await page.getByLabel('El representante legal también será el administrador de Acredita').check();
+  await page.getByLabel('Organismo administrador Ley 16.744').selectOption('achs');
+  await page.getByLabel('Dotación aproximada del contratista').fill('45');
+
   await page.getByRole('button', { name: 'Crear contratista', exact: true }).click();
 
-  await expect(page.getByRole('heading', { name: 'Contratista creado' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Contratista creado completamente' })).toBeVisible();
+  await expect(page.getByText('Se envió una invitación para crear su acceso.')).toBeVisible();
+
   await expect.poll(() => mutations.some(item =>
-    item.path === '/rest/v1/rpc/admin_create_contractor'
-    && item.body?.p_name === 'Contratista Directorio QA'
-    && item.body?.p_rut === '76.123.456-0'
-    && item.body?.p_contact_email === 'ana@directorio.invalid'
+    item.path === '/functions/v1/create-contractor'
+    && item.body?.company_name === 'Contratista Directorio QA'
+    && item.body?.legal_name === 'Contratista Directorio QA SpA'
+    && item.body?.rut === '76.123.456-0'
+    && item.body?.company_type === 'spa'
+    && item.body?.business_activity === 'Montaje industrial'
+    && item.body?.region === 'Metropolitana de Santiago'
+    && item.body?.commune === 'Santiago'
+    && item.body?.legal_representative_rut === '12.345.678-5'
+    && item.body?.admin_email === 'ana.legal@directorio.invalid'
+    && item.body?.occupational_insurer === 'achs'
+    && item.body?.employee_count === 45
   )).toBe(true);
 });
 
