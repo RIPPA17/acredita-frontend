@@ -40,7 +40,29 @@ type BackendContratista = {
   name: string;
   rut: string | null;
   legal_name: string | null;
+  company_type: string | null;
+  business_activity: string | null;
+  sii_activity_code: string | null;
+  company_email: string | null;
+  company_phone: string | null;
+  website: string | null;
+  country: string | null;
+  region: string | null;
+  commune: string | null;
   address: string | null;
+  legal_representative_name: string | null;
+  legal_representative_rut: string | null;
+  legal_representative_email: string | null;
+  legal_representative_phone: string | null;
+  platform_admin_name: string | null;
+  platform_admin_rut: string | null;
+  platform_admin_email: string | null;
+  platform_admin_phone: string | null;
+  occupational_insurer: string | null;
+  compensation_fund: string | null;
+  employee_count: number | null;
+  master_data_version: number;
+  master_data_completed_at: string | null;
   primary_contact_name: string | null;
   primary_contact_email: string | null;
   primary_contact_phone: string | null;
@@ -235,7 +257,7 @@ async function fetchCoreRows(accessToken: string): Promise<CoreRows> {
   const [mandantes, projects, contratistas, accreditations, requirements, services, decisionReviews] = await Promise.all([
     selectRows<BackendMandante>('mandantes', accessToken, 'id,name,rut,integration_key,is_active'),
     selectRows<BackendProject>('projects', accessToken, 'id,mandante_id,name,status,integration_key,location,starts_at,ends_at,description,responsible_name,responsible_email,responsible_phone,archived_at,archived_by,archive_reason'),
-    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,legal_name,address,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id'),
+    selectRows<BackendContratista>('contratistas', accessToken, 'id,name,rut,legal_name,company_type,business_activity,sii_activity_code,company_email,company_phone,website,country,region,commune,address,legal_representative_name,legal_representative_rut,legal_representative_email,legal_representative_phone,platform_admin_name,platform_admin_rut,platform_admin_email,platform_admin_phone,occupational_insurer,compensation_fund,employee_count,master_data_version,master_data_completed_at,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id'),
     selectRows<BackendAccreditation>('accreditations', accessToken, 'id,project_id,contratista_id,is_active,parent_accreditation_id'),
     selectRows<BackendRequirement>('requirements', accessToken, 'id,project_id,integration_key,name,category,target,is_required,frequency,validity_days,alert_days,criticality,is_active,sort_order,description,review_checklist,applicability,blocks_work,blocks_assignment,service_id,due_days'),
     selectRows<BackendService>('services', accessToken, 'id,accreditation_id,integration_key,code,name,category,contractor_contact,mandante_contact,starts_at,ends_at,status,is_active'),
@@ -375,7 +397,29 @@ export async function hydrateCoreDataFromSupabase(session: SupabaseUserSession):
         nombre: row.name,
         rut: row.rut || fallback?.rut || '',
         razonSocial: row.legal_name || fallback?.razonSocial,
+        tipoEmpresa: row.company_type || fallback?.tipoEmpresa,
+        actividadPrincipal: row.business_activity || fallback?.actividadPrincipal,
+        codigoActividadSii: row.sii_activity_code || fallback?.codigoActividadSii,
+        emailEmpresa: row.company_email || fallback?.emailEmpresa,
+        telefonoEmpresa: row.company_phone || fallback?.telefonoEmpresa,
+        sitioWeb: row.website || fallback?.sitioWeb,
+        pais: row.country || fallback?.pais,
+        region: row.region || fallback?.region,
+        comuna: row.commune || fallback?.comuna,
         direccion: row.address || fallback?.direccion,
+        representanteLegalNombre: row.legal_representative_name || fallback?.representanteLegalNombre,
+        representanteLegalRut: row.legal_representative_rut || fallback?.representanteLegalRut,
+        representanteLegalEmail: row.legal_representative_email || fallback?.representanteLegalEmail,
+        representanteLegalTelefono: row.legal_representative_phone || fallback?.representanteLegalTelefono,
+        administradorNombre: row.platform_admin_name || fallback?.administradorNombre,
+        administradorRut: row.platform_admin_rut || fallback?.administradorRut,
+        administradorEmail: row.platform_admin_email || fallback?.administradorEmail,
+        administradorTelefono: row.platform_admin_phone || fallback?.administradorTelefono,
+        organismoAdministrador: row.occupational_insurer || fallback?.organismoAdministrador,
+        cajaCompensacion: row.compensation_fund || fallback?.cajaCompensacion,
+        dotacion: row.employee_count ?? fallback?.dotacion,
+        datosMaestrosVersion: row.master_data_version || fallback?.datosMaestrosVersion,
+        datosMaestrosCompletadosEn: row.master_data_completed_at || fallback?.datosMaestrosCompletadosEn,
         contactoNombre: row.primary_contact_name || fallback?.contactoNombre,
         contactoEmail: row.primary_contact_email || fallback?.contactoEmail,
         contactoTelefono: row.primary_contact_phone || fallback?.contactoTelefono,
@@ -522,10 +566,30 @@ async function syncContractors(
           name: contractor.nombre,
           rut: contractor.rut || null,
           legal_name: contractor.razonSocial || contractor.nombre,
+          company_type: contractor.tipoEmpresa || null,
+          business_activity: contractor.actividadPrincipal || null,
+          sii_activity_code: contractor.codigoActividadSii || null,
+          company_email: contractor.emailEmpresa || null,
+          company_phone: contractor.telefonoEmpresa || null,
+          website: contractor.sitioWeb || null,
+          country: contractor.pais || 'Chile',
+          region: contractor.region || null,
+          commune: contractor.comuna || null,
           address: contractor.direccion || null,
-          primary_contact_name: contractor.contactoNombre || null,
-          primary_contact_email: contractor.contactoEmail || null,
-          primary_contact_phone: contractor.contactoTelefono || null,
+          legal_representative_name: contractor.representanteLegalNombre || null,
+          legal_representative_rut: contractor.representanteLegalRut || null,
+          legal_representative_email: contractor.representanteLegalEmail || null,
+          legal_representative_phone: contractor.representanteLegalTelefono || null,
+          platform_admin_name: contractor.administradorNombre || contractor.contactoNombre || null,
+          platform_admin_rut: contractor.administradorRut || null,
+          platform_admin_email: contractor.administradorEmail || contractor.contactoEmail || null,
+          platform_admin_phone: contractor.administradorTelefono || contractor.contactoTelefono || null,
+          occupational_insurer: contractor.organismoAdministrador || null,
+          compensation_fund: contractor.cajaCompensacion || null,
+          employee_count: contractor.dotacion ?? null,
+          primary_contact_name: contractor.contactoNombre || contractor.administradorNombre || null,
+          primary_contact_email: contractor.contactoEmail || contractor.administradorEmail || null,
+          primary_contact_phone: contractor.contactoTelefono || contractor.administradorTelefono || null,
           is_active: contractor.activo !== false,
           updated_at: new Date().toISOString(),
         });
@@ -539,16 +603,36 @@ async function syncContractors(
         name: contractor.nombre,
         rut: contractor.rut || null,
         legal_name: contractor.razonSocial || contractor.nombre,
+        company_type: contractor.tipoEmpresa || null,
+        business_activity: contractor.actividadPrincipal || null,
+        sii_activity_code: contractor.codigoActividadSii || null,
+        company_email: contractor.emailEmpresa || null,
+        company_phone: contractor.telefonoEmpresa || null,
+        website: contractor.sitioWeb || null,
+        country: contractor.pais || 'Chile',
+        region: contractor.region || null,
+        commune: contractor.comuna || null,
         address: contractor.direccion || null,
-        primary_contact_name: contractor.contactoNombre || null,
-        primary_contact_email: contractor.contactoEmail || null,
-        primary_contact_phone: contractor.contactoTelefono || null,
+        legal_representative_name: contractor.representanteLegalNombre || null,
+        legal_representative_rut: contractor.representanteLegalRut || null,
+        legal_representative_email: contractor.representanteLegalEmail || null,
+        legal_representative_phone: contractor.representanteLegalTelefono || null,
+        platform_admin_name: contractor.administradorNombre || contractor.contactoNombre || null,
+        platform_admin_rut: contractor.administradorRut || null,
+        platform_admin_email: contractor.administradorEmail || contractor.contactoEmail || null,
+        platform_admin_phone: contractor.administradorTelefono || contractor.contactoTelefono || null,
+        occupational_insurer: contractor.organismoAdministrador || null,
+        compensation_fund: contractor.cajaCompensacion || null,
+        employee_count: contractor.dotacion ?? null,
+        primary_contact_name: contractor.contactoNombre || contractor.administradorNombre || null,
+        primary_contact_email: contractor.contactoEmail || contractor.administradorEmail || null,
+        primary_contact_phone: contractor.contactoTelefono || contractor.administradorTelefono || null,
         is_active: contractor.activo !== false,
       }, 'integration_key');
     }
   }
 
-  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,legal_name,address,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id');
+  const refreshed = await selectRows<BackendContratista>('contratistas', token, 'id,name,rut,legal_name,company_type,business_activity,sii_activity_code,company_email,company_phone,website,country,region,commune,address,legal_representative_name,legal_representative_rut,legal_representative_email,legal_representative_phone,platform_admin_name,platform_admin_rut,platform_admin_email,platform_admin_phone,occupational_insurer,compensation_fund,employee_count,master_data_version,master_data_completed_at,primary_contact_name,primary_contact_email,primary_contact_phone,integration_key,is_active,parent_contratista_id');
   const uuidByKey = new Map(refreshed.filter(row => row.integration_key).map(row => [row.integration_key as string, row.id]));
   if (session.role === 'admin') {
     for (const contractor of scoped) {
