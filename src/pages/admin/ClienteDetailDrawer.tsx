@@ -16,6 +16,33 @@ const BADGE_CLASS: Record<string, string> = {
 const iniciales = (nombre: string) =>
   nombre.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
+const COMPANY_TYPE_LABEL: Record<string, string> = {
+  spa: 'SpA',
+  ltda: 'Ltda.',
+  sa: 'S.A.',
+  eirl: 'EIRL',
+  persona_natural: 'Persona natural con giro',
+  otra: 'Otra',
+};
+
+const INSURER_LABEL: Record<string, string> = {
+  achs: 'ACHS',
+  mutual_seguridad: 'Mutual de Seguridad CChC',
+  ist: 'IST',
+  isl: 'ISL',
+  otro: 'Otro',
+  no_aplica: 'No aplica',
+};
+
+function InfoLine({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-0.5 break-words text-[12.5px] font-medium text-navy">{value === null || value === undefined || value === '' ? '—' : value}</div>
+    </div>
+  );
+}
+
 const EstadoBadge = ({ estado }: { estado: string }) => (
   <span className={`badge text-[11px] shrink-0 ${BADGE_CLASS[badgeClass(estado)]}`}>{estado}</span>
 );
@@ -44,6 +71,56 @@ function ResumenTab({
         <div className="card p-4 text-center">
           <div className="text-[20px] font-bold text-navy">{trabajadoresCount}</div>
           <div className="text-[11px] text-gray-400 uppercase tracking-wide mt-1">Trabajador{trabajadoresCount === 1 ? '' : 'es'}</div>
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-[12px] uppercase tracking-wider text-gray-400 font-medium">Ficha maestra</p>
+          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${(contratista.datosMaestrosVersion || 1) >= 2 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+            {(contratista.datosMaestrosVersion || 1) >= 2 ? 'Completa' : 'Básica'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <InfoLine label="Razón social" value={contratista.razonSocial} />
+          <InfoLine label="Tipo de empresa" value={contratista.tipoEmpresa ? COMPANY_TYPE_LABEL[contratista.tipoEmpresa] || contratista.tipoEmpresa : undefined} />
+          <InfoLine label="Actividad principal" value={contratista.actividadPrincipal} />
+          <InfoLine label="Código actividad SII" value={contratista.codigoActividadSii} />
+          <InfoLine label="Correo empresa" value={contratista.emailEmpresa} />
+          <InfoLine label="Teléfono empresa" value={contratista.telefonoEmpresa} />
+          <InfoLine label="Ubicación" value={[contratista.comuna, contratista.region].filter(Boolean).join(', ')} />
+          <InfoLine label="Dirección" value={contratista.direccion} />
+          <InfoLine label="Sitio web" value={contratista.sitioWeb} />
+        </div>
+
+        <div className="my-4 border-t border-cream3" />
+
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Representante legal</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <InfoLine label="Nombre" value={contratista.representanteLegalNombre} />
+          <InfoLine label="RUT" value={contratista.representanteLegalRut} />
+          <InfoLine label="Correo" value={contratista.representanteLegalEmail} />
+          <InfoLine label="Teléfono" value={contratista.representanteLegalTelefono} />
+        </div>
+
+        <div className="my-4 border-t border-cream3" />
+
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Administrador Acredita</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <InfoLine label="Nombre" value={contratista.administradorNombre || contratista.contactoNombre} />
+          <InfoLine label="RUT" value={contratista.administradorRut} />
+          <InfoLine label="Correo de acceso" value={contratista.administradorEmail || contratista.contactoEmail} />
+          <InfoLine label="Teléfono" value={contratista.administradorTelefono || contratista.contactoTelefono} />
+        </div>
+
+        <div className="my-4 border-t border-cream3" />
+
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Información laboral</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <InfoLine label="Organismo Ley 16.744" value={contratista.organismoAdministrador ? INSURER_LABEL[contratista.organismoAdministrador] || contratista.organismoAdministrador : undefined} />
+          <InfoLine label="Caja de compensación" value={contratista.cajaCompensacion} />
+          <InfoLine label="Dotación aproximada" value={contratista.dotacion} />
         </div>
       </div>
 
