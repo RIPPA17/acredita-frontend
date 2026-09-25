@@ -85,15 +85,20 @@ Deno.serve(async (req: Request) => {
     if (phone.length > 40) throw new Error("Teléfono inválido");
 
     const admin = createClient(supabaseUrl, serviceKey);
-
     const normalizedRut = normalizeRut(rut);
-    const { data: existingContractors, error: contractorLookupError } = await admin
+
+    const { data: contractorRows, error: contractorLookupError } = await admin
       .from("contratistas")
-      .select("id,name,rut")
-      .eq("is_active", true);
+      .select("id,name,rut,integration_key,is_active,primary_contact_email");
     if (contractorLookupError) throw contractorLookupError;
-    const duplicate = (existingContractors || []).find((item) => normalizeRut(item.rut || "") === normalizedRut);
-    if (duplicate) return json({ error: `Ya existe un contratista con ese RUT: ${duplicate.name}.` }, 409);
+
+    const legacyContractor = (contractorRows || []).find(
+      (item) => normalizeRut(item.rut || "") === normalizedRut,
+    ) || null;
+
+    if (legacyContractor?.primary_contact_email?.trim()) {
+      return json({ error: `Ya existe un contratista habilitado con ese RUT: ${legacyContractor.name}.` }, 409);
+    }
 
     let user = await findUserByEmail(admin, email);
     if (user) {
@@ -105,32 +110,50 @@ Deno.serve(async (req: Request) => {
       if (staffMembership?.length || mandanteMembership?.length) {
         return json({ error: "Ese correo ya pertenece a un rol incompatible. Usa otro correo para el responsable del contratista." }, 409);
       }
-      if (contractorMemberships?.length) {
+      const incompatibleContractor = (contractorMemberships || []).some(
+        (membership) => !legacyContractor || membership.contratista_id !== legacyContractor.id,
+      );
+      if (incompatibleContractor) {
         return json({ error: "Ese correo ya está asociado a otro contratista." }, 409);
       }
     }
 
-    const integrationKey = `contratista_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
-    const { data: contractor, error: contractorError } = await admin
-      .from("contratistas")
-      .insert({
-        name: companyName,
-        legal_name: companyName,
-        rut,
-        is_active: true,
+    let contractor: { id: string; name: string; rut: string | null; integration_key: string };
+    const existingContractor = Boolean(legacyContractor);
+
+    if (legacyContractor) {
+      const integrationKey = legacyContractor.integration_key
+        || `contratista_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
+      contractor = {
+        id: legacyContractor.id,
+        name: legacyContractor.name,
+        rut: legacyContractor.rut,
         integration_key: integrationKey,
-        data_environment: "production",
-        primary_contact_name: fullName,
-        primary_contact_email: email,
-        primary_contact_phone: phone || null,
-      })
-      .select("id,name,rut,integration_key")
-      .single();
-    if (contractorError || !contractor) {
-      if (contractorError?.code === "23505") throw new Error("Ya existe un contratista con ese RUT.");
-      throw contractorError || new Error("No fue posible crear el contratista");
+      };
+    } else {
+      const integrationKey = `contratista_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
+      const { data, error } = await admin
+        .from("contratistas")
+        .insert({
+          name: companyName,
+          legal_name: companyName,
+          rut,
+          is_active: true,
+          integration_key: integrationKey,
+          data_environment: "production",
+          primary_contact_name: fullName,
+          primary_contact_email: email,
+          primary_contact_phone: phone || null,
+        })
+        .select("id,name,rut,integration_key")
+        .single();
+      if (error || !data) {
+        if (error?.code === "23505") throw new Error("Ya existe un contratista con ese RUT.");
+        throw error || new Error("No fue posible crear el contratista");
+      }
+      contractor = data;
+      createdContractorId = contractor.id;
     }
-    createdContractorId = contractor.id;
 
     let invited = false;
     if (!user) {
@@ -161,45 +184,55 @@ Deno.serve(async (req: Request) => {
     }, { onConflict: "profile_id,contratista_id,role" });
     if (membershipError) throw membershipError;
 
+    if (legacyContractor) {
+      const { error: updateError } = await admin
+        .from("contratistas")
+        .update({
+          is_active: true,
+          integration_key: contractor.integration_key,
+          primary_contact_name: fullName,
+          primary_contact_email: email,
+          primary_contact_phone: phone || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", contractor.id);
+      if (updateError) throw updateError;
+    }
+
     const { error: auditError } = await admin.from("audit_logs").insert({
       actor_profile_id: authData.user.id,
-      action: "creacion_contratista",
+      action: existingContractor ? "habilitacion_contratista" : "creacion_contratista",
       entity_type: "contratista",
       entity_id: contractor.id,
       details: {
         integration_key: contractor.integration_key,
-        company_name: companyName,
-        rut,
+        company_name: contractor.name,
+        rut: contractor.rut,
         responsible_email: email,
         access_invited: invited,
+        existing_contractor: existingContractor,
       },
     });
     if (auditError) throw auditError;
 
     return json({
       ok: true,
-      contractor: {
-        id: contractor.id,
-        integration_key: contractor.integration_key,
-        name: contractor.name,
-        rut: contractor.rut,
-      },
+      contractor,
       responsible: { full_name: fullName, email, phone: phone || null },
       invited,
       existing_user: !invited,
+      existing_contractor: existingContractor,
     });
   } catch (error) {
     try {
-      if (createdContractorId) {
-        const admin = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
-        await admin.from("contratistas").delete().eq("id", createdContractorId);
-        if (invitedUserId) await admin.auth.admin.deleteUser(invitedUserId);
-      }
+      const admin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      if (createdContractorId) await admin.from("contratistas").delete().eq("id", createdContractorId);
+      if (invitedUserId) await admin.auth.admin.deleteUser(invitedUserId);
     } catch {
-      // El error original es más útil para el usuario que un fallo de limpieza.
+      // Conserva el error original.
     }
     return json({ error: error instanceof Error ? error.message : "No fue posible crear el contratista" }, 400);
   }
