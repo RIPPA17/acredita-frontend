@@ -1240,7 +1240,7 @@ test('05db Admin crea empresa contratista completa e invita a su administrador',
     && item.body?.employee_count === 45
   )).toBe(true);
 
-  await page.getByRole('button', { name: 'Cerrar' }).click();
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
   const companyRow = page.locator('tbody tr').filter({ hasText: 'Contratista Directorio QA' }).first();
   await expect(companyRow).toContainText('Ficha completa');
   await companyRow.click();
