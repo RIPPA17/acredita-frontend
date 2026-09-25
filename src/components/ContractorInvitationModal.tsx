@@ -123,7 +123,6 @@ export default function ContractorInvitationModal({ open, onClose, projects, sho
       const invitation = await createContractorInvitation({
         session,
         projectKey,
-        email: selectedContractor.contact_email,
         contractorKey: selectedContractor.contractor_key,
         message,
       });
