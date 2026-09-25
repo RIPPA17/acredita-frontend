@@ -73,6 +73,7 @@ const iniciales = (nombre: string) =>
 export default function AdminPortal() {
   const navigate = useNavigate();
   const session = getCurrentSession();
+  const isAdminAcredita = session?.acreditaRole === 'admin_acredita';
   const { revision: dataSyncRevision } = useDataSync();
   const { sidebarCollapsed, toggleSidebar } = useSidebarPreference(
     typeof window !== 'undefined' && window.innerWidth < 1440,
@@ -305,7 +306,7 @@ export default function AdminPortal() {
           </button>
           Acre<b>dita</b>
           <span className="text-[12.1px] bg-brown/30 text-brown px-2 py-0.5 rounded-lg ml-2 tracking-[1px]">
-            ADMIN
+            {session?.acreditaRole === 'supervisor' ? 'SUPERVISOR' : session?.acreditaRole === 'verificador' ? 'VERIFICADOR' : 'ADMIN'}
           </span>
         </div>
 
@@ -630,7 +631,7 @@ export default function AdminPortal() {
                 setClienteSeleccionado(contratista);
                 setProyectoContextoContratista(proyectoId || null);
               }}
-              onCreateContractor={() => setShowCrearContratistaModal(true)}
+              onCreateContractor={isAdminAcredita ? () => setShowCrearContratistaModal(true) : undefined}
             />
           )}
 
@@ -744,7 +745,7 @@ export default function AdminPortal() {
       )}
 
       <AdminContractorCreateModal
-        open={showCrearContratistaModal}
+        open={isAdminAcredita && showCrearContratistaModal}
         onClose={() => setShowCrearContratistaModal(false)}
         onCreated={() => setContratistas([...getContratistas()])}
         showToast={showToast}
