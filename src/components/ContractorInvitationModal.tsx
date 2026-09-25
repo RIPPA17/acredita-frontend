@@ -197,7 +197,7 @@ export default function ContractorInvitationModal({ open, onClose, projects, sho
               <label className="block text-[13.2px] font-medium text-gray-700">Contratista registrado</label>
               {loadingContractors && <span className="text-[10.5px] text-gray-400">Cargando directorio…</span>}
             </div>
-            <select value={contractorKey} onChange={(e) => { setContractorKey(e.target.value); setInviteLink(null); }} className="form-input w-full" required disabled={!projectKey || loadingContractors}>
+            <select aria-label="Contratista registrado" value={contractorKey} onChange={(e) => { setContractorKey(e.target.value); setInviteLink(null); }} className="form-input w-full" required disabled={!projectKey || loadingContractors}>
               <option value="">Selecciona un contratista...</option>
               {availableContractors.map((contractor) => (
                 <option key={contractor.contractor_key} value={contractor.contractor_key} disabled={!contractor.contact_email}>
