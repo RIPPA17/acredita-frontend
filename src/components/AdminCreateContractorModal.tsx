@@ -71,9 +71,10 @@ export default function AdminCreateContractorModal({ open, onClose, onCreated, s
         {created ? (
           <div className="p-7 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100"><CheckCircle size={34} className="text-green-700" /></div>
-            <h4 className="text-lg font-semibold text-navy">{created.contractor.name} quedó creado</h4>
+            <h4 className="text-lg font-semibold text-navy">{created.contractor.name} {created.existing_contractor ? 'quedó habilitado' : 'quedó creado'}</h4>
             <p className="mt-2 text-sm leading-relaxed text-gray-600">
               El responsable es <strong>{created.responsible.full_name}</strong> ({created.responsible.email}).
+              {created.existing_contractor ? ' La empresa ya existía en Acredita y ahora quedó completada con un responsable principal.' : ''}
               {created.invited ? ' Le enviamos un correo para crear su contraseña y activar el acceso.' : ' La cuenta ya existía y quedó vinculada a esta empresa.'}
             </p>
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left text-xs leading-relaxed text-blue-800">
