@@ -196,17 +196,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    let invited = false;
-    if (!user) {
-      const { data, error } = await admin.auth.admin.inviteUserByEmail(adminEmail, {
-        redirectTo: "https://acredita-frontend.vercel.app/recuperar",
-        data: { full_name: adminFullName },
-      });
-      if (error || !data.user) throw error || new Error("No fue posible crear la invitación de acceso");
-      user = data.user;
-      invitedUserId = user.id;
-      invited = true;
-    }
+    const hadExistingUser = Boolean(user);
 
     const integrationKey = legacyContractor?.integration_key
       || `contratista_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
@@ -272,22 +262,44 @@ Deno.serve(async (req: Request) => {
       createdContractorId = contractor.id;
     }
 
-    const { error: profileError } = await admin.from("profiles").upsert({
-      id: user.id,
-      full_name: adminFullName,
-      phone: adminPhone,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    });
-    if (profileError) throw profileError;
+    let invited = false;
+    let invitationPending = false;
+    let invitationError: string | null = null;
 
-    const { error: membershipError } = await admin.from("contratista_memberships").upsert({
-      profile_id: user.id,
-      contratista_id: contractor.id,
-      role: "contratista_admin",
-      is_active: true,
-    }, { onConflict: "profile_id,contratista_id,role" });
-    if (membershipError) throw membershipError;
+    if (!user) {
+      try {
+        const { data, error } = await admin.auth.admin.inviteUserByEmail(adminEmail, {
+          redirectTo: "https://acredita-frontend.vercel.app/recuperar",
+          data: { full_name: adminFullName },
+        });
+        if (error || !data.user) throw error || new Error("No fue posible crear la invitación de acceso");
+        user = data.user;
+        invitedUserId = user.id;
+        invited = true;
+      } catch (inviteError) {
+        invitationPending = true;
+        invitationError = inviteError instanceof Error ? inviteError.message : "No fue posible enviar la invitación";
+      }
+    }
+
+    if (user) {
+      const { error: profileError } = await admin.from("profiles").upsert({
+        id: user.id,
+        full_name: adminFullName,
+        phone: adminPhone,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+      if (profileError) throw profileError;
+
+      const { error: membershipError } = await admin.from("contratista_memberships").upsert({
+        profile_id: user.id,
+        contratista_id: contractor.id,
+        role: "contratista_admin",
+        is_active: true,
+      }, { onConflict: "profile_id,contratista_id,role" });
+      if (membershipError) throw membershipError;
+    }
 
     const { error: auditError } = await admin.from("audit_logs").insert({
       actor_profile_id: authData.user.id,
@@ -306,6 +318,8 @@ Deno.serve(async (req: Request) => {
         occupational_insurer: occupationalInsurer,
         administrator_email: adminEmail,
         access_invited: invited,
+        invitation_pending: invitationPending,
+        invitation_error: invitationError,
         existing_contractor: Boolean(legacyContractor),
         master_data_version: 2,
       },
@@ -328,7 +342,10 @@ Deno.serve(async (req: Request) => {
         phone: legalRepresentativePhone,
       },
       invited,
-      existing_user: !invited,
+      invitation_pending: invitationPending,
+      invitation_error: invitationError,
+      administrator_linked: Boolean(user),
+      existing_user: hadExistingUser,
       existing_contractor: Boolean(legacyContractor),
       master_data_version: 2,
     });
