@@ -104,10 +104,10 @@ Deno.serve(async (req: Request) => {
       .from("acredita_memberships")
       .select("role")
       .eq("profile_id", authData.user.id)
-      .eq("role", "admin_acredita")
+      .in("role", ["admin_acredita", "supervisor"])
       .eq("is_active", true)
       .limit(1);
-    if (!staff?.length) return json({ error: "Solo Administración de Acredita puede crear contratistas" }, 403);
+    if (!staff?.length) return json({ error: "Tu cuenta de Acredita no tiene permisos para crear contratistas" }, 403);
 
     const body = await req.json();
 
