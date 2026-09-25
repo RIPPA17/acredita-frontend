@@ -114,7 +114,10 @@ export default function ContratistasTab({
       const coincideBusqueda =
         !termino ||
         c.contratista.nombre.toLowerCase().includes(termino) ||
-        c.contratista.rut.toLowerCase().includes(termino);
+        c.contratista.rut.toLowerCase().includes(termino) ||
+        (c.contratista.razonSocial || '').toLowerCase().includes(termino) ||
+        (c.contratista.administradorNombre || '').toLowerCase().includes(termino) ||
+        (c.contratista.administradorEmail || '').toLowerCase().includes(termino);
       const coincideProyecto = !proyectoFiltro || c.contratista.proyectos.includes(proyectoFiltro);
       const coincideFiltro =
         filtro === 'todos' ? true
@@ -291,6 +294,12 @@ export default function ContratistasTab({
                           <div>
                             <div className="text-[14px] font-semibold text-navy tracking-tight">{c.nombre}</div>
                             <div className="text-[11.5px] text-gray-400 font-medium mt-0.5">{c.rut}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-semibold ${(c.datosMaestrosVersion || 1) >= 2 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                {(c.datosMaestrosVersion || 1) >= 2 ? 'Ficha completa' : 'Ficha básica'}
+                              </span>
+                              {(c.comuna || c.region) && <span className="text-[9.5px] text-gray-400">{[c.comuna, c.region].filter(Boolean).join(', ')}</span>}
+                            </div>
                           </div>
                         </div>
                       </td>
