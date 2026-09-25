@@ -183,7 +183,7 @@ export default function ContractorInvitationModal({ open, onClose, projects, sho
             <label className="text-[13.2px] font-medium text-gray-700">Contratista registrado</label>
             <button type="button" onClick={()=>void refreshAvailable()} disabled={loadingAvailable || !projectKey} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brown disabled:opacity-40"><RefreshCw size={12} /> Actualizar</button>
           </div>
-          <select value={contractorKey} onChange={e=>{setContractorKey(e.target.value);setInviteLink(null);}} className="form-input w-full" required disabled={loadingAvailable || !projectKey}>
+          <select aria-label="Contratista registrado" value={contractorKey} onChange={e=>{setContractorKey(e.target.value);setInviteLink(null);}} className="form-input w-full" required disabled={loadingAvailable || !projectKey}>
             <option value="">{loadingAvailable ? 'Cargando directorio…' : 'Selecciona un contratista...'}</option>
             {available.map(item => <option key={item.contractor_key} value={item.contractor_key}>{item.contractor_name} ({item.contractor_rut})</option>)}
           </select>
