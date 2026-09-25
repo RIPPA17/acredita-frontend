@@ -1247,7 +1247,7 @@ test('05db Admin crea empresa contratista completa e invita a su administrador',
   await expect(page.getByText('Ficha maestra', { exact: true })).toBeVisible();
   await expect(page.getByText('Ana Responsable', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('ACHS', { exact: true })).toBeVisible();
-  await expect(page.getByText('Santiago, Metropolitana de Santiago', { exact: true })).toBeVisible();
+  await expect(page.getByText('Santiago, Metropolitana de Santiago', { exact: true }).last()).toBeVisible();
 });
 
 test('05dc Mandante solo incorpora contratistas registrados por Acredita', async ({ page }) => {
