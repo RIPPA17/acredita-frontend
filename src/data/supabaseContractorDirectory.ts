@@ -2,19 +2,55 @@ import { getSupabaseSessionForRequest, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } 
 
 export type AdminContractorInput = {
   name: string;
+  legalName: string;
   rut: string;
-  legalName?: string;
-  address?: string;
-  contactName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
+  companyType: string;
+  businessActivity: string;
+  siiActivityCode?: string;
+  companyEmail: string;
+  companyPhone: string;
+  website?: string;
+  country: string;
+  region: string;
+  commune: string;
+  address: string;
+  legalRepresentativeName: string;
+  legalRepresentativeRut: string;
+  legalRepresentativeEmail: string;
+  legalRepresentativePhone: string;
+  adminFullName: string;
+  adminRut: string;
+  adminEmail: string;
+  adminPhone: string;
+  occupationalInsurer: string;
+  compensationFund?: string;
+  employeeCount?: number | null;
 };
 
 export type CreatedContractor = {
-  contractor_id: string;
-  contractor_key: string;
-  contractor_name: string;
-  contractor_rut: string;
+  ok: boolean;
+  contractor: {
+    id: string;
+    name: string;
+    rut: string | null;
+    integration_key: string;
+  };
+  administrator: {
+    full_name: string;
+    rut: string;
+    email: string;
+    phone: string;
+  };
+  legal_representative: {
+    full_name: string;
+    rut: string;
+    email: string;
+    phone: string;
+  };
+  invited: boolean;
+  existing_user: boolean;
+  existing_contractor: boolean;
+  master_data_version: number;
 };
 
 export type AvailableContractor = {
@@ -57,18 +93,38 @@ export async function createAdminContractor(input: AdminContractorInput): Promis
   const session = await getSupabaseSessionForRequest();
   if (!session || session.role !== 'admin') throw new Error('Solo Administración Acredita puede crear contratistas.');
 
-  const rows = await rpc<CreatedContractor[]>('admin_create_contractor', {
-    p_name: input.name.trim(),
-    p_rut: input.rut.trim(),
-    p_legal_name: input.legalName?.trim() || null,
-    p_address: input.address?.trim() || null,
-    p_contact_name: input.contactName?.trim() || null,
-    p_contact_email: input.contactEmail?.trim().toLowerCase() || null,
-    p_contact_phone: input.contactPhone?.trim() || null,
-  }, session._supabase.accessToken);
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/create-contractor`, {
+    method: 'POST',
+    headers: headers(session._supabase.accessToken),
+    body: JSON.stringify({
+      company_name: input.name.trim(),
+      legal_name: input.legalName.trim(),
+      rut: input.rut.trim(),
+      company_type: input.companyType,
+      business_activity: input.businessActivity.trim(),
+      sii_activity_code: input.siiActivityCode?.trim() || null,
+      company_email: input.companyEmail.trim().toLowerCase(),
+      company_phone: input.companyPhone.trim(),
+      website: input.website?.trim() || null,
+      country: input.country.trim(),
+      region: input.region.trim(),
+      commune: input.commune.trim(),
+      address: input.address.trim(),
+      legal_representative_name: input.legalRepresentativeName.trim(),
+      legal_representative_rut: input.legalRepresentativeRut.trim(),
+      legal_representative_email: input.legalRepresentativeEmail.trim().toLowerCase(),
+      legal_representative_phone: input.legalRepresentativePhone.trim(),
+      admin_full_name: input.adminFullName.trim(),
+      admin_rut: input.adminRut.trim(),
+      admin_email: input.adminEmail.trim().toLowerCase(),
+      admin_phone: input.adminPhone.trim(),
+      occupational_insurer: input.occupationalInsurer,
+      compensation_fund: input.compensationFund?.trim() || null,
+      employee_count: input.employeeCount ?? null,
+    }),
+  });
 
-  if (!rows[0]) throw new Error('Supabase no devolvió el contratista creado.');
-  return rows[0];
+  return parseResponse<CreatedContractor>(response);
 }
 
 export async function listAvailableContractorsForProject(projectKey: string): Promise<AvailableContractor[]> {
