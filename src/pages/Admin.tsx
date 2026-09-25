@@ -57,7 +57,7 @@ import ClienteDetailDrawer from './admin/ClienteDetailDrawer';
 import { loadSupabaseAuditLogs } from '../data/supabaseAuditData';
 import { refreshReviewOperationsCache } from '../data/supabaseReviewOperations';
 import OperationalNotificationsPanel from '../components/OperationalNotificationsPanel';
-import ContractorInvitationModal from '../components/ContractorInvitationModal';
+import AdminCreateContractorModal from '../components/AdminCreateContractorModal';
 import DataSyncButton from '../components/DataSyncButton';
 import { useDataSync } from '../components/DataSyncContext';
 import { usePortalTab } from '../hooks/usePortalTab';
@@ -187,7 +187,7 @@ export default function AdminPortal() {
   const [mandanteCreado, setMandanteCreado] = useState(false);
   const [formInvitacion, setFormInvitacion] = useState({ empresa: "", rut: "" });
 
-  const [showInvitarContratistaModal, setShowInvitarContratistaModal] = useState(false);
+  const [showCrearContratistaModal, setShowCrearContratistaModal] = useState(false);
 
   const [showNuevoProyectoModal, setShowNuevoProyectoModal] = useState(false);
   const [formNuevoProyecto, setFormNuevoProyecto] = useState({ nombre: "", mandanteId: "" });
@@ -630,7 +630,7 @@ export default function AdminPortal() {
                 setClienteSeleccionado(contratista);
                 setProyectoContextoContratista(proyectoId || null);
               }}
-              setShowInvitarContratistaModal={setShowInvitarContratistaModal}
+              setShowCrearContratistaModal={setShowCrearContratistaModal}
             />
           )}
 
@@ -743,11 +743,10 @@ export default function AdminPortal() {
         </div>
       )}
 
-      <ContractorInvitationModal
-        open={showInvitarContratistaModal}
-        onClose={() => setShowInvitarContratistaModal(false)}
-        contractors={contratistas}
-        projects={proyectos}
+      <AdminCreateContractorModal
+        open={showCrearContratistaModal}
+        onClose={() => setShowCrearContratistaModal(false)}
+        onCreated={() => setContratistas([...getContratistas()])}
         showToast={showToast}
       />
 

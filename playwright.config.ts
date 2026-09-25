@@ -11,6 +11,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:3000',
+    timezoneId: 'America/Santiago',
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10_000,
     ignoreHTTPSErrors: true,

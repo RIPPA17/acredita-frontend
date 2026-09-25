@@ -641,11 +641,64 @@ async function protectedPage(page: Page, role: Role, options: MockOptions = {}) 
     if (url.pathname.startsWith('/auth/v1/token')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'e2e-access', refresh_token: 'e2e-refresh', expires_in: 3600, user: { id: PROFILE, email: `${role}@e2e.invalid` } }) });
     }
+    if (url.pathname === '/functions/v1/create-contractor') {
+      const body = request.postDataJSON() as any;
+      mutations.push({ method: request.method(), path: url.pathname, body });
+      const created = {
+        id: '40000000-0000-4000-8000-000000000099',
+        name: body.company_name,
+        rut: body.rut,
+        legal_name: body.company_name,
+        integration_key: 'contratista_admin_creado',
+        is_active: true,
+        parent_contratista_id: null,
+      };
+      (data.contratistas as any[]).push(created);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          contractor: {
+            id: created.id,
+            integration_key: created.integration_key,
+            name: created.name,
+            rut: created.rut,
+          },
+          responsible: {
+            full_name: body.full_name,
+            email: body.email,
+            phone: body.phone || null,
+          },
+          invited: true,
+          existing_user: false,
+        }),
+      });
+    }
+    if (url.pathname === '/functions/v1/send-contractor-invitation') {
+      const body = request.postDataJSON() as any;
+      mutations.push({ method: request.method(), path: url.pathname, body });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, mode: 'invite' }) });
+    }
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
         let body: any = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         mutations.push({ method: request.method(), path: url.pathname, body });
+      }
+      if (url.pathname === '/rest/v1/rpc/list_available_contractors_for_project') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{
+            contractor_key: 'contratista_directorio_qa',
+            contractor_name: 'Contratista Directorio QA',
+            contractor_rut: '12.345.678-5',
+            contact_name: 'Responsable Directorio',
+            contact_email: 'responsable-directorio@contratista.invalid',
+            contact_phone: '+56 9 1111 2222',
+          }]),
+        });
       }
       if (url.pathname === '/rest/v1/rpc/archive_project') {
         const input = request.postDataJSON() as any;
@@ -891,6 +944,47 @@ test('02 login único detecta el portal y mantiene solicitudes de acceso', async
   await expect(page.getByText(/detectará automáticamente tu organización, perfil y permisos/i)).toBeVisible();
 });
 
+test('02b Administración crea contratista y habilita al responsable', async ({ page }) => {
+  const { mutations } = await protectedPage(page, 'admin');
+  await page.goto('/admin');
+  await page.locator('.sb-item:visible').filter({ hasText: 'Contratistas' }).first().click();
+
+  await page.getByRole('button', { name: 'Crear contratista', exact: true }).click();
+  await page.getByLabel('Empresa / razón social').fill('Contratista Creado QA SpA');
+  await page.getByLabel('RUT').fill('12.345.678-5');
+  await page.getByLabel('Nombre del responsable principal').fill('Responsable QA');
+  await page.getByLabel('Correo del responsable').fill('responsable@contratista-qa.invalid');
+  await page.getByLabel('Teléfono responsable').fill('+56 9 5555 5555');
+  await page.getByRole('button', { name: 'Crear contratista', exact: true }).last().click();
+
+  await expect(page.getByText('Contratista Creado QA SpA quedó creado', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Le enviamos un correo para crear su contraseña/)).toBeVisible();
+  await expect.poll(() => mutations.some(item =>
+    item.method === 'POST'
+    && item.path === '/functions/v1/create-contractor'
+    && item.body?.company_name === 'Contratista Creado QA SpA'
+    && item.body?.rut === '12.345.678-5'
+    && item.body?.full_name === 'Responsable QA'
+    && item.body?.email === 'responsable@contratista-qa.invalid'
+  )).toBe(true);
+});
+
+test('02c Mandante solo puede incorporar empresas creadas por Acredita', async ({ page }) => {
+  await protectedPage(page, 'mandante');
+  await openMandanteProject(page);
+  await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
+  await page.getByRole('button', { name: 'Incorporar contratista', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Incorporar contratista' })).toBeVisible();
+  await expect(page.getByText(/El Mandante no crea empresas/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Nuevo contratista' })).toHaveCount(0);
+  await expect(page.getByLabel('Empresa')).toHaveCount(0);
+  await expect(page.getByLabel('RUT')).toHaveCount(0);
+  await page.getByLabel('Contratista registrado').selectOption('contratista_directorio_qa');
+  await expect(page.getByText('Responsable Directorio', { exact: false })).toBeVisible();
+  await expect(page.getByText('responsable-directorio@contratista.invalid', { exact: false })).toBeVisible();
+});
+
 test('03 Mandante hidrata proyecto desde Supabase', async ({ page }) => {
   await protectedPage(page, 'mandante');
   await page.goto('/mandante');
@@ -1129,7 +1223,7 @@ test('05f Mandante revisa y cancela invitaciones pendientes del proyecto', async
   const { mutations } = await protectedPage(page, 'mandante', { invitationFlow: true });
   await openMandanteProject(page);
   await page.getByLabel('Secciones del proyecto').getByRole('button', { name: 'Contratistas', exact: true }).click();
-  await page.getByRole('button', { name: 'Invitar contratista' }).click();
+  await page.getByRole('button', { name: 'Incorporar contratista' }).click();
 
   const invitationRow = page.locator('div').filter({ hasText: 'pendiente@contratista.invalid' }).filter({ hasText: 'Pendiente' }).last();
   await expect(invitationRow).toBeVisible();

@@ -36,6 +36,15 @@ export type ProjectInvitation = {
   send_error: string | null;
 };
 
+export type AvailableProjectContractor = {
+  contractor_key: string;
+  contractor_name: string;
+  contractor_rut: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+};
+
 type CreateInvitationResult = {
   invitation_id: string;
   token: string;
@@ -87,28 +96,26 @@ async function lookupBackendId(table: 'projects' | 'contratistas', integrationKe
   return rows[0].id;
 }
 
+export async function listAvailableContractorsForProject(input: {
+  session: SupabaseUserSession;
+  projectKey: string;
+}): Promise<AvailableProjectContractor[]> {
+  return rpc<AvailableProjectContractor[]>('list_available_contractors_for_project', {
+    p_project_key: input.projectKey,
+  }, input.session._supabase.accessToken);
+}
+
 export async function createContractorInvitation(input: {
   session: SupabaseUserSession;
   projectKey: string;
-  email: string;
-  contractorKey?: string;
-  contractorName?: string;
-  contractorRut?: string;
+  contractorKey: string;
   message?: string;
 }): Promise<CreateInvitationResult> {
-  const token = input.session._supabase.accessToken;
-  const projectId = await lookupBackendId('projects', input.projectKey, token);
-  const contractorId = input.contractorKey
-    ? await lookupBackendId('contratistas', input.contractorKey, token)
-    : null;
-  const rows = await rpc<CreateInvitationResult[]>('create_contractor_invitation', {
-    p_project_id: projectId,
-    p_email: input.email.trim().toLowerCase(),
-    p_contractor_id: contractorId,
-    p_contractor_name: input.contractorName?.trim() || null,
-    p_contractor_rut: input.contractorRut?.trim() || null,
+  const rows = await rpc<CreateInvitationResult[]>('create_registered_contractor_invitation', {
+    p_project_key: input.projectKey,
+    p_contractor_key: input.contractorKey,
     p_message: input.message?.trim() || null,
-  }, token);
+  }, input.session._supabase.accessToken);
   if (!rows[0]) throw new Error('Supabase no devolvió la invitación creada');
   return rows[0];
 }
