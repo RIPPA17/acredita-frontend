@@ -108,25 +108,14 @@ export async function listAvailableContractorsForProject(input: {
 export async function createContractorInvitation(input: {
   session: SupabaseUserSession;
   projectKey: string;
-  email: string;
-  contractorKey?: string;
-  contractorName?: string;
-  contractorRut?: string;
+  contractorKey: string;
   message?: string;
 }): Promise<CreateInvitationResult> {
-  const token = input.session._supabase.accessToken;
-  const projectId = await lookupBackendId('projects', input.projectKey, token);
-  const contractorId = input.contractorKey
-    ? await lookupBackendId('contratistas', input.contractorKey, token)
-    : null;
-  const rows = await rpc<CreateInvitationResult[]>('create_contractor_invitation', {
-    p_project_id: projectId,
-    p_email: input.email.trim().toLowerCase(),
-    p_contractor_id: contractorId,
-    p_contractor_name: input.contractorName?.trim() || null,
-    p_contractor_rut: input.contractorRut?.trim() || null,
+  const rows = await rpc<CreateInvitationResult[]>('create_registered_contractor_invitation', {
+    p_project_key: input.projectKey,
+    p_contractor_key: input.contractorKey,
     p_message: input.message?.trim() || null,
-  }, token);
+  }, input.session._supabase.accessToken);
   if (!rows[0]) throw new Error('Supabase no devolvió la invitación creada');
   return rows[0];
 }
