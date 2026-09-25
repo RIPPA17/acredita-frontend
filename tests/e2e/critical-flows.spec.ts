@@ -1239,6 +1239,15 @@ test('05db Admin crea empresa contratista completa e invita a su administrador',
     && item.body?.occupational_insurer === 'achs'
     && item.body?.employee_count === 45
   )).toBe(true);
+
+  await page.getByRole('button', { name: 'Cerrar' }).click();
+  const companyRow = page.locator('tbody tr').filter({ hasText: 'Contratista Directorio QA' }).first();
+  await expect(companyRow).toContainText('Ficha completa');
+  await companyRow.click();
+  await expect(page.getByText('Ficha maestra', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ana Responsable', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('ACHS', { exact: true })).toBeVisible();
+  await expect(page.getByText('Santiago, Metropolitana de Santiago', { exact: true })).toBeVisible();
 });
 
 test('05dc Mandante solo incorpora contratistas registrados por Acredita', async ({ page }) => {
