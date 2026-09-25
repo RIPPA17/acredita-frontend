@@ -5,6 +5,7 @@ export type AppRole = 'admin' | 'mandante' | 'contratista';
 export interface SupabaseUserSession {
   email: string;
   role: AppRole;
+  acreditaRole?: 'admin_acredita' | 'supervisor' | 'verificador';
   nombre?: string;
   profileId: string;
   mandanteId?: string;
@@ -119,7 +120,13 @@ async function loadIdentity(accessToken: string, refreshToken: string, expiresAt
     _supabase: { accessToken, refreshToken, expiresAt },
   };
 
-  if (acreditaMemberships.length > 0) return { ...base, role: 'admin' };
+  if (acreditaMemberships.length > 0) {
+    const staffRole = acreditaMemberships[0].role;
+    if (!['admin_acredita', 'supervisor', 'verificador'].includes(staffRole)) {
+      throw new Error('Tu rol interno de Acredita no es válido.');
+    }
+    return { ...base, role: 'admin', acreditaRole: staffRole as 'admin_acredita' | 'supervisor' | 'verificador' };
+  }
 
   if (mandanteMemberships.length > 0) {
     const membership = mandanteMemberships[0];
